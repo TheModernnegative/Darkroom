@@ -231,7 +231,7 @@ body.comparing #cmpTags{display:flex}
 #cmpTags span b{background:#000a;color:#eee;font-size:11px;padding:3px 8px;border-radius:3px;font-weight:500}
 body.splitV #cmpTags{top:0;bottom:0;flex-direction:column}
 body.splitV #cmpTags span{padding-top:10px}
-.panel.edited>h3::after{content:"";width:5px;height:5px;border-radius:50%;background:#e0533d;margin-left:2px;order:1}
+.panel.edited>h3::after{content:"";width:7px;height:7px;border-radius:50%;background:#e0533d;margin-left:2px;order:1}
 .panel>h3 .reset,.panel>h3 .hbtns,.panel>h3 .hdrval{order:2}
 
 /* masks / detail / library */
@@ -315,3 +315,21 @@ body.m-studio #devPanels{display:none}
 .atile.none span{position:static;opacity:1;background:none;font-size:10px;padding:0}
 .actl{margin-top:6px}
 #placeClip::after{font:11px var(--sans);color:#ddd;background:#000b;padding:3px 8px;border-radius:3px;white-space:nowrap}
+.zones{display:flex;gap:1px;margin:4px 0 6px;border-radius:3px;overflow:hidden;cursor:pointer}
+.zones span{flex:1;text-align:center;font:10px var(--sans);padding:5px 0}
+.zones span:hover{outline:2px solid #ff8c1a;outline-offset:-2px}
+.zones.pinned{box-shadow:0 0 0 1px #ff8c1a}
+.panel.edited>h3::after,.panel.edited>.ph::after{}
+button[data-m].edited{position:relative}
+button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:#e0533d}
+.rgroup{grid-column:1/-1;font:11px var(--sans);text-transform:uppercase;letter-spacing:.07em;color:#8d8d8d;margin:8px 2px 0}
+/* stacks */
+.thumb.stk,.cell.stk{position:relative}
+.thumb.stkShut,.cell.stkShut{box-shadow:3px -3px 0 -1px #555,6px -6px 0 -2px #3a3a3a}
+.thumb.stkOpen,.cell.stkOpen{background:#2b3140}
+.thumb.stkOpen.stkFirst,.cell.stkOpen.stkFirst{border-top-left-radius:6px;border-bottom-left-radius:6px;box-shadow:inset 3px 0 0 #6a9cf0}
+.thumb.stkOpen.stkLast,.cell.stkOpen.stkLast{border-top-right-radius:6px;border-bottom-right-radius:6px;box-shadow:inset -3px 0 0 #6a9cf0}
+.stkBtn{position:absolute;left:3px;top:3px;z-index:3;display:flex;gap:3px;align-items:center;height:18px;padding:0 5px;border-radius:9px;background:#000c;color:#fff;font:600 12px var(--sans);border:1px solid #fff4;cursor:pointer}
+.stkBtn b{font:10px var(--sans);color:#bbb}
+.stkBtn:hover{background:#3d5a90}
+.thumb .pin,.cell .pin{position:absolute;right:24px;top:3px;font-size:10px;font-style:normal;z-index:2}

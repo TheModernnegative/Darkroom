@@ -185,7 +185,8 @@ const M = {
       const h=document.createElement('div'); h.className='paneHead'; h.innerHTML='<span>Looks</span><button class="dice">🎲 Random</button><button class="rst">Clear all</button>';
       h.querySelector('.rst').onclick=()=>{ Studio.resetAll(); this.showTab('studio',true); }; h.querySelector('.dice').onclick=()=>{ Studio.randomLook(); this.showTab('studio',true); }; pane.appendChild(h);
       const rl=document.createElement('div'); rl.className='rgridm'; pane.appendChild(rl); const tiles=[];
-      STUDIO_RECIPES.forEach(([name,r])=>{ const b=document.createElement('button'); b.className='rtm'; b.innerHTML='<i></i><span></span>'; b.querySelector('span').textContent=name.replace(' · ',' — '); b.onclick=()=>{ Studio.applyRecipe(r,name); this.showTab('studio',true); }; rl.appendChild(b); tiles.push([b,r]); });
+      let grp=''; STUDIO_RECIPES.forEach(([name,r])=>{ const [g,n]=name.includes(' · ')?name.split(' · '):['',name]; if(g!==grp){ grp=g; const h=document.createElement('div'); h.className='rgroup'; h.textContent=g; rl.appendChild(h); }
+        const b=document.createElement('button'); b.className='rtm'; b.innerHTML='<i></i><span></span>'; b.querySelector('span').textContent=n; b.onclick=()=>{ Studio.applyRecipe(r,name); this.showTab('studio',true); }; rl.appendChild(b); tiles.push([b,r]); });
       { let i=0; const job=this._rjob=(this._rjob||0)+1; const step=()=>{ if(job!==this._rjob||this.tab!=='studio'||!Engine.src) return; const t0=performance.now();
           while(i<tiles.length&&performance.now()-t0<30){ const [b,r]=tiles[i++]; const u=this.thumb(Studio.recipeParams(r),192,128); if(u) b.querySelector('i').style.backgroundImage=`url(${u})`; }
           if(i<tiles.length) setTimeout(step,30); }; setTimeout(step,80); }

@@ -3,35 +3,84 @@
 // Uses UI.panel / UI.slider / UI.select / UI.check / UI.button / UI.note (phone app maps these to its widgets).
 const FILTERS = [['none','No filter',0,0],['red','Red  (dark skies, light skin)',0,85],['orange','Orange',30,70],['yellow','Yellow  (classic)',60,55],
   ['green','Green  (foliage, ruddy skin)',120,65],['blue','Blue  (orthochromatic look)',230,75]];
+// Silver film types: band sensitivity [R,Y,G,C,B,M] + grain + tonality, written into the editable controls (like Silver Efex)
+const SILVER_FILMS = [
+  ['neutral','Neutral (no film)',{sSens:[0,0,0,0,0,0],grain:0,grainSize:1.0,sContrast:0,sAmpW:0,sAmpB:0,sSoft:0}],
+  ['trix','Kodak Tri-X 400',{sSens:[8,6,0,-6,-12,0],grain:.75,grainSize:1.1,sContrast:18,sAmpW:0,sAmpB:12,sSoft:0}],
+  ['hp5','Ilford HP5 Plus 400',{sSens:[0,6,6,0,-6,0],grain:.65,grainSize:1.05,sContrast:6,sAmpW:0,sAmpB:5,sSoft:0}],
+  ['tmax100','Kodak T-Max 100',{sSens:[0,0,0,0,0,0],grain:.2,grainSize:0.65,sContrast:20,sAmpW:5,sAmpB:5,sSoft:0}],
+  ['tmax3200','Kodak T-Max P3200',{sSens:[10,8,0,-8,-12,0],grain:1.25,grainSize:1.5,sContrast:10,sAmpW:0,sAmpB:15,sSoft:5}],
+  ['delta3200','Ilford Delta 3200',{sSens:[12,6,0,-10,-16,0],grain:1.4,grainSize:1.7,sContrast:-6,sAmpW:0,sAmpB:0,sSoft:12}],
+  ['acros','Fuji Acros 100 II',{sSens:[-6,0,12,6,0,0],grain:.15,grainSize:0.6,sContrast:15,sAmpW:12,sAmpB:5,sSoft:0}],
+  ['panf','Ilford Pan F Plus 50',{sSens:[6,6,-6,-10,-10,0],grain:.1,grainSize:0.55,sContrast:32,sAmpW:5,sAmpB:18,sSoft:0}],
+  ['fp4','Ilford FP4 Plus 125',{sSens:[0,4,4,0,-4,0],grain:.35,grainSize:0.8,sContrast:10,sAmpW:0,sAmpB:5,sSoft:0}],
+  ['plusx','Kodak Plus-X 125',{sSens:[4,4,0,-4,-6,0],grain:.35,grainSize:0.8,sContrast:14,sAmpW:5,sAmpB:5,sSoft:0}],
+  ['apx','Agfa APX 100',{sSens:[6,0,0,0,-6,0],grain:.4,grainSize:0.85,sContrast:22,sAmpW:0,sAmpB:10,sSoft:0}],
+  ['neopan','Fuji Neopan 1600',{sSens:[4,4,0,-4,-8,0],grain:1.0,grainSize:1.4,sContrast:26,sAmpW:0,sAmpB:15,sSoft:0}],
+  ['2475','Kodak 2475 Recording',{sSens:[10,6,0,-8,-12,0],grain:1.8,grainSize:2.1,sContrast:30,sAmpW:5,sAmpB:20,sSoft:8}],
+  ['xp2','Ilford XP2 Super (chromogenic)',{sSens:[0,0,0,0,0,0],grain:.2,grainSize:0.7,sContrast:-8,sAmpW:0,sAmpB:0,sSoft:12}],
+  ['ortho','Orthochromatic (Ortho Plus)',{sSens:[-80,-30,10,30,45,-30],grain:.3,grainSize:0.75,sContrast:24,sAmpW:5,sAmpB:10,sSoft:0}],
+  ['sfx','Ilford SFX 200 (near infrared)',{sSens:[55,30,45,-25,-55,10],grain:.6,grainSize:1.1,sContrast:22,sAmpW:25,sAmpB:10,sSoft:10}],
+  ['hie','Kodak HIE (infrared)',{sSens:[85,45,90,-40,-75,10],grain:.9,grainSize:1.3,sContrast:20,sAmpW:35,sAmpB:5,sSoft:40}],
+];
+const SENS_BANDS=[['Red','#e33'],['Yellow','#ec3'],['Green','#3c4'],['Cyan','#3cd'],['Blue','#36e'],['Magenta','#d3c']];
+const SILVER_KEYS=['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','sBright','sBrightHi','sBrightSh','sContrast','sAmpW','sAmpB','sSoft','sStructHi','sStructMid','sStructSh','sFine','sSens','sFilmType','sVig','sVigSize','sVigX','sVigY','sBurnT','sBurnB','sBurnL','sBurnR','sToneBal'];
+const SF=id=>{ const f=SILVER_FILMS.find(x=>x[0]===id); return Object.assign({silver:true,sFilmType:id},JSON.parse(JSON.stringify(f[2]))); };
+// Looks. "Group · Name" — the group heads the grid. Develop values a look sets are restored when you pick another look.
 const STUDIO_RECIPES = [
-  ['Silver · Classic contrast', {silver:true,sFilterHue:30,sFilterAmt:60,structure:25,contrast:30,sBurn:30,sBurnSize:40,sTone:'none'}],
-  ['Silver · Red filter skies', {silver:true,sFilterHue:0,sFilterAmt:90,structure:30,contrast:20,sBurn:20,sTone:'none'}],
-  ['Silver · Fine art selenium', {silver:true,sFilterHue:60,sFilterAmt:40,structure:10,sTone:'selenium',sToneAmt:70,sBurn:20}],
-  ['Silver · Soft & airy', {silver:true,sFilterHue:60,sFilterAmt:30,structure:-25,contrast:-20,shadows:30,sTone:'platinum',sToneAmt:50}],
-  ['Silver · Gritty street', {silver:true,sFilterHue:30,sFilterAmt:50,structure:65,contrast:45,grain:1.8,grainSize:1.4,sBurn:45}],
-  ['Silver · Split tone', {silver:true,sFilterHue:60,sFilterAmt:45,structure:15,sTone:'split',sToneAmt:80,sBurn:25}],
-  ['Wet plate / tintype', {silver:true,sFilterHue:230,sFilterAmt:80,structure:35,contrast:20,sTone:'tintype',sToneAmt:95,sBurn:55,sBurnSize:45,border:'wetplate',dustAmt:30,scratchAmt:20,hairAmt:10,softEdges:25}],
-  ['Cyanotype', {silver:true,sFilterHue:230,sFilterAmt:40,structure:10,sTone:'cyanotype',sToneAmt:100,sBurn:20}],
-  ['Two-tone flash · Red / cyan', {ttOn:true,ttPalette:'red-cyan',ttGhost:80,ttMono:85,ttDX:6,ttDY:-4,ttScale:100,ttBand:0}],
-  ['Two-tone flash · Slit band', {ttOn:true,ttPalette:'red-cyan',ttGhost:90,ttMono:90,ttDX:-4,ttDY:-12,ttScale:104,ttBand:38,ttBandPos:48}],
-  ['Two-tone flash · Pink / blue', {ttOn:true,ttPalette:'pink-blue',ttGhost:75,ttMono:70,ttDX:5,ttDY:3,ttScale:103,ttBand:0}],
-  ['Light leak · Sunset', {leakAmt:60,leakColor:'warm',leakPos:1,leakSize:55}],
-  ['Light leak · Red edge', {leakAmt:70,leakColor:'red',leakPos:0,leakSize:35}],
-  ['Expired & dusty', {leakAmt:30,leakColor:'yellow',leakPos:5,dustAmt:45,scratchAmt:25,hairAmt:20,softEdges:30,fringe:20,falloff:0.8}],
-  ['Toy camera', {softEdges:60,fringe:40,falloff:1.2,leakAmt:25,leakColor:'magenta',saturation:20,contrast:15}],
-  ['Zoom burst', {zoomBlur:55}],
-  ['Tilt-shift miniature', {tiltShift:70,tiltPos:58,tiltWidth:16,saturation:25,contrast:15}],
+  ['Silver · Classic contrast', {...SF('trix'),sFilterHue:30,sFilterAmt:55,sContrast:25,structure:20,sAmpB:15,sBurn:25,sBurnSize:40}],
+  ['Silver · Red filter skies', {...SF('hp5'),sFilterHue:0,sFilterAmt:90,sContrast:20,structure:25,sBurnT:40,sBurnSize:45}],
+  ['Silver · Dramatic sky', {...SF('apx'),sFilterHue:0,sFilterAmt:100,sContrast:30,sStructHi:40,sAmpB:25,sBurnT:60,sBurnSize:50}],
+  ['Silver · Fine art selenium', {...SF('acros'),sFilterHue:60,sFilterAmt:40,structure:10,sTone:'selenium',sToneAmt:70,sSoft:10,sVig:20}],
+  ['Silver · Pan F landscape', {...SF('panf'),sFilterHue:60,sFilterAmt:55,structure:30,sFine:25,sBurnT:35,sTone:'selenium',sToneAmt:30}],
+  ['Silver · High key', {...SF('fp4'),sBright:40,sBrightSh:30,sContrast:-10,sAmpW:30,structure:-10,sVig:-35,sVigSize:55}],
+  ['Silver · Low key noir', {...SF('trix'),sFilterHue:0,sFilterAmt:60,sBright:-35,sBrightHi:10,sContrast:45,sAmpB:40,structure:25,sVig:50,sVigSize:60}],
+  ['Silver · Soft & airy', {...SF('xp2'),sBright:15,sContrast:-25,sSoft:35,structure:-20,sTone:'platinum',sToneAmt:45}],
+  ['Silver · Gold-toned portrait', {...SF('fp4'),sFilterHue:30,sFilterAmt:40,structure:-10,sSoft:15,sTone:'gold',sToneAmt:60,sVig:25}],
+  ['Silver · Orthochromatic portrait', {...SF('ortho'),sContrast:15,structure:15,sTone:'sepia',sToneAmt:25,sVig:15}],
+  ['Silver · Infrared dream', {...SF('hie'),sBright:5,sTone:'none'}],
+  ['Silver · Pushed 3200', {...SF('delta3200'),sContrast:35,sAmpB:30,structure:30,sBurn:30,sBurnSize:45}],
+  ['Silver · Gritty street', {...SF('neopan'),sFilterHue:30,sFilterAmt:50,structure:60,sFine:40,sContrast:40,grain:1.4,grainSize:1.3,sBurn:40}],
+  ['Silver · Newspaper', {...SF('2475'),sContrast:50,sAmpB:30,sFine:50}],
+  ['Silver · Split tone', {...SF('hp5'),sFilterHue:60,sFilterAmt:45,structure:15,sTone:'split',sToneAmt:80,sToneBal:10,sBurn:25}],
+  ['Silver · Copper print', {...SF('fp4'),sTone:'copper',sToneAmt:70,sToneBal:20,sContrast:10,sBurn:20,fx:{texture:{pick:1,amt:30}}}],
+  ['Silver · Holga', {...SF('hp5'),sSoft:30,sVig:70,sVigSize:70,softEdges:50,grain:1.0,fx:{frame:{pick:2,amt:100}}}],
+  ['Alt process · Wet plate tintype', {...SF('ortho'),structure:35,sContrast:20,sTone:'tintype',sToneAmt:95,sBurn:45,sBurnSize:45,border:'wetplate',dustAmt:30,scratchAmt:20,hairAmt:10,softEdges:25,grain:0.2}],
+  ['Alt process · Ambrotype', {...SF('ortho'),structure:25,sContrast:10,sSoft:15,sTone:'ambrotype',sToneAmt:90,sBurn:35,softEdges:30,fx:{frame:{id:'frame_ambrotype_1',amt:100}},grain:0.2}],
+  ['Alt process · Cyanotype', {...SF('ortho'),sTone:'cyanotype',sToneAmt:100,sContrast:10,sBurn:20,fx:{texture:{pick:0,amt:35}}}],
   ['Analog · Expired roll', {fx:{leak:{pick:0,amt:55},dust:{pick:0,amt:60},texture:{pick:0,amt:25}},softEdges:20,fringe:15,falloff:0.6,saturation:-10}],
   ['Analog · Burnt ending', {fx:{burn:{pick:0,amt:85},dust:{pick:1,amt:40}},contrast:10}],
   ['Analog · Summer leak', {fx:{leak:{pick:1,amt:80},flare:{pick:0,amt:45}},saturation:10}],
+  ['Analog · Sunset leak', {leakAmt:60,leakColor:'warm',leakPos:1,leakSize:55}],
+  ['Analog · Red edge leak', {leakAmt:70,leakColor:'red',leakPos:0,leakSize:35}],
   ['Analog · Lomo', {fx:{leak:{pick:2,amt:50},frame:{pick:0,amt:100}},softEdges:45,fringe:30,falloff:1.3,saturation:25,contrast:20}],
-  ['Analog · Darkroom print', {silver:true,sFilterHue:60,sFilterAmt:40,structure:20,sTone:'selenium',sToneAmt:40,fx:{texture:{pick:1,amt:35},dust:{pick:2,amt:45,invert:true},frame:{pick:1,amt:100}}}],
-  ['Double exposure · In-camera', {dblMode:'add',dblAmt:70}],
-  ['Double exposure · Silhouette', {dblMode:'silhouette',dblAmt:100,dblMask:0}],
+  ['Analog · Disposable flash', {contrast:20,saturation:15,falloff:1.0,highlights:-15,fx:{leak:{pick:3,amt:35},dust:{pick:0,amt:30}},fringe:15}],
+  ['Analog · Faded 70s print', {contrast:-20,saturation:-15,blacks:25,gHiH:45,gHiS:25,gShH:200,gShS:15,fx:{texture:{pick:1,amt:30},dust:{pick:1,amt:30}}}],
+  ['Analog · Sun-bleached', {highlights:20,whites:15,saturation:-25,gHiH:40,gHiS:20,fx:{flare:{pick:1,amt:55}}}],
+  ['Analog · Cross-processed', {contrast:30,saturation:25,gShH:170,gShS:35,gHiH:60,gHiS:35,gMidH:100,gMidS:10}],
+  ['Analog · Redscale', {saturation:20,contrast:15,gShH:10,gShS:50,gMidH:20,gMidS:45,gHiH:40,gHiS:40,fx:{leak:{pick:0,amt:30}}}],
+  ['Analog · Bleach bypass', {saturation:-45,contrast:40,whites:15,highlights:-10,fringe:10}],
+  ['Analog · Darkroom print', {...SF('fp4'),sFilterHue:60,sFilterAmt:40,structure:20,sTone:'selenium',sToneAmt:40,fx:{texture:{pick:1,amt:35},dust:{pick:2,amt:45,invert:true},frame:{pick:1,amt:100}}}],
+  ['Cinema · Teal & orange', {contrast:15,gShH:195,gShS:30,gHiH:35,gHiS:30,saturation:5}],
+  ['Cinema · Moody night', {ev:-0.3,contrast:10,gShH:220,gShS:30,gMidH:210,gMidS:10,halation:1.5,glow:0.3,saturation:-10}],
+  ['Cinema · Dreamy halation', {glow:0.6,halation:1.8,softEdges:30,highlights:-10,fx:{flare:{pick:0,amt:40}}}],
+  ['Creative · Toy camera', {softEdges:60,fringe:40,falloff:1.2,leakAmt:25,leakColor:'magenta',saturation:20,contrast:15}],
+  ['Creative · Zoom burst', {zoomBlur:55}],
+  ['Creative · Motion streak', {motionBlur:45,motionAngle:0,fx:{leak:{pick:1,amt:40}}}],
+  ['Creative · Tilt-shift miniature', {tiltShift:70,tiltPos:58,tiltWidth:16,saturation:25,contrast:15}],
+  ['Creative · Prism fringe', {fringe:70,softEdges:25,fx:{flare:{pick:2,amt:50},leak:{pick:2,amt:30}}}],
+  ['Creative · Bubble lens', {distort:-60,softEdges:40,falloff:0.8,fringe:20}],
+  ['Two-tone · Red / cyan', {ttOn:true,ttPalette:'red-cyan',ttGhost:80,ttMono:85,ttDX:6,ttDY:-4,ttScale:100,ttBand:0}],
+  ['Two-tone · Slit band', {ttOn:true,ttPalette:'red-cyan',ttGhost:90,ttMono:90,ttDX:-4,ttDY:-12,ttScale:104,ttBand:38,ttBandPos:48}],
+  ['Two-tone · Pink / blue', {ttOn:true,ttPalette:'pink-blue',ttGhost:75,ttMono:70,ttDX:5,ttDY:3,ttScale:103,ttBand:0}],
+  ['Two-tone · Purple / yellow drag', {ttOn:true,ttPalette:'purple-yellow',ttGhost:95,ttMono:80,ttDX:12,ttDY:0,ttScale:100,motionBlur:25,motionAngle:0}],
+  ['Double · In-camera', {dblMode:'add',dblAmt:70}],
+  ['Double · Silhouette', {dblMode:'silhouette',dblAmt:100,dblMask:0}],
+  ['Double · Silver dream', {dblMode:'screen',dblAmt:80,...SF('hp5'),sSoft:25,sTone:'selenium',sToneAmt:40}],
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'];
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
 
 const Studio = {
   host:null,
@@ -43,31 +92,57 @@ const Studio = {
   reset(keys){ keys.forEach(k=>this.P()[k]=cloneParams(DEFAULTS[k])); this.host.changed(); this.host.commit(); UI.refresh(); },
   // ---- asset layers
   assets(cat){ return (Engine.assetList||[]).filter(a=>a.cat===cat); },
-  resolveFx(fx){ const out={}; for(const cat in fx||{}){ const L=Object.assign({},fx[cat]); if(L.pick!==undefined){ const list=this.assets(cat); if(!list.length) continue; L.id=list[L.pick%list.length].id; delete L.pick; } out[cat]=L; } return out; },
+  resolveFx(fx){ const out={}; for(const cat in fx||{}){ const L=Object.assign({},fx[cat]); if(L.id&&!this.assets(cat).some(a=>a.id===L.id)){ delete L.id; if(L.pick===undefined) L.pick=0; } if(L.pick!==undefined){ const list=this.assets(cat); if(!list.length) continue; L.id=list[L.pick%list.length].id; delete L.pick; } out[cat]=L; } return out; },
   layer(cat){ const p=this.P(); if(!p.fx||p.fx===DEFAULTS.fx) p.fx={}; return p.fx[cat]||(p.fx[cat]={id:'',amt:0}); },
-  recipeParams(r){ const o=cloneParams(this.P()); r=cloneParams(r); if(r.fx){ r.fx=this.resolveFx(r.fx); if(r.border==='wetplate'&&r.fx.frame) delete r.border; } Object.assign(o,r);
+  // a look replaces the previous look: Studio starts clean, and Develop values the last look changed go back first
+  recipeParams(r){ const o=cloneParams(this.P()); r=cloneParams(r);
+    const lu=o.lookUndo||{}; for(const k in lu) o[k]=cloneParams(lu[k]);
+    const keepDbl=o.dblId, keepPlace={dblX:o.dblX,dblY:o.dblY,dblScale:o.dblScale,dblRot:o.dblRot}; STUDIO_KEYS.forEach(k=>o[k]=cloneParams(DEFAULTS[k])); o.fx={};
+    if(keepDbl&&(r.dblMode||r.dblId)){ o.dblId=keepDbl; Object.assign(o,keepPlace); }
+    o.lookUndo={}; for(const k in r) if(!STUDIO_KEYS.includes(k)&&k!=='fx') o.lookUndo[k]=cloneParams(o[k]); if(r.fx){ r.fx=this.resolveFx(r.fx); if(r.border==='wetplate'&&r.fx.frame) delete r.border; } Object.assign(o,r);
     if(r.border==='wetplate'){ const t=this.assets('frame').find(a=>/tintype|wetplate|wet-plate/i.test(a.id+a.name)); if(t){ delete o.border; o.border=this.P().border; o.fx=Object.assign({},o.fx,{frame:{id:t.id,amt:100}}); } } if(r.border==='wetplate'&&!o.edgeText) o.edgeText='none'; return o; },
-  applyRecipe(r,name){ const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!r.dblId) Engine.p.dblId=keep;
-    if(r.dblMode && !Engine.p.dblId) this.host.toast('Pick the second photo in Double Exposure'); this.host.changed(); this.host.commit(); UI.refresh(); this.host.toast('Applied '+name); },
+  applyRecipe(r,name){ const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!Engine.p.dblId){ this._lastDbl=keep; Engine.setDouble(null); }
+    if(r.dblMode && !Engine.p.dblId) this.host.toast('Pick the second photo in Double Exposure'); this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets();
+    const dev=Object.keys(Engine.p.lookUndo||{}); const NM={contrast:'Contrast',saturation:'Saturation',vibrance:'Vibrance',falloff:'Vignette',grain:'Grain',grainSize:'Grain',border:'Frame',edgeText:'Frame',ev:'Exposure',highlights:'Highlights',shadows:'Shadows',temp:'White balance',tint:'White balance',halation:'Halation',glow:'Glow',stock:'Film',blacks:'Blacks',whites:'Whites'};
+    this.host.toast('Applied '+name+(dev.length?' — also set in Develop: '+[...new Set(dev.map(k=>NM[k]||k))].join(', '):'')); this.host.openEdited&&this.host.openEdited(); },
   resetAll(){ this.dragTarget=null; this.reset(STUDIO_KEYS); this.P().fx={}; if(this.P().border==='wetplate') this.P().border='none'; Engine.setDouble(null); this.host.changed(); },
 
   build(root,only){
     root.innerHTML=''; const H=this.host, P=()=>this.P(); const want=id=>!only||only===id; let b;
     // ---------------------------------------------------------------- Silver
     if(want('sSilver')){
-    b=UI.panel(root,'sSilver','Silver — Black & White',true,()=>this.reset(['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt']));
+    b=UI.panel(root,'sSilver','Silver — Black & White',true,()=>this.reset(SILVER_KEYS));
+    const sub=t=>{ const h=document.createElement('div'); h.className='ahead'; h.textContent=t; b.appendChild(h); };
+    const on=()=>{ if(!P().silver){ P().silver=true; UI.refresh(); } };
+    const SS=(k,l,o)=>this.S(b,k,l,Object.assign({set:v=>{ P()[k]=v; if(!P().silver){ P().silver=true; UI.refresh(); } H.changed(); }},o));
     UI.check(b,'st_silver','Convert to black & white',()=>P().silver,v=>{ P().silver=v; H.changed(); H.commit(); });
-    UI.select(b,'st_filter','Color filter',()=>FILTERS.map(f=>[f[0],f[1]]),()=>{ const f=FILTERS.find(f=>f[3]&&Math.abs(f[2]-P().sFilterHue)<1)||FILTERS[0]; return P().sFilterAmt>0?f[0]:'none'; },
+    sub('Global adjustments');
+    SS('sBright','Brightness',{min:-100,max:100,step:1}); SS('sBrightHi','\u2003Highlights',{min:-100,max:100,step:1}); SS('sBrightSh','\u2003Shadows',{min:-100,max:100,step:1});
+    SS('sContrast','Contrast',{min:-100,max:100,step:1}); SS('sAmpW','Amplify whites',{min:0,max:100,step:1}); SS('sAmpB','Amplify blacks',{min:0,max:100,step:1}); SS('sSoft','Soft contrast',{min:0,max:100,step:1});
+    SS('structure','Structure',{min:-100,max:100,step:1}); SS('sStructHi','\u2003Highlights',{min:-100,max:100,step:1}); SS('sStructMid','\u2003Midtones',{min:-100,max:100,step:1}); SS('sStructSh','\u2003Shadows',{min:-100,max:100,step:1}); SS('sFine','\u2003Fine structure',{min:-100,max:100,step:1});
+    sub('Color filter');
+    UI.select(b,'st_filter','Filter',()=>FILTERS.map(f=>[f[0],f[1]]),()=>{ const f=FILTERS.find(f=>f[3]&&Math.abs(f[2]-P().sFilterHue)<1)||FILTERS[0]; return P().sFilterAmt>0?f[0]:'none'; },
       v=>{ const f=FILTERS.find(x=>x[0]===v); P().sFilterHue=f[2]; P().sFilterAmt=f[3]; if(f[3]) P().silver=true; H.changed(); H.commit(); UI.refresh(); });
-    this.S(b,'sFilterHue','Filter hue',{min:0,max:359,step:1,fmt:x=>Math.round(x)+'°',track:'linear-gradient(90deg,#f33,#fb3,#3f3,#3ff,#33f,#f3f,#f33)'});
-    this.S(b,'sFilterAmt','Filter strength',{min:0,max:100,step:1});
-    UI.select(b,'st_bwfilm','Film',()=>[['', 'Keep current film']].concat(Engine.manifest.stocks.filter(s=>s.type==='bw'&&!s.instant).map(s=>[s.id,s.maker+' '+s.name])),()=>'',
+    SS('sFilterHue','Hue',{min:0,max:359,step:1,fmt:x=>Math.round(x)+'°',track:'linear-gradient(90deg,#f33,#fb3,#3f3,#3ff,#33f,#f3f,#f33)'});
+    SS('sFilterAmt','Strength',{min:0,max:100,step:1});
+    sub('Film type');
+    UI.select(b,'st_sfilm','Film',()=>SILVER_FILMS.map(f=>[f[0],f[1]]),()=>P().sFilmType||'neutral',v=>{ const f=SILVER_FILMS.find(x=>x[0]===v); Object.assign(P(),cloneParams(f[2]),{sFilmType:v,silver:true}); H.changed(); H.commit(); UI.refresh(); });
+    SENS_BANDS.forEach(([n,c],i)=>UI.slider(b,'st_sens'+i,'\u2003'+n,{min:-100,max:100,step:1,def:0,track:`linear-gradient(90deg,#111,${c})`,get:()=>(P().sSens||[])[i]||0,set:v=>{ const a=(P().sSens||[0,0,0,0,0,0]).slice(); a[i]=v; P().sSens=a; on(); H.changed(); },commit:()=>H.commit()}));
+    UI.note(b,'Each film sees colour differently: these sliders set how bright each colour lands in grey, plus grain (Develop → Grain) and tonality above.');
+    sub('Finishing');
+    UI.select(b,'st_tone','Toning',()=>[['none','None'],['selenium','Selenium'],['sepia','Sepia'],['gold','Gold'],['platinum','Platinum'],['copper','Copper'],['cyanotype','Cyanotype'],['tintype','Tintype'],['ambrotype','Ambrotype'],['split','Split (cool shadows, warm highlights)']],()=>P().sTone,v=>{ P().sTone=v; on(); H.changed(); H.commit(); });
+    SS('sToneAmt','\u2003Strength',{min:0,max:100,step:1}); SS('sToneBal','\u2003Balance',{min:-100,max:100,step:1,fmt:x=>x<0?'shadows '+(-x):x>0?'highlights '+x:'even'});
+    SS('sVig','Vignette',{min:-100,max:100,step:1}); SS('sVigSize','\u2003Size',{min:0,max:100,step:1});
+    SS('sVigX','\u2003Centre ←→',{min:-1,max:1,step:0.01,fmt:x=>(x*100).toFixed(0)}); SS('sVigY','\u2003Centre ↑↓',{min:-1,max:1,step:0.01,fmt:x=>(x*100).toFixed(0)});
+    SS('sBurn','Burn edges (all)',{min:0,max:100,step:1}); SS('sBurnT','\u2003Top',{min:0,max:100,step:1}); SS('sBurnB','\u2003Bottom',{min:0,max:100,step:1}); SS('sBurnL','\u2003Left',{min:0,max:100,step:1}); SS('sBurnR','\u2003Right',{min:0,max:100,step:1}); SS('sBurnSize','\u2003Size',{min:5,max:90,step:1});
+    UI.select(b,'st_bwfilm','Film look underneath',()=>[['', 'Keep current film']].concat(Engine.manifest.stocks.filter(s=>s.type==='bw'&&!s.instant).map(s=>[s.id,s.maker+' '+s.name])),()=>'',
       async v=>{ if(!v) return; await H.setStock(v); P().silver=true; H.changed(); H.commit(); UI.refresh(); });
-    this.S(b,'structure','Structure',{min:-100,max:100,step:1});
-    this.S(b,'sBurn','Burn edges',{min:0,max:100,step:1}); this.S(b,'sBurnSize','Burn size',{min:5,max:90,step:1});
-    UI.select(b,'st_tone','Toner',()=>[['none','None'],['selenium','Selenium'],['sepia','Sepia'],['gold','Gold'],['platinum','Platinum'],['copper','Copper'],['cyanotype','Cyanotype'],['tintype','Tintype'],['ambrotype','Ambrotype'],['split','Split (cool shadows, warm highlights)']],()=>P().sTone,v=>{ P().sTone=v; H.changed(); H.commit(); });
-    this.S(b,'sToneAmt','Toner strength',{min:0,max:100,step:1});
-    UI.note(b,'Filters work like real glass on the lens, before the film — red darkens blue skies, green lightens foliage. Contrast, curve and grain from Develop still apply.');
+    sub('Zone system');
+    { const z=document.createElement('div'); z.className='zones'; b.appendChild(z);
+      for(let i=0;i<=10;i++){ const c=document.createElement('span'); const g=Math.round(255*Math.pow(i/10,1)); c.style.background=`rgb(${g},${g},${g})`; c.style.color=i<6?'#ccc':'#222'; c.textContent=['0','I','II','III','IV','V','VI','VII','VIII','IX','X'][i];
+        c.onmouseenter=()=>{ Engine.view.zones=true; Engine.view.zoneHi=i; Engine.dirty=true; }; c.onmouseleave=()=>{ Engine.view.zones=!!this._zonesPinned; Engine.view.zoneHi=-1; Engine.dirty=true; };
+        c.onclick=()=>{ this._zonesPinned=!this._zonesPinned; Engine.view.zones=this._zonesPinned; z.classList.toggle('pinned',this._zonesPinned); Engine.dirty=true; }; z.appendChild(c); } }
+    UI.note(b,'Hover a zone to see where it falls in the photo (Ansel Adams zones 0–X). Click to keep the zone map on.');
     }
     // ---------------------------------------------------------------- Two-tone flash
     if(want('sTwoTone')){
@@ -206,7 +281,8 @@ const Studio = {
     this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); this.host.toast&&this.host.toast('🎲 '+{analog:'Analog accident',silver:'Silver print',toy:'Toy camera',twotone:'Two-tone flash',dreamy:'Dreamy flare',burnt:'Burnt roll',double:'Double exposure'}[th]+' — press again for another (⌘Z to undo)'); },
   // recipes as a Nik-style grid of live previews of the current photo
   buildRecipeGrid(el,onHover){ el.innerHTML=''; el.classList.add('rgrid'); this._rtiles=[];
-    STUDIO_RECIPES.forEach(([name,r])=>{ const d=document.createElement('div'); d.className='rtile'; d.innerHTML='<div class="rim"></div><span></span>'; d.querySelector('span').textContent=name.replace(' · ',' — ');
+    let grp=''; STUDIO_RECIPES.forEach(([name,r])=>{ const [g,n]=name.includes(' · ')?name.split(' · '):['',name]; if(g!==grp){ grp=g; const h=document.createElement('div'); h.className='rgroup'; h.textContent=g; el.appendChild(h); }
+      const d=document.createElement('div'); d.className='rtile'; d.innerHTML='<div class="rim"></div><span></span>'; d.querySelector('span').textContent=n;
       d.onclick=()=>this.applyRecipe(r,name); if(onHover){ d.onmouseenter=()=>onHover(this.recipeParams(r)); d.onmouseleave=()=>onHover(null); } el.appendChild(d); this._rtiles.push([d,r]); }); },
   // render the previews a few at a time so the UI stays responsive
   refreshRecipeThumbs(key){ if(!this._rtiles||!this.host.renderThumb||!Engine.src) return; if(key&&key===this._rkey) return; this._rkey=key; const job=this._rjob=(this._rjob||0)+1; let i=0;

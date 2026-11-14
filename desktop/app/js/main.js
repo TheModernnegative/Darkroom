@@ -305,7 +305,17 @@ const App = {
   syncToggles(){ if(UI.sliders.showFrame) UI.sliders.showFrame(); const off=Engine.p.off||{}; for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el) continue; const o=this.PANEL_SECTIONS[id].every(k=>off[k]); el.classList.toggle('secoff',o); const b=el.querySelector('.ptog'); if(b) b.textContent=o?'OFF':'ON'; } },
   dots(){ this.syncToggles&&this.syncToggles(); const e=Tools.edited(Engine.p), map={pMasks:'masks',pDetail:'effects',pFilm:'film',pBasic:'light',pCurve:'light',pCrop:'crop',pHSL:'color',pGrade:'color',pGrain:'effects',pHal:'effects',pLens:'effects',pFrame:'effects'};
     const own={pMasks:['masks'],pDetail:['sharpen','sharpRadius','nr','nrColor'],pBasic:['temp','tint','ev','contrast','highlights','shadows','whites','blacks','vibrance','saturation','hlExpand'],pCurve:['curve'],pHSL:['hslH','hslS','hslL'],pGrade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'],pGrain:['grain','grainSize','grainRough'],pHal:['halation','glow'],pLens:['falloff'],pFrame:['border'],pCrop:['crop','angle','rot','flip']};
-    for(const id in map){ const el=document.getElementById(id); if(!el) continue; const ks=own[id]; const on = ks ? ks.some(k=>JSON.stringify(Engine.p[k])!==JSON.stringify(DEFAULTS[k])) : e[map[id]]; el.classList.toggle('edited',!!on); } },
+    for(const id in map){ const el=document.getElementById(id); if(!el) continue; const ks=own[id]; const on = ks ? ks.some(k=>JSON.stringify(Engine.p[k])!==JSON.stringify(DEFAULTS[k])) : e[map[id]]; el.classList.toggle('edited',!!on); }
+    // Studio panels
+    for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('edited',this.studioEdited(id)); }
+    const any=Object.keys(this.STUDIO_OWN).some(id=>this.studioEdited(id)); const nav=document.querySelector('[data-m="studio"]'); if(nav) nav.classList.toggle('edited',any); },
+  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
+  studioEdited(id){ const [ks,...cats]=this.STUDIO_OWN[id], p=Engine.p, fx=p.fx||{};
+    if(id==='sSilver'&&!p.silver) return false; if(id==='sTwoTone'&&!p.ttOn) return false;
+    return ks.some(k=>JSON.stringify(p[k])!==JSON.stringify(DEFAULTS[k]))||cats.some(c=>fx[c]&&fx[c].id&&fx[c].amt>0); },
+  // after a look: open the panels it used, fold the rest, so you can fine-tune it
+  openEdited(){ this.dots(); for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('open',this.studioEdited(id)); }
+    const first=Object.keys(this.STUDIO_OWN).map(id=>document.getElementById(id)).find(el=>el&&el.classList.contains('open')); if(first) first.scrollIntoView({block:'start',behavior:'smooth'}); },
   changed(){ Engine.dirty=true; Engine.histDirty=true; clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),120); if(this.cur){ this.cur.settings=Engine.p; this.thumbSoon(); this.saveSoon(); } },
   commit(){ const it=this.cur; if(!it) return; const snap=JSON.stringify(Engine.p);
     it.hist=it.hist||[]; it.fut=[]; if(it.hist[it.hist.length-1]!==snap) it.hist.push(snap); if(it.hist.length>200) it.hist.shift(); },
@@ -390,7 +400,27 @@ const App = {
 
   rate(n){ const list=this.selected(); list.forEach(it=>it.rating=n); this.renderStrip(); this.renderGrid(); this.saveSoon(); this.toast(n?('★'.repeat(n)+(list.length>1?` · ${list.length} photos`:'')):'Rating cleared'); },
   flag(f){ const list=this.selected(); list.forEach(it=>it.flag=f); this.renderStrip(); this.renderGrid(); this.saveSoon(); this.toast(f==='pick'?'Picked ⚑':f==='reject'?'Rejected ✕':'Flag cleared'); },
-  visible(){ const f=this.filter||'all'; return this.items.filter(it=> f==='all' ? true : f==='picks' ? it.flag==='pick' : f==='rejects' ? it.flag==='reject' : f==='unrated' ? !it.rating : (it.rating||0)>=+f ); },
+  // ---- stacks: duplicates live together under one cover photo; collapse/expand, pin members to stay out
+  members(sid){ return this.items.filter(x=>x.stack===sid); },
+  cover(sid){ const m=this.members(sid); return m.find(x=>x.stackTop)||m[0]; },
+  visible(){ const all=this.filtered(), out=[], seen=new Set();
+    all.forEach(it=>{ if(!it.stack){ out.push(it); return; } if(seen.has(it.stack)) return; seen.add(it.stack);
+      const m=all.filter(x=>x.stack===it.stack); if(m.length<2){ out.push(...m); return; }
+      const top=m.find(x=>x.stackTop)||m[0], open=top.stackOpen;
+      m.sort((a,b)=>(b===top)-(a===top)); m.forEach((x,i)=>{ x._stk={n:m.length,first:i===0,last:i===m.length-1,open};
+        if(open||x===top||x.pinned||x===this.cur) out.push(x); }); });
+    return out; },
+  toggleStack(it){ const top=this.cover(it.stack); top.stackOpen=!top.stackOpen; this.renderStrip(); this.renderGrid(); this.saveSoon(); },
+  makeCover(it){ this.members(it.stack).forEach(x=>{ if(x.stackTop&&x!==it){ x.stackTop=false; it.stackOpen=x.stackOpen; } }); it.stackTop=true; this.renderStrip(); this.renderGrid(); this.saveSoon(); this.toast('Now the cover of this stack'); },
+  pinItem(it){ it.pinned=!it.pinned; this.renderStrip(); this.renderGrid(); this.saveSoon(); this.toast(it.pinned?'Pinned — stays visible when the stack is closed':'Unpinned'); },
+  stackSelected(){ const sel=this.items.filter(x=>x.sel||x===this.cur); if(sel.length<2){ this.toast('Select two or more photos (⌘-click) to stack them'); return; }
+    const sid=sel.find(x=>x.stack)?.stack||sel[0].id; const first=this.items.indexOf(sel[0]);
+    sel.forEach(x=>{ x.stack=sid; x.stackTop=false; }); sel[0].stackTop=true; sel[0].stackOpen=false;
+    const rest=this.items.filter(x=>!sel.includes(x)); rest.splice(Math.min(first,rest.length),0,...sel); this.items=rest;
+    this.items.forEach(x=>x.sel=false); this.renderStrip(); this.renderGrid(); this.saveSoon(); this.toast('Stacked '+sel.length+' photos'); },
+  unstack(it){ const sid=it.stack; if(!sid) return; const m=this.members(sid); if(m.length<=2) m.forEach(x=>{ delete x.stack; x.stackTop=false; x.pinned=false; }); else { delete it.stack; if(it.stackTop){ it.stackTop=false; const n=this.members(sid)[0]; n.stackTop=true; n.stackOpen=it.stackOpen; } it.pinned=false; }
+    this.renderStrip(); this.renderGrid(); this.saveSoon(); },
+  filtered(){ const f=this.filter||'all'; return this.items.filter(it=> f==='all' ? true : f==='picks' ? it.flag==='pick' : f==='rejects' ? it.flag==='reject' : f==='unrated' ? !it.rating : (it.rating||0)>=+f ); },
   badge(it){ return (it.flag==='pick'?'<i class="fl pk">⚑</i>':it.flag==='reject'?'<i class="fl rj">✕</i>':'')+(it.rating?`<i class="st">${'★'.repeat(it.rating)}</i>`:''); },
   renderStrip(){
     const el=$('#strip'); el.innerHTML='';
@@ -407,6 +437,7 @@ const App = {
       t.innerHTML=(it.thumb?`<img src="${it.thumb}">`:'')+`<span class="badge">${(Engine.stock(it.settings.stock).name||'').replace('Superia ','')}</span><span class="marks">${this.badge(it)}</span>`;
       t.onclick=e=>this.stripClick(it,e);
       t.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); };
+      this.stackDecor(t,it);
       const mb=document.createElement('button'); mb.className='tmore'; mb.textContent='⋯'; mb.title='Duplicate · Reset · Remove';
       mb.onclick=e=>{ e.stopPropagation(); const r=mb.getBoundingClientRect(); this.photoMenu(it,r.left,r.top); }; t.appendChild(mb);
       el.appendChild(t); });
@@ -425,9 +456,15 @@ const App = {
     const set=asOriginal?withDefaults({}):cloneParams(it===this.cur?Engine.p:it.settings);
     const d=this.newItem({name:`${base} (${tag}${n>1?' '+n:''})`,path:it.path,file:it.file,kind:it.kind==='scanframe'?'photo':it.kind,settings:set,thumb:asOriginal?null:it.thumb});
     if(it.kind==='scanframe'&&it.src){ d.kind='scanframe'; d.src=it.src; }
-    this.items.splice(this.items.indexOf(d),1); this.items.splice(this.items.indexOf(it)+1,0,d);
+    const sid=it.stack||it.id; if(!it.stack){ it.stack=sid; it.stackTop=true; } d.stack=sid; d.stackTop=false; this.cover(sid).stackOpen=true;
+    const m=this.members(sid).filter(x=>x!==d); this.items.splice(this.items.indexOf(d),1); this.items.splice(this.items.indexOf(m[m.length-1])+1,0,d);
     this.renderStrip(); this.renderGrid&&this.renderGrid(); this.saveSoon(); await this.select(d.id);
     this.toast(asOriginal?'Duplicated as the original — your edit is still on the first copy':'Duplicated with this edit'); },
+  stackDecor(t,it){ const k=it.stack&&it._stk; if(!k||k.n<2) return; const top=this.cover(it.stack);
+    t.classList.add('stk'); if(k.open){ t.classList.add('stkOpen'); if(k.first) t.classList.add('stkFirst'); if(k.last) t.classList.add('stkLast'); }
+    if(it.pinned) t.insertAdjacentHTML('beforeend','<i class="pin" title="Pinned">📌</i>');
+    if(it===top){ const b=document.createElement('button'); b.className='stkBtn'; b.innerHTML=(k.open?'−':'+')+'<b>'+k.n+'</b>'; b.title=k.open?'Close the stack':'Show all '+k.n+' versions';
+      b.onclick=e=>{ e.stopPropagation(); this.toggleStack(it); }; t.appendChild(b); if(!k.open) t.classList.add('stkShut'); } },
   photoMenuReset(x0,y0){ const m=$('#ctxMenu'); m.innerHTML='';
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     item('Reset to original',()=>this.resetPhoto(false),'⇧⌘R'); item('Save as version, then reset',()=>this.resetPhoto(true));
@@ -440,6 +477,11 @@ const App = {
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const sep=()=>{ const h=document.createElement('hr'); m.appendChild(h); };
     const open=async()=>{ if(it!==this.cur) await this.select(it.id); };
+    if(it.stack&&this.members(it.stack).length>1){ const top=this.cover(it.stack);
+      if(it!==top) item('Make cover of stack',()=>this.makeCover(it)); else item(top.stackOpen?'Close stack':'Open stack',()=>this.toggleStack(it));
+      if(it!==top) item(it.pinned?'Unpin':'Pin (show when stack is closed)',()=>this.pinItem(it));
+      item('Remove from stack',()=>this.unstack(it),'⇧⌘G'); sep(); }
+    if(this.items.filter(x=>x.sel||x===this.cur).length>1) { item('Stack selected photos',()=>this.stackSelected(),'⌘G'); sep(); }
     item('Duplicate',()=>this.duplicate(it,false),'⌘D');
     item('Duplicate as original',()=>this.duplicate(it,true),'⇧⌘D');
     sep();
@@ -479,7 +521,7 @@ const App = {
     const g=$('#grid'); if(!g.classList.contains('on')) return; g.innerHTML='';
     this.visible().forEach(it=>{ const c=document.createElement('div'); c.className='cell'+(it===this.cur?' on':'')+(it.flag==='reject'?' rej':'');
       c.innerHTML=(it.thumb?`<img src="${it.thumb}">`:'')+`<div class="cap">${it.name} · ${Engine.stock(it.settings.stock).name}</div><span class="marks">${this.badge(it)}</span>`;
-      c.className+=(it.sel&&it!==this.cur?' sel':''); c.onclick=e=>{ if(e.metaKey||e.ctrlKey||e.shiftKey) this.stripClick(it,e); else { this.items.forEach(x=>x.sel=false); this.select(it.id); } }; c.ondblclick=()=>{ this.setModule('develop'); this.select(it.id); }; c.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); };
+      c.className+=(it.sel&&it!==this.cur?' sel':''); c.onclick=e=>{ if(e.metaKey||e.ctrlKey||e.shiftKey) this.stripClick(it,e); else { this.items.forEach(x=>x.sel=false); this.select(it.id); } }; c.ondblclick=()=>{ this.setModule('develop'); this.select(it.id); }; c.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); }; this.stackDecor(c,it);
       g.appendChild(c); });
   },
   thumbSoon(ms=500){ clearTimeout(this._tt); this._tt=setTimeout(()=>this.makeThumb(),ms); },
@@ -843,7 +885,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const data={v:1,presets:this.userPresets,lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null}))};
+    const data={v:1,presets:this.userPresets,lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -957,6 +999,7 @@ const App = {
     if(meta&&e.shiftKey&&k.toLowerCase()==='c'){ e.preventDefault(); const cp=cloneParams(Engine.p); PER_PHOTO_KEYS.forEach(k=>delete cp[k]); this.clipboard=JSON.stringify(Engine.p); this._clipLite=JSON.stringify(cp); this.toast('Settings copied'); return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='v'){ e.preventDefault(); if(this.clipboard){ this.applySettings(Object.assign(cloneParams(Engine.p),JSON.parse(this._clipLite||this.clipboard))); this.commit(); this.toast('Settings pasted'); } return; }
     if(meta&&k.toLowerCase()==='a'&&this.module!=='scan'){ e.preventDefault(); this.items.forEach(x=>x.sel=true); this.renderStrip(); this.renderGrid(); this.updateSync(); this.toast(this.items.length+' photos selected'); return; }
+    if(meta&&k.toLowerCase()==='g'&&this.module!=='scan'){ e.preventDefault(); if(e.shiftKey){ if(this.cur) this.unstack(this.cur); } else this.stackSelected(); return; }
     if(meta&&k.toLowerCase()==='d'&&this.cur&&this.module!=='scan'){ e.preventDefault(); this.duplicate(this.cur,e.shiftKey); return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='r'&&this.cur){ e.preventDefault(); this.resetPhoto(false); return; }
     if(meta&&k==="'"){ e.preventDefault(); this.saveVersion(); return; }

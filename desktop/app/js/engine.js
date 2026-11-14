@@ -11,6 +11,9 @@ const DEFAULTS = {
   edgeText:'stock', edgeCustom:'', frameNo:0, frameTone:'auto',
   // Studio — Silver (B&W lab)
   silver:false, sFilterHue:30, sFilterAmt:0, structure:0, sBurn:0, sBurnSize:40, sTone:'none', sToneAmt:60,
+  // Silver Efex-style controls (only act when silver is on)
+  sBright:0, sBrightHi:0, sBrightSh:0, sContrast:0, sAmpW:0, sAmpB:0, sSoft:0, sStructHi:0, sStructMid:0, sStructSh:0, sFine:0,
+  lookUndo:null, sSens:[0,0,0,0,0,0], sFilmType:'', sVig:0, sVigSize:50, sVigX:0, sVigY:0, sBurnT:0, sBurnB:0, sBurnL:0, sBurnR:0, sToneBal:0,
   // Studio — Analog
   dblId:'', dblMode:'add', dblAmt:60, dblEv:0, dblScale:1, dblX:0, dblY:0, dblRot:0, dblFlip:false, dblMask:0,
   leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
@@ -324,7 +327,7 @@ const Engine = {
     gl.uniform1iv(u.uMType,mt); gl.uniform4fv(u.uMA,mA); gl.uniform4fv(u.uMB,mB); gl.uniform4fv(u.uMC,mC); gl.uniformMatrix3fv(u.uMWB,false,mW);
     gl.uniform1iv(u.uMTex,new Int32Array([1,2,3,4]));
     // Silver colour filter (a real filter in front of the lens: scales each channel's exposure)
-    { const f = Engine.filterRGB(p.sFilterHue,p.silver?p.sFilterAmt/100:0); gl.uniform3f(u.uFilt,...f); gl.uniform1f(u.uSilverPre,p.silver?1:0); }
+    { const f = Engine.filterRGB(p.sFilterHue,p.silver?p.sFilterAmt/100:0); gl.uniform3f(u.uFilt,...f); gl.uniform1f(u.uSilverPre,p.silver?1:0); gl.uniform1fv(u.uSens,new Float32Array((p.silver&&p.sSens||[0,0,0,0,0,0]).map(v=>(v||0)/100))); }
     // double exposure: second photo added in exposure space, before the film
     const s2 = p.dblId && this.dblSrc && this.dblSrc.id===p.dblId ? this.dblSrc : null;
     gl.uniform1f(u.uDblOn, s2?1:0);
@@ -385,8 +388,10 @@ const Engine = {
     const halAmt = ahAmt*p.halation*(1+0.15*Math.max(0,p.push||0));
     if(halAmt>0.001) blurChain(R.ha,R.hb,1.6,0.006);
     if(p.glow>0.001) blurChain(R.ga,R.gb,0.0,0.03);
-    const doStruct = p.silver && Math.abs(p.structure||0)>0.5;
+    const doStruct = p.silver && [p.structure,p.sStructHi,p.sStructMid,p.sStructSh,p.sSoft].some(v=>Math.abs(v||0)>0.5);
     if(doStruct){ R.sa=GLU.ensure(R.sa,qw,qh); R.sb=GLU.ensure(R.sb,qw,qh); blurChain(R.sa,R.sb,0.0,0.012); }
+    const doFine = p.silver && Math.abs(p.sFine||0)>0.5;
+    if(doFine){ R.fa=GLU.ensure(R.fa,qw,qh); R.fb=GLU.ensure(R.fb,qw,qh); blurChain(R.fa,R.fb,0.0,0.0025); }
     gl.useProgram(this.P.final.p); u=this.P.final.u;
     if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target.f); gl.viewport(0,0,target.w,target.h); }
     else { gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,L.W,L.H); }
@@ -394,9 +399,17 @@ const Engine = {
     bind(0,gl.TEXTURE_2D,R.prep.t,'uPrep'); bind(1,gl.TEXTURE_2D,R.ha.t,'uHal'); bind(2,gl.TEXTURE_2D,R.ga.t,'uGlowTex');
     bind(3,gl.TEXTURE_3D,lut||null,'uLut'); bind(4,gl.TEXTURE_2D,s.tex,'uSrc'); bind(5,gl.TEXTURE_2D,opts.borderTex||this.borderTex,'uBorder');
     bind(6,gl.TEXTURE_2D,this.curveLUT(p),'uCurve');
-    bind(7,gl.TEXTURE_2D,doStruct?R.sa.t:R.prep.t,'uStructTex'); gl.uniform1f(u.uStruct,doStruct?p.structure/100:0);
+    bind(7,gl.TEXTURE_2D,doStruct?R.sa.t:R.prep.t,'uStructTex'); gl.uniform1f(u.uStruct,doStruct?1:0);
+    gl.uniform4f(u.uStructB,(p.structure||0)/100,(p.sStructHi||0)/100,(p.sStructMid||0)/100,(p.sStructSh||0)/100);
+    gl.uniform4f(u.uSB,(p.sBright||0)/100,(p.sBrightHi||0)/100,(p.sBrightSh||0)/100,(p.sContrast||0)/100);
+    gl.uniform3f(u.uSAmp,(p.sAmpW||0)/100,(p.sAmpB||0)/100,doStruct?(p.sSoft||0)/100:0);
+    gl.uniform4f(u.uSVig,(p.sVig||0)/100,(p.sVigSize??50)/100,(p.sVigX||0),(p.sVigY||0));
+    gl.uniform4f(u.uBurnS,(p.sBurnT||0)/100,(p.sBurnB||0)/100,(p.sBurnL||0)/100,(p.sBurnR||0)/100); gl.uniform1f(u.uToneBal,(p.sToneBal||0)/100);
+    gl.uniform2f(u.uZones,this.view.zones?1:0,this.view.zoneHi??-1);
     const dustOn=(p.dustAmt||0)+(p.scratchAmt||0)+(p.hairAmt||0)>0.5;
     bind(8,gl.TEXTURE_2D,dustOn?this.dustTex(p):this.borderTex,'uDust'); gl.uniform1f(u.uDustOn,dustOn?1:0); gl.uniform1f(u.uDustDark,p.dustKind==='print'?1:0);
+    // unit 15 is the scratch unit for texture uploads, so bind it after every texture that may be created this frame
+    bind(15,gl.TEXTURE_2D,doFine?R.fa.t:R.prep.t,'uFineTex'); gl.uniform1f(u.uFine,doFine?p.sFine/100:0);
     { const fx=p.fx||{}; let slot=0; const on=new Float32Array(6), mode=new Int32Array(6), amt=new Float32Array(6), inv=new Float32Array(6), mats=new Float32Array(54), hue=new Float32Array(18);
       FX_SLOTS.forEach((cat,i)=>{ const Ly=fx[cat]; if(!Ly||!Ly.id||!(Ly.amt>0)) return; const t=this.assetTex(Ly.id); if(!t) return;
         const M=this.layerMatrix(Ly,this.dims(p,s)[0]/this.dims(p,s)[1],t.w/t.h,cat);
@@ -489,7 +502,11 @@ const PREP_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc; uniform vec4 uWin; uniform float uFlip,uEncoded,uDispRef,uHL,uK,uFalloff,uAspect,uTanHalfDiag;
 uniform mat3 uWB,uToAP1,uGeo; uniform float uPush,uSrcAspect;
-uniform vec3 uFilt; uniform float uSilverPre; uniform sampler2D uDbl; uniform mat3 uDblM; uniform int uDblMode; uniform float uDblOn,uDblAmt,uDblK,uDblEnc,uDblDisp,uDblMask,uDblFlipY;
+uniform vec3 uFilt; uniform float uSilverPre; uniform float uSens[6];
+float silverMono(vec3 c){ float m=dot(c,uFilt); float mx=max(c.r,max(c.g,c.b)), mn=min(c.r,min(c.g,c.b)); if(mx<=1e-6) return m; float sat=(mx-mn)/mx; if(sat<.02) return m;
+  float d=mx-mn, h = mx==c.r ? mod((c.g-c.b)/d,6.) : mx==c.g ? (c.b-c.r)/d+2. : (c.r-c.g)/d+4.; float e=0.;
+  for(int i=0;i<6;i++){ float dh=abs(h-float(i)); dh=min(dh,6.-dh); e+=uSens[i]*max(0.,1.-dh); }
+  return m*exp2(e*sat*1.6); } uniform sampler2D uDbl; uniform mat3 uDblM; uniform int uDblMode; uniform float uDblOn,uDblAmt,uDblK,uDblEnc,uDblDisp,uDblMask,uDblFlipY;
 uniform float uTT; uniform vec3 uTTA,uTTB,uTTM; uniform vec4 uTTP;
 uniform float uLeakAmt,uLeakSize,uLeakSeed; uniform vec3 uLeakC1,uLeakC2; uniform vec2 uLeakP;
 uniform int uMType[4]; uniform vec4 uMA[4]; uniform vec4 uMB[4]; uniform vec4 uMC[4]; uniform mat3 uMWB[4]; uniform sampler2D uMTex[4];
@@ -534,13 +551,13 @@ void main(){
     c = max(a,b) + .3*min(a,b);
   }
   c = uWB*c*uK;
-  if(uSilverPre>.5) c=vec3(dot(c,uFilt));
+  if(uSilverPre>.5) c=vec3(silverMono(c));
   vec2 fuv=vec2(u,vt);
   if(uDblOn>.5){
     vec2 d=(uDblM*vec3(fuv,1.)).xy; vec3 c2=vec3(0.);
     if(d.x>=0.&&d.y>=0.&&d.x<=1.&&d.y<=1.){ c2=texture(uDbl,vec2(d.x,uDblFlipY>.5?1.-d.y:d.y)).rgb; if(uDblEnc>.5) c2=dec(max(c2,0.));
       if(uDblDisp>.5){ float Y2=dot(c2,vec3(.2126,.7152,.0722)), y2=min(Y2,1.); c2*= (Y2<=1.? Y2/(1.-uHL*y2*y2) : Y2/(1.-uHL))/max(Y2,1e-6); }
-      c2=uWB*c2*uDblK; if(uSilverPre>.5) c2=vec3(dot(c2,uFilt)); }
+      c2=uWB*c2*uDblK; if(uSilverPre>.5) c2=vec3(silverMono(c2)); }
     float a=uDblAmt; vec3 n1=c/(1.+c), n2=c2/(1.+c2);
     if(uDblMode==0) c=(c+c2*a)/(1.+.45*a);
     else if(uDblMode==1){ vec3 r=n1+n2*a-n1*n2*a; c=r/max(1.-r,vec3(1e-3)); }
@@ -635,7 +652,8 @@ uniform sampler2D uPrep,uHal,uGlowTex,uSrc,uBorder,uCurve; uniform sampler3D uLu
 uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; uniform mat3 uGeo;
 uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
 uniform sampler2D uA[6]; uniform float uAOn[6],uAAmt[6],uAInv[6]; uniform int uAMode[6]; uniform mat3 uAM[6]; uniform vec3 uAHue[6];
-uniform sampler2D uStructTex,uDust; uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
+uniform sampler2D uStructTex,uDust; uniform sampler2D uFineTex; uniform float uFine,uToneBal; uniform vec4 uStructB,uSB,uSVig,uBurnS; uniform vec3 uSAmp; uniform vec2 uZones;
+uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
 uniform float uHslH[8]; uniform float uHslS[8]; uniform float uHslL[8];
 uniform vec4 uGSh,uGMid,uGHi; uniform vec2 uGBlend;
@@ -698,8 +716,14 @@ void main(){
     } else {
       vec2 puv=vec2((u-uWin.x)/(uWin.z-uWin.x), 1.-(vt-uWin.y)/(uWin.w-uWin.y));
       vec3 E=texture(uPrep,puv).rgb;
-      if(uStruct!=0.){ vec3 B=texture(uStructTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6);
-        E*=pow(Y/Yb, clamp(uStruct,-1.,1.)*.9); }
+      float Yblur=-1.;
+      if(uStruct!=0.){ vec3 B=texture(uStructTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6); Yblur=Yb;
+        // structure by tone range, like Silver Efex: highlights / midtones / shadows
+        float v=pow(clamp(Yb/.18*.18,0.,1.),1./2.2), ws=1.-smoothstep(.1,.45,v), wh=smoothstep(.45,.85,v), wm=max(0.,1.-ws-wh);
+        float k=uStructB.x+uStructB.y*wh+uStructB.z*wm+uStructB.w*ws;
+        E*=pow(Y/Yb, clamp(k,-1.,1.5)*.9); }
+      if(uFine!=0.){ vec3 B=texture(uFineTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6);
+        E*=pow(Y/Yb, clamp(uFine,-1.,1.)*1.3); }
       if(uHalAmt>0.){ vec3 h=texture(uHal,puv).rgb; float hy=dot(h,vec3(.3,.6,.1)); E += hy*vec3(1.,.12,.02)*uHalAmt; }
       if(uGlow>0.){ vec3 g=texture(uGlowTex,puv).rgb; E = mix(E, E*.75+g*.5, uGlow*.6); }
       vec3 c;
@@ -750,7 +774,21 @@ void main(){
         vec3 l=dec(c); float L=dot(l,vec3(.2290,.6917,.0793));
         vec2 e=abs(vec2(u,vt)-.5)*2.; float ed=pow(pow(e.x,4.)+pow(e.y,4.),.25);
         L*=1.-uBurn.x*.85*smoothstep(1.-uBurn.y,1.15,ed);
-        float t=smoothstep(0.,1.,pow(L,1./2.2)); vec3 tint=mix(uToneLo,uToneHi,t);
+        // per-side burn (top, bottom, left, right)
+        { float sz=uBurn.y; vec4 e4=vec4(1.-vt*2.,vt*2.-1.,1.-u*2.,u*2.-1.);
+          L*=(1.-uBurnS.x*.85*smoothstep(1.-sz,1.1,e4.x))*(1.-uBurnS.y*.85*smoothstep(1.-sz,1.1,e4.y))*(1.-uBurnS.z*.85*smoothstep(1.-sz,1.1,e4.z))*(1.-uBurnS.w*.85*smoothstep(1.-sz,1.1,e4.w)); }
+        // tonality in a perceptual space: brightness by range, contrast, amplify whites / blacks, soft contrast
+        float v=pow(max(L,0.),1./2.2);
+        float ws=1.-smoothstep(0.,.5,v), wh=smoothstep(.5,1.,v);
+        v+= uSB.x*.25*v*(1.-v)*4.*.5 + uSB.y*.18*wh*(1.-v*.6) + uSB.z*.18*ws*v*1.5;
+        if(uSB.w!=0.){ float k=uSB.w>0.?1.+uSB.w*1.4:1.+uSB.w*.7; v=clamp(v,0.,1.); v=v<.5?.5*pow(2.*v,k):1.-.5*pow(2.*(1.-v),k); }
+        v+= uSAmp.x*.35*smoothstep(.45,1.,v)*(1.-v)*2. - uSAmp.y*.35*(1.-smoothstep(0.,.55,v))*v*2.;
+        if(uSAmp.z!=0.&&Yblur>0.){ float vb=pow(clamp(Yblur*2.,0.,1.),1./2.2); v=mix(v, 1.-(1.-v)*(1.-vb*.55), uSAmp.z); v=mix(v,.5+(v-.5)*.85,uSAmp.z*.5); }
+        // vignette (negative = lighten edges)
+        if(uSVig.x!=0.){ vec2 q=(vec2(u,vt)-.5-uSVig.zw*.5)*vec2(uImg.z/uImg.w,1.); float r=length(q)/length(vec2(uImg.z/uImg.w,1.)*.5);
+          float m=smoothstep(mix(.95,.1,uSVig.y),1.25,r); v = uSVig.x>0. ? v*(1.-uSVig.x*.8*m) : v+(1.-v)*(-uSVig.x)*.8*m; }
+        L=pow(clamp(v,0.,1.2),2.2);
+        float t=smoothstep(0.,1.,clamp(pow(L,1./2.2)-uToneBal*.35,0.,1.)); vec3 tint=mix(uToneLo,uToneHi,t);
         c=clamp(enc(L*mix(vec3(1.),tint,uToneAmt)),0.,1.);
       }
       // Studio asset layers before the grain: leaks / burns / flares (screen), paper texture (overlay)
@@ -772,6 +810,7 @@ void main(){
       if(uDustOn>.5){ float a=texture(uDust,vec2(u*uImg.z/uImg.w,vt)*1.0).a; c=mix(c, uDustDark>.5?vec3(.04):vec3(.97), a*.9); }
       col=clamp(c,0.,1.);
       if(uToSRGB>.5) col=clamp(enc(P3_TO_709*dec(col)),0.,1.);
+      if(uZones.x>.5){ float z=floor(clamp(pow(luma(dec(col)),1./2.2)*1.0001,0.,1.)*10.+.5); vec3 g=vec3(z/10.); col = abs(z-uZones.y)<.5 ? mix(g,vec3(1.,.55,.1),.75) : g; }
       if(uClip>.5){ if(max(col.r,max(col.g,col.b))>.996) col=vec3(1.,.15,.1); else if(min(col.r,min(col.g,col.b))<.004) col=vec3(.15,.45,1.); }
     }
   }
