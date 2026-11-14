@@ -130,12 +130,12 @@ const M = {
     if(t==='film'){
       const s=Engine.stock();
       { const h=document.createElement('div'); h.className='paneHead'; h.innerHTML='<span>Film look</span>'; this.secSwitch(h,['film']); pane.appendChild(h); }
-      const desc=document.createElement('div'); desc.className='desc'; desc.innerHTML=`<b>${s.maker} ${s.name}</b> · ISO ${s.iso} — ${s.desc}`; pane.appendChild(desc);
+      const desc=document.createElement('div'); desc.className='desc'; desc.innerHTML=`<b>${s.maker} ${s.name}</b>${s.iso?" · ISO "+s.iso:""} — ${s.desc}`; pane.appendChild(desc);
       const row=document.createElement('div'); row.className='stocks'; let g='';
       Engine.manifest.stocks.forEach(st=>{
         if(st.group!==g){ g=st.group; const gl=document.createElement('div'); gl.className='grp'; gl.textContent=g.replace('Kodak ','').replace('Professional','Kodak Pro').replace('Consumer','Kodak'); row.appendChild(gl); }
         const c=document.createElement('div'); c.className='card'+(st.id===p.stock?' on':''); c.dataset.id=st.id;
-        c.innerHTML=`<div class="th" style="${this.thumbs[st.id]?`background-image:url(${this.thumbs[st.id]})`:''}"></div><div class="nm">${st.maker==='CineStill'?'CineStill ':''}${st.name}</div><div class="iso">${st.iso}</div>`;
+        c.innerHTML=`<div class="th" style="${this.thumbs[st.id]?`background-image:url(${this.thumbs[st.id]})`:''}"></div><div class="nm">${st.maker==='CineStill'?'CineStill ':''}${st.name}</div><div class="iso">${st.iso||""}</div>`;
         c.onclick=()=>this.setStock(st.id); row.appendChild(c);
       });
       pane.appendChild(row); if(keepScroll&&sx!=null) row.scrollLeft=sx; else { const on=row.querySelector('.card.on'); if(on) row.scrollLeft=on.offsetLeft-40; }

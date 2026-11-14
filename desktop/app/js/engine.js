@@ -78,7 +78,8 @@ const Engine = {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,4);
     return this.luts[name]=t;
   },
-  async ensureLuts(p){ await this.lut(this.paperFor(p).lut); },
+  isOriginal(p){ return !!(p&&(p.filmOff||this.stock(p.stock).type==='original')); },
+  async ensureLuts(p){ const l=this.paperFor(p).lut; if(l) await this.lut(l); },
 
   setSource(src){ this.src=src; this.dirty=true; this.histDirty=true; },
   keyFromSamples(lum, w, h){
@@ -91,7 +92,7 @@ const Engine = {
   // ---------------------------------------------------------------- geometry
   // parameters actually rendered: switched-off sections fall back to neutral
   eff(p){ if(!p||!p.off) return p; const o=Object.assign({},p); let any=false;
-    for(const k in p.off){ if(!p.off[k]||!SECTIONS[k]) continue; any=true; SECTIONS[k].forEach(key=>o[key]= key==='filmAmt'?0 : cloneParams(DEFAULTS[key])); }
+    for(const k in p.off){ if(!p.off[k]||!SECTIONS[k]) continue; any=true; SECTIONS[k].forEach(key=>o[key]= key==='filmAmt'?0 : cloneParams(DEFAULTS[key])); if(k==='film') o.filmOff=true; }
     if(!any) return p; delete o.off; return o; },
   oriented(p,src){ src=src||this.src; return (p.rot&1)?[src.h,src.w]:[src.w,src.h]; },
   // output (cropped) size in source pixels. In crop mode the whole rotated canvas is shown.
@@ -255,7 +256,8 @@ const Engine = {
     const target=opts.target||null;
     if(!this.src){ gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,L.W,L.H); gl.clearColor(.07,.07,.07,1); gl.clear(gl.COLOR_BUFFER_BIT); return L; }
     const st=this.stock(p.stock), paper=this.paperFor(p);
-    const lut=this.luts[paper.lut]; if(!lut){ this.lut(paper.lut).then(()=>{this.dirty=true;}); }
+    const orig=this.isOriginal(p);
+    const lut=orig?null:this.luts[paper.lut]; if(!orig&&!lut&&paper.lut){ this.lut(paper.lut).then(()=>{this.dirty=true;}); }
     const [u0,v0,u1,v1]=L.win;
     const vw=Math.max(1,Math.round((u1-u0)*L.iw)), vh=Math.max(1,Math.round((v1-v0)*L.ih));
     const R=opts.RT||this.RT;
@@ -271,10 +273,10 @@ const Engine = {
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,s.tex); gl.uniform1i(u.uSrc,0);
     gl.uniform4f(u.uWin,u0,v0,u1,v1); gl.uniform1f(u.uFlip,s.flipY?1:0); gl.uniform1f(u.uEncoded,s.encoded?1:0);
     gl.uniformMatrix3fv(u.uGeo,true,geo);
-    gl.uniform1f(u.uDispRef,s.dispRef?1:0); gl.uniform1f(u.uHL,p.hlExpand*0.85);
+    gl.uniform1f(u.uDispRef,(s.dispRef&&!orig)?1:0); gl.uniform1f(u.uHL,p.hlExpand*0.85);
     gl.uniformMatrix3fv(u.uWB,true,new Float32Array(CM.wbMatrix(p.temp,p.tint)));
     gl.uniformMatrix3fv(u.uToAP1,true,new Float32Array(CM.REC709_TO_AP1));
-    const auto = p.autoExp && s.key ? Math.min(16,Math.max(1/16, 0.18*0.62/s.key)) : 1;
+    const auto = p.autoExp && s.key && !orig ? Math.min(16,Math.max(1/16, 0.18*0.62/s.key)) : 1;
     gl.uniform1f(u.uK, auto*Math.pow(2,p.ev));
     const F=FORMATS[p.format]||FORMATS['35mm'];
     const [ow,oh]=this.dims(p,s,full);
@@ -374,7 +376,7 @@ const Engine = {
     gl.uniform2f(u.uRes, target?target.w:L.W, target?target.h:L.H);
     gl.uniform4f(u.uFrame,L.fx,L.fy,L.fw,L.fh); gl.uniform4f(u.uImg,L.ix,L.iy,L.iw,L.ih); gl.uniform4f(u.uWin,u0,v0,u1,v1);
     gl.uniformMatrix3fv(u.uGeo,true,geo);
-    gl.uniform1f(u.uFilmAmt,Math.max(0,Math.min(1,(p.filmAmt??100)/100))); gl.uniform1f(u.uHasLut,lut?1:0); gl.uniform1f(u.uN,this.manifest.lutSize); gl.uniform2f(u.uShaper,this.manifest.shaper.lo,this.manifest.shaper.hi);
+    gl.uniform1f(u.uFilmAmt,Math.max(0,Math.min(1,(p.filmAmt??100)/100))); gl.uniform1f(u.uOrig,orig?1:0); gl.uniform1f(u.uHasLut,lut?1:0); gl.uniform1f(u.uN,this.manifest.lutSize); gl.uniform2f(u.uShaper,this.manifest.shaper.lo,this.manifest.shaper.hi);
     gl.uniform1f(u.uHalAmt, halAmt>0.001?halAmt:0); gl.uniform1f(u.uGlow,p.glow);
     gl.uniform1f(u.uBefore,(this.before&&!opts.forceAfter)?1:0); gl.uniform1f(u.uFlip,s.flipY?1:0); gl.uniform1f(u.uEncoded,s.encoded?1:0);
     gl.uniform1f(u.uContrast,p.contrast/100); gl.uniform1f(u.uHighlights,p.highlights/100); gl.uniform1f(u.uShadows,p.shadows/100);
@@ -594,7 +596,7 @@ const FINAL_FS = `#version 300 es
 precision highp float; precision highp sampler3D;
 uniform sampler2D uPrep,uHal,uGlowTex,uSrc,uBorder,uCurve; uniform sampler3D uLut;
 uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; uniform mat3 uGeo;
-uniform float uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
+uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
 uniform sampler2D uStructTex,uDust; uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
 uniform float uHslH[8]; uniform float uHslS[8]; uniform float uHslL[8];
@@ -660,7 +662,8 @@ void main(){
         vec3 x=clamp((log2(max(E,vec3(1e-12))/.18)+uShaper.x)/(uShaper.x+uShaper.y),0.,1.);
         c=texture(uLut, x*(uN-1.)/uN + .5/uN).rgb;
         if(uFilmAmt<.999){ vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); vec3 nt=enc(l*1.2/(1.+l)); c=mix(nt,c,uFilmAmt); }
-      } else { vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); c=enc(l*1.2/(1.+l)); }
+      } else if(uOrig>.5){ c=clamp(enc(max(R709_TO_P3*(AP1_TO_709*E),0.)),0.,1.); }   // the photo as shot
+      else { vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); c=enc(l*1.2/(1.+l)); }
       float y=luma(c);
       float hm=smoothstep(.35,1.,y), sm=1.-smoothstep(0.,.6,y);
       float dy = uHighlights*.32*hm*(uHighlights>0.?(1.-y):y) + uShadows*.38*sm*(uShadows>0.?(1.-y)*.9:y);

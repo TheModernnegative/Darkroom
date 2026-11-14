@@ -7,6 +7,31 @@
  },
  "stocks": [
   {
+   "id": "original",
+   "name": "Original \u2014 no film",
+   "maker": "",
+   "iso": 0,
+   "group": "Original",
+   "type": "original",
+   "pgi": 20,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Your photo exactly as shot: no film look, no auto exposure, no grain, halation or vignette. Your own Develop and Studio edits still apply.",
+   "defaults": {
+    "grain": 0,
+    "halation": 0,
+    "falloff": 0,
+    "glow": 0
+   },
+   "papers": [
+    {
+     "id": "none",
+     "name": "\u2014",
+     "lut": ""
+    }
+   ]
+  },
+  {
    "id": "kodak_portra_160",
    "name": "Portra 160",
    "maker": "Kodak",

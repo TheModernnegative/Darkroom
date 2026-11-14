@@ -288,7 +288,7 @@ const App = {
     if(newAspect && Engine.src) Tools.applyAspect(false);
     await Engine.ensureLuts(p); this.commit&&this.commit(); this.changed(); UI.refresh(); UI.markPreset(id); this.updateStockNote();
   },
-  updateStockNote(){ const s=Engine.stock(), el=$('#stockNote'); if(el) el.innerHTML=`<b style="color:#ddd">${s.maker} ${s.name}</b> · ISO ${s.iso}<br>${s.desc}`; },
+  updateStockNote(){ const s=Engine.stock(), el=$('#stockNote'); if(el) el.innerHTML=`<b style="color:#ddd">${s.maker} ${s.name}</b>${s.iso?' · ISO '+s.iso:''}<br>${s.desc}`; },
 
   // ================================================================ edits / history
   // on/off switch in each panel header: hides that section's effect without losing its settings
@@ -862,7 +862,7 @@ const App = {
   borderFor(L,p){ p=Engine.eff(p); if(!Engine.src||p.border==='none') return null; return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock),this.edgeP(p)); },
   histo(){ const p=Engine.hoverParams||Engine.p; const h=Engine.src?Engine.histogram(p):null; Engine._lastHist=h; UI.drawHisto($('#histo'),h); if(Tools.drawCurve&&!this._curveT){ this._curveT=setTimeout(()=>{ this._curveT=null; Tools.drawCurve(); },150); }
     const s=Engine.stock(p.stock);
-    const auto=(p.autoExp&&Engine.src&&Engine.src.key)?Math.log2(0.18*0.62/Engine.src.key):0;
+    const auto=(p.autoExp&&Engine.src&&Engine.src.key&&!Engine.isOriginal(Engine.eff(p)))?Math.log2(0.18*0.62/Engine.src.key):0;
     $('#histoInfo').innerHTML=`<span>${s.maker} ${s.name}${Engine.hoverParams?' (preview)':''}</span><span>${Engine.src&&Engine.src.raw?'RAW · ':''}EV ${(p.ev+auto>=0?'+':'')+(p.ev+auto).toFixed(1)}</span>`; },
   status(){ const s=Engine.src; $('#status').textContent = s ? (this.module==='scan' ? `${Splat.cam.format} · ${Math.round(Splat.cam.fmm)}mm · ƒ/${STOPS[Splat.cam.stop]} · ${(Splat.cam.focus*Splat.cam.scale).toFixed(2)} m` : (()=>{ const [w,h]=Engine.dims(Engine.p); return `${Math.round(w)} × ${Math.round(h)}`; })()) : ''; },
 
