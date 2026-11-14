@@ -49,7 +49,7 @@ const M = {
     bmp.close&&bmp.close();
     return {tex,w,h,dispRef:true,encoded:false,flipY:false,key:Engine.keyFromSamples(lum,sw,sh)};
   },
-  borderTex(){ const p=Engine.hoverParams||Engine.p; if(!Engine.src||p.border==='none'||Engine.cropMode) return null; const L=this._lastL||Engine.layout(); return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock),this.edgeP(p)); },
+  borderTex(){ const p=Engine.eff(Engine.hoverParams||Engine.p); if(!Engine.src||p.border==='none'||Engine.cropMode) return null; const L=this._lastL||Engine.layout(); return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock),this.edgeP(p)); },
   edgeP(p){ const h=[...(this.name||'x')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7); return Object.assign({},p,{frameNo:p.frameNo||(h%36)+1}); },
   // small offscreen render of the current photo with params → dataURL
   thumb(params,W,H){
@@ -82,10 +82,16 @@ const M = {
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
   async setStock(id){ Engine.p.stock=id; Engine.p.paper=null; await Engine.ensureLuts(Engine.p); this.changed(); this.commit(); this.showTab('film',true); },
   title(){ const s=Engine.stock(); $('#title').innerHTML=`<b>${s.maker==='CineStill'?'CineStill ':''}${s.name}</b> · ${Engine.paperFor(Engine.p).name}`; },
+  // on/off switch for a section (keeps its settings) — e.g. compare with and without grain
+  secSwitch(h,secs){ const off=()=>secs.every(k=>(Engine.p.off||{})[k]); const b=document.createElement('button'); b.className='secTog';
+    const sync=()=>{ b.textContent=off()?'Off':'On'; b.classList.toggle('off',off()); h.classList.toggle('secoff',off()); }; sync();
+    b.onclick=e=>{ e.stopPropagation(); const p=Engine.p; p.off=Object.assign({},p.off||{}); const o=!off(); secs.forEach(k=>{ if(o) p.off[k]=true; else delete p.off[k]; }); sync(); this.changed(); this.commit(); };
+    const sp=h.querySelector('span'); sp.after(b); },
   kit(){
     const M=this;
-    UI.panel=(parent,id,title,open,reset)=>{ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(reset?'<button>Reset</button>':'');
-      if(reset) h.querySelector('button').onclick=()=>{ reset(); M.showTab(M.tab,true); }; parent.appendChild(h); const b=document.createElement('div'); parent.appendChild(b); return b; };
+    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks']};
+    UI.panel=(parent,id,title,open,reset)=>{ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(reset?'<button class="rst">Reset</button>':''); if(SEC[id]) M.secSwitch(h,SEC[id]);
+      if(reset) h.querySelector('.rst').onclick=()=>{ reset(); M.showTab(M.tab,true); }; parent.appendChild(h); const b=document.createElement('div'); parent.appendChild(b); return b; };
     UI.slider=(parent,key,label,o)=>M.slider(parent,key,label||'',o);
     UI.seg=(parent,key,label,opts,get,set)=>M.seg(parent,label,opts,get,set);
     UI.select=(parent,key,label,optsFn,get,set)=>M.seg(parent,label,optsFn(),get,set);
@@ -113,8 +119,8 @@ const M = {
   },
   toggle(parent,label,get,set){ const d=document.createElement('div'); d.className='tog'; d.innerHTML=`<span>${label}</span><div class="sw"></div>`; const sw=d.querySelector('.sw'); sw.classList.toggle('on',!!get());
     d.onclick=()=>{ set(!get()); sw.classList.toggle('on',!!get()); }; parent.appendChild(d); },
-  head(parent,title,resetKeys){ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(resetKeys?'<button>Reset</button>':'');
-    if(resetKeys) h.querySelector('button').onclick=()=>{ resetKeys.forEach(k=>Engine.p[k]=DEFAULTS[k]); this.changed(); this.commit(); this.showTab(this.tab); }; parent.appendChild(h); },
+  head(parent,title,resetKeys,secs){ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(resetKeys?'<button class="rst">Reset</button>':''); if(secs) this.secSwitch(h,secs);
+    if(resetKeys) h.querySelector('.rst').onclick=()=>{ resetKeys.forEach(k=>Engine.p[k]=DEFAULTS[k]); this.changed(); this.commit(); this.showTab(this.tab); }; parent.appendChild(h); },
   showTab(t,keepScroll){
     if(this.tab==='crop' && t!=='crop' && Engine.cropMode) Tools.setCropMode(false);
     this.tab=t; document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); this.dots();
@@ -123,6 +129,7 @@ const M = {
     const p=Engine.p, S=(k,l,o)=>this.slider(pane,k,l,o);
     if(t==='film'){
       const s=Engine.stock();
+      { const h=document.createElement('div'); h.className='paneHead'; h.innerHTML='<span>Film look</span>'; this.secSwitch(h,['film']); pane.appendChild(h); }
       const desc=document.createElement('div'); desc.className='desc'; desc.innerHTML=`<b>${s.maker} ${s.name}</b> · ISO ${s.iso} — ${s.desc}`; pane.appendChild(desc);
       const row=document.createElement('div'); row.className='stocks'; let g='';
       Engine.manifest.stocks.forEach(st=>{
@@ -138,7 +145,7 @@ const M = {
       S('push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box speed':(x>0?'Push +':'Pull −')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
       this.toggle(pane,'Auto exposure (lab metering)',()=>p.autoExp,v=>{ p.autoExp=v; this.changed(); this.commit(); });
     } else if(t==='light'){
-      this.head(pane,'Light',['ev','contrast','highlights','shadows','whites','blacks']);
+      this.head(pane,'Light',['ev','contrast','highlights','shadows','whites','blacks'],['tone']);
       S('ev','Exposure',{min:-4,max:4,step:0.01,fmt:x=>(x>0?'+':'')+x.toFixed(2)});
       S('contrast','Contrast',{min:-100,max:100,step:1}); S('highlights','Highlights',{min:-100,max:100,step:1}); S('shadows','Shadows',{min:-100,max:100,step:1});
       S('whites','Whites',{min:-100,max:100,step:1}); S('blacks','Blacks',{min:-100,max:100,step:1});
@@ -148,11 +155,11 @@ const M = {
       this.toolRow(pane,'Masks',(p.masks||[]).length?`${p.masks.length} mask${p.masks.length>1?'s':''}`:'Gradient, radial or brush — dodge & burn',()=>this.openTool('Masks',b=>{ Tools.buildMaskPanel(b,true); if(Tools.masks().length){ if(!Tools.maskSel) Tools.maskSel=Tools.masks()[0].id; Tools.setMaskEdit(true); Tools.renderMasks(); } }),!!(p.masks||[]).length);
       this.toolRow(pane,'Tone Curve',Engine.curveIsIdentity(p)?'Tap to shape RGB or single channels':'Edited',()=>this.openTool('Tone Curve',b=>Tools.buildCurvePanel(b,true)),!Engine.curveIsIdentity(p));
     } else if(t==='color'){
-      this.head(pane,'White balance',['temp','tint']);
+      this.head(pane,'White balance',['temp','tint'],['wb']);
       S('temp','Temp',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3c6bd6,#777 50%,#e4c03a)'});
       S('tint','Tint',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3fae4a,#777 50%,#c446c0)'});
       { const r=document.createElement('div'); r.className='btnrow'; pane.appendChild(r); UI.button(r,'Auto',()=>Tools.autoWB()); const w=UI.button(r,Tools.eyedrop?'Tap something grey…':'⌖ Pick neutral',()=>{ Tools.pickWB(!Tools.eyedrop); this.showTab('color',true); }); w.id='wbPick'; }
-      this.head(pane,'Presence',['vibrance','saturation']);
+      this.head(pane,'Presence',['vibrance','saturation'],['presence']);
       S('vibrance','Vibrance',{min:-100,max:100,step:1}); S('saturation','Saturation',{min:-100,max:100,step:1});
       Tools.buildHSLPanel(pane,true);
       const gOn=!!(p.gShS||p.gMidS||p.gHiS||p.gShL||p.gMidL||p.gHiL);
@@ -162,13 +169,13 @@ const M = {
       Tools.buildCropPanel(pane,true);
       const tb=pane.querySelector('.pbtn'); if(tb){ tb.textContent='Done'; tb.onclick=()=>this.showTab('film'); }
     } else if(t==='effects'){
-      this.head(pane,'Detail',['sharpen','sharpRadius','nr','nrColor']);
+      this.head(pane,'Detail',['sharpen','sharpRadius','nr','nrColor'],['detail']);
       S('sharpen','Sharpening',{min:0,max:150,step:1}); S('nr','Noise reduction',{min:0,max:100,step:1}); S('nrColor','Color noise',{min:0,max:100,step:1});
-      this.head(pane,'Grain',['grain','grainSize','grainRough']);
+      this.head(pane,'Grain',['grain','grainSize','grainRough'],['grain']);
       S('grain','Amount',{min:0,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainSize','Size',{min:0.4,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainRough','Softness',{min:0.05,max:0.8,step:0.01,fmt:x=>Math.round(x*100)});
-      this.head(pane,'Light & lens',['halation','glow','falloff']);
+      this.head(pane,'Light & lens',['halation','glow','falloff'],['halation','lens']);
       S('halation','Halation',{min:0,max:4,step:0.01,fmt:x=>Math.round(x*100)}); S('glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)}); S('falloff','Lens falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)});
-      this.head(pane,'Frame');
+      this.head(pane,'Frame',null,['frame']);
       this.seg(pane,'',Borders.styles.map(([k,t])=>[k,t.replace(' scan','').replace(' holder','').replace('Print border','Print')]),()=>p.border,v=>{ p.border=v; this.changed(); this.commit(); this.showTab('effects',true); });
       if(p.border!=='none'){ this.seg(pane,'Edge print',[['stock','Film stock'],['custom','Custom'],['none','None']],()=>p.edgeText,v=>{ p.edgeText=v; this.changed(); this.commit(); this.showTab('effects',true); });
         if(p.edgeText==='custom'){ const r=document.createElement('div'); r.className='pnew'; r.innerHTML='<input placeholder="Your edge text" maxlength="40">'; const i=r.querySelector('input'); i.value=p.edgeCustom||''; i.oninput=()=>{ p.edgeCustom=i.value; this.changed(); }; i.onchange=()=>this.commit(); pane.appendChild(r); } }
@@ -226,11 +233,11 @@ const M = {
       const gl=Engine.gl, view=Engine.src;
       const src=await this.decode(this.file, 8192); src.key=view.key;
       const keepCrop=Engine.cropMode; Engine.cropMode=false;
-      const [dw,dh]=Engine.dims(Engine.p,src); const w=Math.round(dw), h=Math.round(dh), b=Borders.margins(Engine.p.border,w,h);
+      const [dw,dh]=Engine.dims(Engine.p,src); const w=Math.round(dw), h=Math.round(dh), b=Borders.margins(Engine.eff(Engine.p).border,w,h);
       let fw=Math.round(w*(1+b.l+b.r)), fh=Math.round(h*(1+b.t+b.b));
       const L={W:fw,H:fh,dpr:1,scale:w/dw,fx:0,fy:0,fw,fh,ix:Math.round(b.l*w),iy:Math.round(b.b*h),iw:w,ih:h,win:[0,0,1,1],b};
       Engine.src=src;
-      const bt=Engine.p.border!=='none'?Borders.texture(Engine.p.border,fw,fh,b,Engine.stock(),this.edgeP(Engine.p)):null;
+      const EPf=Engine.eff(Engine.p); const bt=EPf.border!=='none'?Borders.texture(EPf.border,fw,fh,b,Engine.stock(),this.edgeP(EPf)):null;
       const c=document.createElement('canvas'); c.width=fw; c.height=fh;
       let x=null; try{ x=c.getContext('2d',{colorSpace:'display-p3'}); }catch(e){}
       if(!x) x=c.getContext('2d'); const p3=!!(x.getContextAttributes&&x.getContextAttributes().colorSpace==='display-p3');

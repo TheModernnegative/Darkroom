@@ -14,6 +14,10 @@ const DEFAULTS = {
 };
 const PER_PHOTO_KEYS = ['ev','temp','tint','crop','angle','rot','flip','aspect','masks'];
 const MAX_MASKS = 4;
+// sections that can be switched off without losing their settings (p.off = {grain:true, …})
+const SECTIONS = { film:['filmAmt','push'], wb:['temp','tint'], tone:['ev','contrast','highlights','shadows','whites','blacks'], presence:['vibrance','saturation'],
+  curve:['curve'], hsl:['hslH','hslS','hslL'], grade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'], detail:['sharpen','nr','nrColor'],
+  grain:['grain'], halation:['halation','glow'], lens:['falloff'], frame:['border'], masks:['masks'] };
 function cloneParams(p){ return JSON.parse(JSON.stringify(p)); }
 function withDefaults(p){ return Object.assign(cloneParams(DEFAULTS), cloneParams(p||{})); }
 const FORMATS = { '35mm':{gauge:2.4,diag:43.3,label:'35mm'}, '645':{gauge:1.6,diag:69.8,label:'6×4.5'}, '6x7':{gauge:1.35,diag:89.6,label:'6×7'}, '4x5':{gauge:1.0,diag:162.6,label:'4×5'} };
@@ -69,6 +73,10 @@ const Engine = {
   },
 
   // ---------------------------------------------------------------- geometry
+  // parameters actually rendered: switched-off sections fall back to neutral
+  eff(p){ if(!p||!p.off) return p; const o=Object.assign({},p); let any=false;
+    for(const k in p.off){ if(!p.off[k]||!SECTIONS[k]) continue; any=true; SECTIONS[k].forEach(key=>o[key]= key==='filmAmt'?0 : cloneParams(DEFAULTS[key])); }
+    if(!any) return p; delete o.off; return o; },
   oriented(p,src){ src=src||this.src; return (p.rot&1)?[src.h,src.w]:[src.w,src.h]; },
   // output (cropped) size in source pixels. In crop mode the whole rotated canvas is shown.
   dims(p,src,full){ p=p||this.p; src=src||this.src; if(!src) return [1,1];
@@ -169,7 +177,7 @@ const Engine = {
 
   // ---------------------------------------------------------------- layout
   layout(p,box){
-    p=p||this.p;
+    p=this.eff(p||this.p);
     const c=this.canvas, dpr=window.devicePixelRatio||1;
     let W=Math.max(2,Math.round(c.clientWidth*dpr)), H=Math.max(2,Math.round(c.clientHeight*dpr));
     if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
@@ -193,7 +201,7 @@ const Engine = {
 
   // ---------------------------------------------------------------- render
   render(opts={}){
-    const gl=this.gl; const p=opts.params||this.p; const L=opts.layout||this.layout(p);
+    const gl=this.gl; const p=this.eff(opts.params||this.p); const L=opts.layout||this.layout(p);
     const target=opts.target||null;
     if(!this.src){ gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,L.W,L.H); gl.clearColor(.07,.07,.07,1); gl.clear(gl.COLOR_BUFFER_BIT); return L; }
     const st=this.stock(p.stock), paper=this.paperFor(p);
@@ -320,7 +328,7 @@ const Engine = {
     [pA,pB].forEach((p,i)=>{ const [x0,y0,bw,bh]=boxes[i];
       const L=this.layout(p,{W:bw,H:bh}); const key='split'+i;
       this.RT[key]=GLU.ensure(this.RT[key],bw,bh,'rgba8');
-      this.render({params:p,layout:L,target:this.RT[key],RT:this['splitRT'+i]||(this['splitRT'+i]={}),borderTex:borderFn?borderFn(L,p):null,p3:this.outP3});
+      this.render({params:p,layout:L,target:this.RT[key],RT:this['splitRT'+i]||(this['splitRT'+i]={}),borderTex:borderFn?borderFn(L,this.eff(p)):null,p3:this.outP3});
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER,this.RT[key].f); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,null);
       gl.blitFramebuffer(0,0,bw,bh,x0,y0,x0+bw,y0+bh,gl.COLOR_BUFFER_BIT,gl.NEAREST);
       out.push(Object.assign({},L,{ox:x0,oy:y0}));

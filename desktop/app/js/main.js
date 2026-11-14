@@ -11,7 +11,7 @@ const App = {
     this.editMax=Math.min(6144, Engine.gl.getParameter(Engine.gl.MAX_TEXTURE_SIZE));
     await Engine.loadManifest();
     $('#credits').innerHTML = 'Colour film models: <a href="https://github.com/andreavolpato/spektrafilm">spektrafilm</a> by Andrea Volpato — profiles &amp; LUTs CC BY-SA 4.0. Black-and-white film and paper models, grain and halation: Splat Darkroom.';
-    this.buildDevelopPanels(); this.buildScanPanels(); this.buildPresets();
+    this.buildDevelopPanels(); this.addToggles(); this.buildScanPanels(); this.buildPresets();
     this.bindEvents();
     await Engine.ensureLuts(Engine.p);
     await this.restore();
@@ -258,7 +258,16 @@ const App = {
   updateStockNote(){ const s=Engine.stock(), el=$('#stockNote'); if(el) el.innerHTML=`<b style="color:#ddd">${s.maker} ${s.name}</b> · ISO ${s.iso}<br>${s.desc}`; },
 
   // ================================================================ edits / history
-  dots(){ const e=Tools.edited(Engine.p), map={pMasks:'masks',pDetail:'effects',pFilm:'film',pBasic:'light',pCurve:'light',pCrop:'crop',pHSL:'color',pGrade:'color',pGrain:'effects',pHal:'effects',pLens:'effects',pFrame:'effects'};
+  // on/off switch in each panel header: hides that section's effect without losing its settings
+  PANEL_SECTIONS:{pFilm:['film'],pBasic:['wb','tone','presence'],pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pDetail:['detail'],pGrain:['grain'],pHal:['halation'],pLens:['lens'],pFrame:['frame'],pMasks:['masks']},
+  addToggles(){
+    for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el||el.querySelector('.ptog')) continue; const secs=this.PANEL_SECTIONS[id];
+      const b=document.createElement('button'); b.className='ptog'; b.title='Turn this section on / off (keeps its settings)';
+      b.onclick=e=>{ e.stopPropagation(); const p=Engine.p; p.off=Object.assign({},p.off||{}); const off=!secs.every(k=>p.off[k]); secs.forEach(k=>{ if(off) p.off[k]=true; else delete p.off[k]; }); this.changed(); this.commit(); this.syncToggles(); };
+      el.querySelector('h3').appendChild(b); }
+    this.syncToggles(); },
+  syncToggles(){ const off=Engine.p.off||{}; for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el) continue; const o=this.PANEL_SECTIONS[id].every(k=>off[k]); el.classList.toggle('secoff',o); const b=el.querySelector('.ptog'); if(b) b.textContent=o?'OFF':'ON'; } },
+  dots(){ this.syncToggles&&this.syncToggles(); const e=Tools.edited(Engine.p), map={pMasks:'masks',pDetail:'effects',pFilm:'film',pBasic:'light',pCurve:'light',pCrop:'crop',pHSL:'color',pGrade:'color',pGrain:'effects',pHal:'effects',pLens:'effects',pFrame:'effects'};
     const own={pMasks:['masks'],pDetail:['sharpen','sharpRadius','nr','nrColor'],pBasic:['temp','tint','ev','contrast','highlights','shadows','whites','blacks','vibrance','saturation','hlExpand'],pCurve:['curve'],pHSL:['hslH','hslS','hslL'],pGrade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'],pGrain:['grain','grainSize','grainRough'],pHal:['halation','glow'],pLens:['falloff'],pFrame:['border'],pCrop:['crop','angle','rot','flip']};
     for(const id in map){ const el=document.getElementById(id); if(!el) continue; const ks=own[id]; const on = ks ? ks.some(k=>JSON.stringify(Engine.p[k])!==JSON.stringify(DEFAULTS[k])) : e[map[id]]; el.classList.toggle('edited',!!on); } },
   changed(){ Engine.dirty=true; Engine.histDirty=true; clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),120); if(this.cur){ this.cur.settings=Engine.p; this.thumbSoon(); this.saveSoon(); } },
@@ -654,7 +663,7 @@ const App = {
       tmp=GLU.target(w,h,'rgba16f'); Splat.render(tmp); src={tex:tmp.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1}; }
     else if(this.cur && this.cur.path && Native.available && this.cur.kind==='photo'){ const max=st.size==='full'?Math.min(16384,gl.getParameter(gl.MAX_TEXTURE_SIZE)):Math.ceil(+st.size/Math.max(Engine.p.crop.w,Engine.p.crop.h,.05));
       const s2=await this.decode(this.cur,max); s2.key=Engine.src.key; src=s2; tmp={t:s2.tex}; }
-    const EP = this.module==='scan' ? Object.assign(cloneParams(Engine.p),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false}) : Engine.p;
+    const EP = Engine.eff(this.module==='scan' ? Object.assign(cloneParams(Engine.p),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false}) : Engine.p);
     const [dw,dh]=Engine.dims(EP,src); let w=Math.round(dw), h=Math.round(dh);
     if(st.size!=='full'){ const s=Math.min(1,(+st.size)/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); }
     const b=Borders.margins(EP.border,w,h); const fw=Math.round(w*(1+b.l+b.r)), fh=Math.round(h*(1+b.t+b.b));
@@ -780,7 +789,7 @@ const App = {
     requestAnimationFrame(()=>this.loop());
   },
   edgeP(p){ const i=this.cur?this.items.indexOf(this.cur):0; return Object.assign({},p,{frameNo:p.frameNo||((Math.max(0,i)%36)+1)}); },
-  borderFor(L,p){ if(!Engine.src||p.border==='none') return null; return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock),this.edgeP(p)); },
+  borderFor(L,p){ p=Engine.eff(p); if(!Engine.src||p.border==='none') return null; return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock),this.edgeP(p)); },
   histo(){ const p=Engine.hoverParams||Engine.p; const h=Engine.src?Engine.histogram(p):null; Engine._lastHist=h; UI.drawHisto($('#histo'),h); if(Tools.drawCurve&&!this._curveT){ this._curveT=setTimeout(()=>{ this._curveT=null; Tools.drawCurve(); },150); }
     const s=Engine.stock(p.stock);
     const auto=(p.autoExp&&Engine.src&&Engine.src.key)?Math.log2(0.18*0.62/Engine.src.key):0;

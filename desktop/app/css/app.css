@@ -261,3 +261,9 @@ body.m-scan #stripBar{display:none}
 #ctxMenu button:hover{background:#3d4a5e}
 .askIn{width:100%;box-sizing:border-box;background:#1b1b1b;border:1px solid #444;border-radius:4px;color:#eee;font:13px var(--sans);padding:8px}
 table.keys{width:100%;border-collapse:collapse;font-size:12px}table.keys td{padding:4px 6px;border-bottom:1px solid #2a2a2a}table.keys td:first-child{color:#fff;white-space:nowrap;font-family:"SF Mono",Menlo,monospace;font-size:11px}
+.ptog{order:3;margin-left:auto;background:#2c2c2c;border:1px solid #3c3c3c;color:#bbb;border-radius:9px;font:600 9px var(--sans);letter-spacing:.04em;height:16px;min-width:30px;padding:0 5px;cursor:pointer}
+.ptog:hover{color:#fff}
+.panel.secoff .ptog{background:#e0533d33;border-color:#e0533d88;color:#ff8a78}
+.panel.secoff>.body{opacity:.45}
+.panel.secoff>h3{color:#888}
+.panel>h3 .reset ~ .ptog{margin-left:6px}
