@@ -71,6 +71,9 @@ const CM = {
     const D=[d[0]/s[0],0,0, 0,d[1]/s[1],0, 0,0,d[2]/s[2]];
     const A=CM.mul(Bi,CM.mul(D,B)); const X=CM.SRGB_TO_XYZ, Xi=CM.inv(X);
     return CM.mul(Xi,CM.mul(A,X)); },
+  toHalf: (()=>{ const f=new Float32Array(1), i=new Uint32Array(f.buffer); return v=>{ f[0]=v; const x=i[0], s=(x>>>16)&0x8000; let e=((x>>>23)&0xff)-112, m=x&0x7fffff;
+    if(e<=0){ if(e<-10) return s; m|=0x800000; const t=14-e; return s|((m>>t)+((m>>(t-1))&1)); }
+    if(e>=31) return s|0x7c00; return s|(e<<10)|((m>>13)+((m>>12)&1)); }; })(),
   half2float: (()=>{ const t=new Float32Array(65536); for(let h=0;h<65536;h++){ const s=(h&0x8000)?-1:1, e=(h>>10)&31, m=h&1023;
     t[h]= e===0 ? s*m*5.960464477539063e-8 : e===31 ? (m?NaN:s*Infinity) : s*Math.pow(2,e-15)*(1+m/1024); } return t; })(),
 };

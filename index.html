@@ -123,6 +123,21 @@ nav button.on i{color:var(--accent)}
   .card{width:100px}.card .th{width:100px;height:120px}
   #sheet{padding-bottom:var(--sb)}
 }
+#cropOv{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;display:none}
+.pbtn{height:34px;padding:0 12px;border-radius:8px;background:#2a2a2a;color:var(--bright);font-size:13px;flex:1}
+.btnrow{display:flex;gap:8px;margin:8px 0}
+.curveBox{width:100%;max-width:340px;margin:6px auto}
+.curveBox canvas{display:block;border-radius:8px;touch-action:none}
+.wheels{display:flex;gap:8px;justify-content:space-between;margin:8px 0}
+.wheel{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:0}
+.wheel canvas{border-radius:50%;touch-action:none;box-shadow:0 0 0 1px #333}
+.wheel>span{font-size:11px;color:var(--dim)}
+.wheel .sl{width:100%}
+.wheel .sl .top{display:none}
+#tabs button{min-width:0}
+.seg{overflow-x:auto;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{flex:1 0 auto;padding:0 8px}
 </style>
 </head>
 <body>
@@ -137,6 +152,7 @@ nav button.on i{color:var(--accent)}
   <div id="body">
   <div id="stage">
     <canvas id="view"></canvas>
+    <canvas id="cropOv"></canvas>
     <canvas id="histo"></canvas>
     <div id="tag">ORIGINAL</div>
     <div id="empty"><div class="big">Film for your iPhone photos</div><div>Portra, Ektar, Tri-X, CineStill, Velvia and more —<br>simulated from manufacturer data.</div><button class="hb" id="emptyOpen">Choose a Photo</button></div>
@@ -148,6 +164,7 @@ nav button.on i{color:var(--accent)}
       <button data-t="film" class="on"><i>◉</i>Film</button>
       <button data-t="light"><i>☀︎</i>Light</button>
       <button data-t="color"><i>◑</i>Color</button>
+      <button data-t="crop"><i>⌗</i>Crop</button>
       <button data-t="effects"><i>✦</i>Effects</button>
       <button data-t="presets"><i>☰</i>Presets</button>
     </nav>
@@ -165,6 +182,7 @@ nav button.on i{color:var(--accent)}
 <script src="js/engine.js"></script>
 <script src="js/borders.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/tools.js"></script>
 <script src="js/mobile.js"></script>
 </body>
 </html>

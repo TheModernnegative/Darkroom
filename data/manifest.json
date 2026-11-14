@@ -27,6 +27,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_portra_160__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_portra_160__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_portra_160__noritsu"
     }
    ]
   },
@@ -51,6 +61,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_portra_400__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_portra_400__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_portra_400__noritsu"
     }
    ]
   },
@@ -75,6 +95,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_portra_800__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_portra_800__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_portra_800__noritsu"
     }
    ]
   },
@@ -99,6 +129,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_portra_800_push1__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_portra_800_push1__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_portra_800_push1__noritsu"
     }
    ]
   },
@@ -123,6 +163,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_portra_800_push2__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_portra_800_push2__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_portra_800_push2__noritsu"
     }
    ]
   },
@@ -147,6 +197,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_ektar_100__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_ektar_100__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_ektar_100__noritsu"
     }
    ]
   },
@@ -171,6 +231,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_gold_200__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_gold_200__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_gold_200__noritsu"
     }
    ]
   },
@@ -195,6 +265,16 @@
      "id": "fujifilm_crystal_archive_typeii",
      "name": "Fujifilm Crystal Archive II",
      "lut": "kodak_ultramax_400__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_ultramax_400__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_ultramax_400__noritsu"
     }
    ]
   },
@@ -219,6 +299,16 @@
      "id": "kodak_portra_endura",
      "name": "Kodak Portra Endura",
      "lut": "fujifilm_c200__kodak_portra_endura"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "fujifilm_c200__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "fujifilm_c200__noritsu"
     }
    ]
   },
@@ -243,6 +333,16 @@
      "id": "kodak_portra_endura",
      "name": "Kodak Portra Endura",
      "lut": "fujifilm_xtra_400__kodak_portra_endura"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "fujifilm_xtra_400__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "fujifilm_xtra_400__noritsu"
     }
    ]
   },
@@ -267,6 +367,16 @@
      "id": "kodak_portra_endura",
      "name": "Kodak Portra Endura",
      "lut": "fujifilm_pro_400h__kodak_portra_endura"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "fujifilm_pro_400h__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "fujifilm_pro_400h__noritsu"
     }
    ]
   },
@@ -291,6 +401,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_vision3_50d__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_vision3_50d__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_vision3_50d__noritsu"
     }
    ]
   },
@@ -315,6 +435,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_vision3_250d__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_vision3_250d__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_vision3_250d__noritsu"
     }
    ]
   },
@@ -339,6 +469,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_vision3_200t__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_vision3_200t__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_vision3_200t__noritsu"
     }
    ]
   },
@@ -363,6 +503,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_vision3_500t__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_vision3_500t__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_vision3_500t__noritsu"
     }
    ]
   },
@@ -387,6 +537,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_vision3_500t__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_vision3_500t__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_vision3_500t__noritsu"
     }
    ]
   },
@@ -411,6 +571,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_vision3_50d__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_vision3_50d__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_vision3_50d__noritsu"
     }
    ]
   },
@@ -435,6 +605,16 @@
      "id": "kodak_2393",
      "name": "Kodak Vision Premier 2393",
      "lut": "kodak_verita_200d__kodak_2393"
+    },
+    {
+     "id": "frontier",
+     "name": "Frontier scan",
+     "lut": "kodak_verita_200d__frontier"
+    },
+    {
+     "id": "noritsu",
+     "name": "Noritsu scan",
+     "lut": "kodak_verita_200d__noritsu"
     }
    ]
   },
@@ -610,5 +790,6 @@
    ]
   }
  ],
- "credits": "Colour film models: spektrafilm by Andrea Volpato (github.com/andreavolpato/spektrafilm), profiles & LUTs CC BY-SA 4.0. Black & white models: Splat Darkroom."
+ "credits": "Colour film models: spektrafilm by Andrea Volpato (github.com/andreavolpato/spektrafilm), profiles & LUTs CC BY-SA 4.0. Black & white models: Splat Darkroom.",
+ "output": "p3"
 }
