@@ -26,7 +26,7 @@ const STUDIO_RECIPES = [
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe'];
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'];
 
 const Studio = {
   host:null,
@@ -106,9 +106,10 @@ const Studio = {
     }
     // ---------------------------------------------------------------- Lens
     if(want('sLens')){
-    b=UI.panel(root,'sLens','Lens Effects',false,()=>this.reset(['zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe']));
+    b=UI.panel(root,'sLens','Lens Effects',false,()=>this.reset(['zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort']));
     this.S(b,'softEdges','Soft edges',{min:0,max:100,step:1});
     this.S(b,'fringe','Color fringing',{min:0,max:100,step:1});
+    this.S(b,'distort','Distortion',{min:-80,max:60,step:1,fmt:x=>x<0?'Barrel '+Math.round(-x):x>0?'Pincushion '+Math.round(x):'0'});
     this.S(b,'zoomBlur','Zoom blur',{min:0,max:100,step:1});
     this.S(b,'motionBlur','Motion blur',{min:0,max:100,step:1}); this.S(b,'motionAngle','Motion angle',{min:-90,max:90,step:1,fmt:x=>Math.round(x)+'°'});
     this.S(b,'tiltShift','Tilt-shift blur',{min:0,max:100,step:1}); this.S(b,'tiltPos','Focus line',{min:0,max:100,step:1}); this.S(b,'tiltWidth','Focus width',{min:2,max:80,step:1});

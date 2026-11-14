@@ -167,7 +167,7 @@ precision highp float;precision highp int;
 uniform highp usampler2D uData;
 uniform mat4 uProj,uView;
 uniform vec2 uViewport;uniform float uFocalPx,uCovScale;
-uniform float uFocus,uFocusY,uTiltK,uFmm,uN,uMmPerUnit,uPxPerMm,uDof;
+uniform vec2 uTiltDir; uniform float uFocus,uFocusY,uTiltK,uFmm,uN,uMmPerUnit,uPxPerMm,uDof,uSwirl,uCatEye,uAnam;
 in vec2 aQuad;in uint aIndex;
 out vec4 vColor;out vec2 vPos;
 void main(){
@@ -189,13 +189,19 @@ void main(){
   float alpha=float(d0.w>>24)/255.;
   // ---- thin-lens depth of field: grow each gaussian by its circle of confusion, conserve energy
   if(uDof>0.5){
-    float S=max(uFocus+(cam.y-uFocusY)*uTiltK,0.01);
+    float S=max(uFocus+(dot(cam.xy,uTiltDir)-uFocusY)*uTiltK,0.01);
     float Smm=S*uMmPerUnit;
     float m=uFmm/max(Smm-uFmm,1.);
     float cocPx=min((uFmm/uN)*m*abs(d-S)/d*uPxPerMm,420.);
     float add=cocPx*cocPx/16.;
     float det0=xx*yy-xy*xy;
-    xx+=add;yy+=add;
+    // lens character: Petzval swirl (tangential stretch), cat's-eye (radial squeeze), anamorphic (tall ovals)
+    vec2 sp=clip.xy/clip.w*uViewport*.5; float rr=length(sp)/length(uViewport*.5);
+    vec2 er=rr>1e-4?normalize(sp):vec2(1.,0.), et=vec2(-er.y,er.x);
+    float ar=max(.12,1.-uCatEye*.85*rr*rr-uSwirl*.45*rr*rr), at=1.+uSwirl*2.6*rr*rr;
+    mat2 C=add*(ar*outerProduct(er,er)+at*outerProduct(et,et));
+    vec2 AS=vec2(1./sqrt(1.+uAnam),sqrt(1.+uAnam)); C=mat2(AS.x,0.,0.,AS.y)*C*mat2(AS.x,0.,0.,AS.y);
+    xx+=C[0][0];yy+=C[1][1];xy+=C[0][1];
     alpha*=sqrt(max(det0,1e-6)/max(xx*yy-xy*xy,1e-6));
   }
   if(alpha<1./255.){gl_Position=vec4(0.,0.,2.,1.);return;}
@@ -216,10 +222,50 @@ void main(){float A=-dot(vPos,vPos);if(A<-4.)discard;float B=exp(A)*vColor.a;if(
 
 
 const SCAN_FORMATS={'35mm':{w:36,h:24,f:50,r:[14,200]},'6x7':{w:70,h:56,f:90,r:[35,300]},'4x5':{w:127,h:101.6,f:150,r:[65,480]},'8x10':{w:254,h:203.2,f:300,r:[120,760]}};
-const STOPS=[1.4,2,2.8,4,5.6,8,11,16,22,32,45,64];
+const STOPS=[0.95,1.2,1.4,2,2.8,4,5.6,8,11,16,22,32,45,64];
+// Lens library for 3D scans: optics (format, focal length, widest stop, bokeh character) + rendering traits
+// post: falloff (vignette), glow (spherical-aberration haze), fringe (lateral CA), distort (barrel −), softEdges (field softness)
+const LENSES=[
+ {id:'planar50',  name:'50mm f/1.4 · classic double-Gauss', format:'35mm', fmm:50,  f:1.4, catEye:.2,  post:{falloff:.35,glow:.04,fringe:3,distort:-2},
+  desc:'Clean, neutral standard lens: crisp focus, round-ish bokeh that turns to cat\'s-eyes toward the corners wide open.'},
+ {id:'helios',    name:'Helios 44-2 58mm f/2 · swirly', format:'35mm', fmm:58, f:2, swirl:.8, catEye:.3, post:{falloff:.55,glow:.14,fringe:9,distort:-1,softEdges:15},
+  desc:'Soviet Biotar copy famous for its swirling, spinning background bokeh and gentle glow.'},
+ {id:'petzval',   name:'Petzval 85mm f/2.2 · art lens', format:'35mm', fmm:85, f:2.2, swirl:1.2, catEye:.25, post:{falloff:.75,glow:.12,fringe:6,softEdges:40},
+  desc:'1840s portrait design: sharp centre, strong swirl and soft edges that pull the eye to the subject.'},
+ {id:'nocti',     name:'50mm f/0.95 · dream lens', format:'35mm', fmm:50, f:.95, catEye:.7, post:{falloff:.9,glow:.3,fringe:12,distort:-2,softEdges:10},
+  desc:'Ultra-fast: razor-thin focus, glowing highlights, heavy vignette and big cat\'s-eye bokeh.'},
+ {id:'p85',       name:'85mm f/1.2 · portrait', format:'35mm', fmm:85, f:1.2, catEye:.35, post:{falloff:.45,glow:.06,fringe:4},
+  desc:'Creamy portrait lens: melting background, smooth roll-off, very little distortion.'},
+ {id:'w24',       name:'24mm f/1.4 · wide', format:'35mm', fmm:24, f:1.4, catEye:.3, post:{falloff:.7,glow:.04,fringe:6,distort:-7},
+  desc:'Wide and fast: environmental portraits with a little barrel distortion and corner falloff.'},
+ {id:'t200',      name:'200mm f/2 · telephoto', format:'35mm', fmm:200, f:2, catEye:.25, post:{falloff:.25,glow:.03,fringe:3,distort:1},
+  desc:'Long and fast: compressed perspective, huge smooth bokeh, background flattened behind the subject.'},
+ {id:'anamorphic',name:'Anamorphic 50mm T2 · 2× squeeze', format:'35mm', fmm:50, f:2, anam:.9, landscape:true, post:{falloff:.5,glow:.12,fringe:16,distort:-4},
+  desc:'Cinema anamorphic: tall oval bokeh, blue-ish fringing, wide-screen feel. Best in horizontal orientation.'},
+ {id:'speedpanchro',name:'Speed Panchro 32mm T2 · vintage cine', format:'35mm', fmm:32, f:2, swirl:.25, catEye:.3, post:{falloff:.55,glow:.22,fringe:8,distort:-3,softEdges:12},
+  desc:'Classic Hollywood cine glass: warm glow, soft contrast, gentle swirl.'},
+ {id:'fisheye',   name:'Fisheye 15mm f/2.8', format:'35mm', fmm:15, f:2.8, post:{falloff:.6,glow:.04,fringe:22,distort:-60},
+  desc:'Extreme barrel distortion and a huge field of view — the skate-video look.'},
+ {id:'tilt24',    name:'Tilt-shift 24mm f/3.5 · architecture & miniature', format:'35mm', fmm:24, f:3.5, tilt:-8, post:{falloff:.45,glow:.02,fringe:5,distort:-3},
+  desc:'Tilt the lens down to make a scene look like a tiny model (the miniature effect), or level it for big depth of field.'},
+ {id:'tilt45',    name:'Tilt-shift 45mm f/2.8', format:'35mm', fmm:45, f:2.8, tilt:5, catEye:.1, post:{falloff:.35,glow:.03,fringe:3},
+  desc:'Normal-length tilt-shift: lay the plane of focus along a table, a face or a road.'},
+ {id:'tilt90',    name:'Tilt-shift 90mm f/2.8', format:'35mm', fmm:90, f:2.8, tilt:6, catEye:.15, post:{falloff:.35,glow:.03,fringe:3},
+  desc:'Front tilt sets a plane of focus that runs at an angle through the scene.'},
+ {id:'soft',      name:'Soft-focus / Lensbaby', format:'35mm', fmm:50, f:2, swirl:.4, catEye:.3, post:{falloff:.6,glow:.5,fringe:10,softEdges:55},
+  desc:'Dreamy: a small sweet spot, blooming highlights and smeared edges.'},
+ {id:'mamiya80',  name:'Mamiya 80mm f/2.8 · 6×7', format:'6x7', fmm:80, f:2.8, catEye:.2, post:{falloff:.35,glow:.04,fringe:3},
+  desc:'Medium-format normal lens: the big-negative look with shallow depth at moderate apertures.'},
+ {id:'holga',     name:'Holga 60mm f/8 · plastic toy', format:'6x7', fmm:60, f:8, swirl:.3, post:{falloff:1.3,glow:.2,fringe:40,distort:-10,softEdges:60},
+  desc:'Plastic meniscus lens: heavy vignette, smeary corners, colour fringing.'},
+ {id:'lf150',     name:'150mm f/5.6 · 4×5 view camera', format:'4x5', fmm:150, f:5.6, post:{falloff:.3,glow:.02,fringe:2},
+  desc:'Large-format standard: huge negative, very shallow depth even at f/5.6, crisp and neutral.'},
+ {id:'lf300',     name:'300mm f/5.6 · 8×10 portrait', format:'8x10', fmm:300, f:5.6, catEye:.1, post:{falloff:.3,glow:.06,fringe:2},
+  desc:'Ultra-large format: the deepest subject separation of all — eyes sharp, ears already soft.'},
+];
 const Splat = {
   scene:null, covScale:1, sortedCount:0, sortBusy:false, sortWant:false, lastSortView:null,
-  cam:{format:'4x5',portrait:true,fmm:150,stop:4,focus:2.4,tilt:0,dof:true,up:'Y-up',scale:1,bg:'#0a0a09',
+  cam:{format:'4x5',portrait:true,fmm:150,stop:6,focus:2.4,tilt:0,dof:true,up:'Y-up',scale:1,bg:'#0a0a09',roll:0,model:null,lens:'',tiltDir:0,swirl:0,catEye:0,anam:0,post:null,
        yaw:0.25,pitch:0.12,dist:2.4,target:[0,0.85,0],focusLock:null},
   init(gl){
     this.gl=gl;
@@ -268,12 +314,18 @@ onmessage=e=>{const d=e.data;
   },
   sensor(){ const F=SCAN_FORMATS[this.cam.format]; return this.cam.portrait?[F.h,F.w]:[F.w,F.h]; },
   camPos(){ const c=this.cam, cp=Math.cos(c.pitch); return [c.target[0]+c.dist*cp*Math.sin(c.yaw), c.target[1]+c.dist*Math.sin(c.pitch), c.target[2]+c.dist*cp*Math.cos(c.yaw)]; },
-  view(){ return M4.lookAt(this.camPos(),this.cam.target,[0,1,0]); },
-  viewModel(){ return M4.mul(this.view(),new Float32Array(MODELS[this.cam.up])); },
+  view(){ const c=this.cam, e=this.camPos(), t=c.target; let up=[0,1,0];
+    if(c.roll){ // rotate "up" about the viewing axis (horizon fine-tune)
+      let f=[t[0]-e[0],t[1]-e[1],t[2]-e[2]]; const l=Math.hypot(...f); f=f.map(v=>v/l); const a=c.roll*Math.PI/180, co=Math.cos(a), si=Math.sin(a);
+      const cr=[f[1]*up[2]-f[2]*up[1], f[2]*up[0]-f[0]*up[2], f[0]*up[1]-f[1]*up[0]], d=f[0]*up[0]+f[1]*up[1]+f[2]*up[2];
+      up=up.map((u,i)=>u*co+cr[i]*si+f[i]*d*(1-co)); }
+    return M4.lookAt(e,t,up); },
+  modelM(){ return new Float32Array(this.cam.model||MODELS[this.cam.up]); },
+  viewModel(){ return M4.mul(this.view(),this.modelM()); },
   frame(){
     const c=this.cam, s=this.scene; if(!s) return;
     if(s.demo){ Object.assign(c,{yaw:0.25,pitch:0.12,dist:2.4,target:[0,0.85,0],up:'Y-up',focusLock:[0,0.86,0]}); return; }
-    const n=s.n,m=new Float32Array(MODELS[c.up]),N=Math.min(n,40000),xs=[],ys=[],zs=[];
+    const n=s.n,m=this.modelM(),N=Math.min(n,40000),xs=[],ys=[],zs=[];
     for(let i=0;i<N;i++){ const j=Math.floor(i*n/N)*3,x=s.pos[j],y=s.pos[j+1],z=s.pos[j+2];
       xs.push(m[0]*x+m[4]*y+m[8]*z); ys.push(m[1]*x+m[5]*y+m[9]*z); zs.push(m[2]*x+m[6]*y+m[10]*z); }
     const med=a=>{const b=a.slice().sort((p,q)=>p-q);return b[b.length>>1];};
@@ -295,14 +347,14 @@ onmessage=e=>{const d=e.data;
     const [sw,sh]=this.sensor(), fovy=2*Math.atan(sh/(2*c.fmm)), focalPx=ih/2/Math.tan(fovy/2);
     const V=this.viewModel(), Pm=M4.persp(fovy,iw/ih,0.02,2000);
     let focusY=0;
-    if(c.focusLock){ const p=c.focusLock, mm=new Float32Array(MODELS[c.up]), v=this.view();
+    if(c.focusLock){ const p=c.focusLock, mm=this.modelM(), v=this.view();
       const wx=mm[0]*p[0]+mm[4]*p[1]+mm[8]*p[2], wy=mm[1]*p[0]+mm[5]*p[1]+mm[9]*p[2], wz=mm[2]*p[0]+mm[6]*p[1]+mm[10]*p[2];
-      const cz=v[2]*wx+v[6]*wy+v[10]*wz+v[14]; focusY=v[1]*wx+v[5]*wy+v[9]*wz+v[13]; if(-cz>0.01) c.focus=-cz; }
+      const cz=v[2]*wx+v[6]*wy+v[10]*wz+v[14]; { const td=(c.tiltDir||0)*Math.PI/180, cx_=v[0]*wx+v[4]*wy+v[8]*wz+v[12], cy_=v[1]*wx+v[5]*wy+v[9]*wz+v[13]; focusY=cx_*Math.sin(td)+cy_*Math.cos(td); } if(-cz>0.01) c.focus=-cz; }
     gl.useProgram(this.P.p); const u=this.P.u;
     gl.uniformMatrix4fv(u.uProj,false,Pm); gl.uniformMatrix4fv(u.uView,false,V);
     gl.uniform2f(u.uViewport,iw,ih); gl.uniform1f(u.uFocalPx,focalPx); gl.uniform1f(u.uCovScale,this.covScale);
-    gl.uniform1f(u.uFocus,c.focus); gl.uniform1f(u.uFocusY,focusY); gl.uniform1f(u.uTiltK,-Math.tan(c.tilt*Math.PI/180));
-    gl.uniform1f(u.uFmm,c.fmm); gl.uniform1f(u.uN,STOPS[c.stop]); gl.uniform1f(u.uMmPerUnit,c.scale*1000); gl.uniform1f(u.uPxPerMm,ih/sh); gl.uniform1f(u.uDof,c.dof?1:0);
+    gl.uniform1f(u.uFocus,c.focus); gl.uniform1f(u.uFocusY,focusY); gl.uniform1f(u.uTiltK,-Math.tan(c.tilt*Math.PI/180)); { const td=(c.tiltDir||0)*Math.PI/180; gl.uniform2f(u.uTiltDir,Math.sin(td),Math.cos(td)); }
+    gl.uniform1f(u.uFmm,c.fmm); gl.uniform1f(u.uN,STOPS[c.stop]); gl.uniform1f(u.uMmPerUnit,c.scale*1000); gl.uniform1f(u.uPxPerMm,ih/sh); gl.uniform1f(u.uDof,c.dof?1:0); gl.uniform1f(u.uSwirl,c.swirl||0); gl.uniform1f(u.uCatEye,c.catEye||0); gl.uniform1f(u.uAnam,c.anam||0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,this.dataTex); gl.uniform1i(u.uData,0);
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(this.vao); gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,this.sortedCount); gl.bindVertexArray(null); gl.disable(gl.BLEND);
@@ -319,6 +371,39 @@ onmessage=e=>{const d=e.data;
     if(!cand.length) return null; cand.sort((a,b)=>a[0]-b[0]); const i=cand[Math.floor(cand.length*0.12)][1];
     return [P[i*3],P[i*3+1],P[i*3+2]];
   },
-  toWorld(p){ const m=MODELS[this.cam.up]; return [m[0]*p[0]+m[4]*p[1]+m[8]*p[2], m[1]*p[0]+m[5]*p[1]+m[9]*p[2], m[2]*p[0]+m[6]*p[1]+m[10]*p[2]]; },
+  toWorld(p){ const m=this.modelM(); return [m[0]*p[0]+m[4]*p[1]+m[8]*p[2], m[1]*p[0]+m[5]*p[1]+m[9]*p[2], m[2]*p[0]+m[6]*p[1]+m[10]*p[2]]; },
+  // ---- levelling: make the scene's ground/table plane horizontal so orbits stay upright
+  applyRotation(R){ // R: 3x3 row-major, applied in world space; keeps the current view
+    const c=this.cam, M=this.modelM(), R4=new Float32Array([R[0],R[3],R[6],0, R[1],R[4],R[7],0, R[2],R[5],R[8],0, 0,0,0,1]);
+    const e=this.camPos(), rot=v=>[R[0]*v[0]+R[1]*v[1]+R[2]*v[2], R[3]*v[0]+R[4]*v[1]+R[5]*v[2], R[6]*v[0]+R[7]*v[1]+R[8]*v[2]];
+    const t2=rot(c.target), e2=rot(e), d=[e2[0]-t2[0],e2[1]-t2[1],e2[2]-t2[2]], dist=Math.hypot(...d);
+    c.model=Array.from(M4.mul(R4,M)); c.target=t2; c.dist=dist; c.pitch=Math.asin(Math.max(-1,Math.min(1,d[1]/dist))); c.yaw=Math.atan2(d[0],d[2]); c.roll=0;
+    this.lastSortView=null; },
+  rotTo(n,to){ // rotation taking unit vector n onto `to`
+    const v=[n[1]*to[2]-n[2]*to[1], n[2]*to[0]-n[0]*to[2], n[0]*to[1]-n[1]*to[0]], s=Math.hypot(...v), c=n[0]*to[0]+n[1]*to[1]+n[2]*to[2];
+    if(s<1e-8) return c>0?[1,0,0,0,1,0,0,0,1]:[1,0,0,0,-1,0,0,0,-1];
+    const k=v.map(x=>x/s), K=[0,-k[2],k[1], k[2],0,-k[0], -k[1],k[0],0], a=Math.atan2(s,c), sa=Math.sin(a), ca=1-Math.cos(a);
+    const KK=[0,0,0,0,0,0,0,0,0]; for(let r=0;r<3;r++) for(let q=0;q<3;q++) for(let j=0;j<3;j++) KK[r*3+q]+=K[r*3+j]*K[j*3+q];
+    return [0,1,2,3,4,5,6,7,8].map(i=>(i%4===0?1:0)+sa*K[i]+ca*KK[i]); },
+  levelToView(){ const v=this.view(); const up=[v[1],v[5],v[9]]; this.applyRotation(this.rotTo(up,[0,1,0])); },
+  autoLevel(){
+    const s=this.scene; if(!s||s.demo) return false; const M=this.modelM(), n=s.n, N=Math.min(n,30000), P=[];
+    for(let i=0;i<N;i++){ const j=Math.floor(i*n/N); if(s.rgba[j*4+3]<80) continue; const x=s.pos[j*3],y=s.pos[j*3+1],z=s.pos[j*3+2];
+      P.push([M[0]*x+M[4]*y+M[8]*z, M[1]*x+M[5]*y+M[9]*z, M[2]*x+M[6]*y+M[10]*z]); }
+    if(P.length<100) return false;
+    const c=this.cam.target; const ds=P.map(p=>Math.hypot(p[0]-c[0],p[1]-c[1],p[2]-c[2])).sort((a,b)=>a-b); const R=ds[Math.floor(ds.length*.6)]||1, thr=R*0.02;
+    const near=P.filter(p=>Math.hypot(p[0]-c[0],p[1]-c[1],p[2]-c[2])<R*2.5);
+    let best=null, bs=0; let sd=12345; const rnd=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+    for(let it=0;it<700;it++){
+      const a=near[Math.floor(rnd()*near.length)], b=near[Math.floor(rnd()*near.length)], q=near[Math.floor(rnd()*near.length)];
+      const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], w=[q[0]-a[0],q[1]-a[1],q[2]-a[2]]; let nn=[u[1]*w[2]-u[2]*w[1],u[2]*w[0]-u[0]*w[2],u[0]*w[1]-u[1]*w[0]]; const l=Math.hypot(...nn); if(l<1e-9) continue; nn=nn.map(x=>x/l);
+      let cnt=0; for(let i=0;i<near.length;i+=3){ const p=near[i]; if(Math.abs((p[0]-a[0])*nn[0]+(p[1]-a[1])*nn[1]+(p[2]-a[2])*nn[2])<thr) cnt++; }
+      const score=cnt*(0.35+0.65*Math.abs(nn[1]));   // prefer planes near the current "up"
+      if(score>bs){ bs=score; best={nn,a}; } }
+    if(!best) return false;
+    let nn=best.nn; // point "up" toward where most of the subject is
+    let above=0; for(let i=0;i<near.length;i+=5){ const p=near[i]; above+=Math.sign((p[0]-best.a[0])*nn[0]+(p[1]-best.a[1])*nn[1]+(p[2]-best.a[2])*nn[2]); }
+    if(above<0) nn=nn.map(x=>-x);
+    this.applyRotation(this.rotTo(nn,[0,1,0])); return true; },
   pan(dx,dy){ const v=this.view(),k=this.cam.dist*0.0016; for(let i=0;i<3;i++) this.cam.target[i]+=(-v[i*4]*dx+v[i*4+1]*dy)*k; },
 };

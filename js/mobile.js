@@ -142,6 +142,7 @@ const M = {
       this.seg(pane,'Print',s.papers.map(x=>[x.id,x.name.replace('Kodak Professional ','').replace('Fujifilm ','Fuji ').replace('Kodak ','')]),()=>Engine.paperFor(p).id,async v=>{ p.paper=v; await Engine.ensureLuts(p); this.changed(); this.commit(); });
       this.seg(pane,'Format',Object.entries(FORMATS).map(([k,f])=>[k,f.label]),()=>p.format,v=>{ p.format=v; this.changed(); this.commit(); });
       S('filmAmt','Film strength',{min:0,max:100,step:1,fmt:x=>Math.round(x)+'%'});
+      this.toggle(pane,'Show frame / border',()=>p.border!=='none'&&!(p.off&&p.off.frame),v=>{ p.off=Object.assign({},p.off||{}); if(v){ delete p.off.frame; if(p.border==='none'){ p.border=(Engine.stock(p.stock).defaults||{}).border||'35mm'; } } else p.off.frame=true; this.changed(); this.commit(); });
       S('push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box speed':(x>0?'Push +':'Pull −')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
       this.toggle(pane,'Auto exposure (lab metering)',()=>p.autoExp,v=>{ p.autoExp=v; this.changed(); this.commit(); });
     } else if(t==='light'){
@@ -173,8 +174,8 @@ const M = {
       S('sharpen','Sharpening',{min:0,max:150,step:1}); S('nr','Noise reduction',{min:0,max:100,step:1}); S('nrColor','Color noise',{min:0,max:100,step:1});
       this.head(pane,'Grain',['grain','grainSize','grainRough'],['grain']);
       S('grain','Amount',{min:0,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainSize','Size',{min:0.4,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainRough','Softness',{min:0.05,max:0.8,step:0.01,fmt:x=>Math.round(x*100)});
-      this.head(pane,'Light & lens',['halation','glow','falloff'],['halation','lens']);
-      S('halation','Halation',{min:0,max:4,step:0.01,fmt:x=>Math.round(x*100)}); S('glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)}); S('falloff','Lens falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)});
+      this.head(pane,'Light & lens',['halation','glow','falloff','softness'],['halation','lens']);
+      S('halation','Halation',{min:0,max:4,step:0.01,fmt:x=>Math.round(x*100)}); S('glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)}); S('falloff','Lens falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)}); S('softness','Softness',{min:0,max:100,step:1});
       this.head(pane,'Frame',null,['frame']);
       this.seg(pane,'',Borders.styles.map(([k,t])=>[k,t.replace(' scan','').replace(' holder','').replace('Print border','Print')]),()=>p.border,v=>{ p.border=v; this.changed(); this.commit(); this.showTab('effects',true); });
       if(p.border!=='none'){ this.seg(pane,'Frame color',[['auto','Auto'],['white','White'],['cream','Cream'],['black','Black']],()=>p.frameTone||'auto',v=>{ p.frameTone=v; this.changed(); this.commit(); });

@@ -806,7 +806,8 @@
     "aspect": "1:1",
     "falloff": 0.55,
     "glow": 0.22,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 50
    },
    "papers": [
     {
@@ -833,7 +834,8 @@
     "aspect": "1:1",
     "falloff": 0.5,
     "glow": 0.2,
-    "grain": 0.5
+    "grain": 0.5,
+    "softness": 42
    },
    "papers": [
     {
@@ -860,7 +862,8 @@
     "aspect": "1:1",
     "falloff": 0.5,
     "glow": 0.15,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -887,7 +890,8 @@
     "aspect": "1:1",
     "falloff": 0.5,
     "glow": 0.15,
-    "grain": 0.5
+    "grain": 0.5,
+    "softness": 40
    },
    "papers": [
     {
@@ -915,7 +919,8 @@
     "frameTone": "black",
     "falloff": 0.5,
     "glow": 0.12,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -943,7 +948,8 @@
     "frameTone": "black",
     "falloff": 0.5,
     "glow": 0.12,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -971,7 +977,8 @@
     "frameTone": "black",
     "falloff": 0.5,
     "glow": 0.12,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -999,7 +1006,8 @@
     "frameTone": "black",
     "falloff": 0.5,
     "glow": 0.12,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -1027,7 +1035,8 @@
     "frameTone": "black",
     "falloff": 0.5,
     "glow": 0.12,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -1054,7 +1063,8 @@
     "aspect": "1:1",
     "falloff": 0.5,
     "glow": 0.15,
-    "grain": 0.6
+    "grain": 0.6,
+    "softness": 45
    },
    "papers": [
     {
@@ -1081,7 +1091,8 @@
     "aspect": "46:62",
     "falloff": 0.35,
     "glow": 0.08,
-    "grain": 0.7
+    "grain": 0.7,
+    "softness": 35
    },
    "papers": [
     {
@@ -1108,7 +1119,8 @@
     "aspect": "46:62",
     "falloff": 0.35,
     "glow": 0.06,
-    "grain": 0.7
+    "grain": 0.7,
+    "softness": 32
    },
    "papers": [
     {
@@ -1135,7 +1147,8 @@
     "aspect": "46:62",
     "falloff": 0.35,
     "glow": 0.08,
-    "grain": 0.7
+    "grain": 0.7,
+    "softness": 35
    },
    "papers": [
     {
@@ -1161,7 +1174,8 @@
     "border": "peel",
     "falloff": 0.4,
     "glow": 0.06,
-    "grain": 0.8
+    "grain": 0.8,
+    "softness": 25
    },
    "papers": [
     {
@@ -1187,7 +1201,8 @@
     "border": "peel",
     "falloff": 0.45,
     "glow": 0.12,
-    "grain": 0.8
+    "grain": 0.8,
+    "softness": 35
    },
    "papers": [
     {
@@ -1213,7 +1228,8 @@
     "border": "peel",
     "falloff": 0.45,
     "glow": 0.05,
-    "grain": 1.0
+    "grain": 1.0,
+    "softness": 25
    },
    "papers": [
     {
@@ -1239,7 +1255,8 @@
     "border": "peel",
     "falloff": 0.4,
     "glow": 0.04,
-    "grain": 0.8
+    "grain": 0.8,
+    "softness": 15
    },
    "papers": [
     {
@@ -1266,7 +1283,8 @@
     "format": "4x5",
     "falloff": 0.35,
     "glow": 0.03,
-    "grain": 0.8
+    "grain": 0.8,
+    "softness": 8
    },
    "papers": [
     {

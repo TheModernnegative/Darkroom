@@ -36,6 +36,7 @@ const App = {
     UI.select(b,'paper','Print / Lab',()=>Engine.stock(P().stock).papers.map(x=>[x.id,x.name]), ()=>Engine.paperFor(P()).id, async v=>{ P().paper=v; await Engine.ensureLuts(P()); this.changed(); this.commit(); });
     UI.seg(b,'format','Format',Object.entries(FORMATS).map(([k,f])=>[k,f.label]),()=>P().format,v=>{ P().format=v; this.changed(); this.commit(); });
     S(b,'filmAmt','Strength',{min:0,max:100,step:1,fmt:x=>Math.round(x)+'%'});
+    { const fr=UI.check(b,'showFrame','Show frame / border',()=>P().border!=='none'&&!(P().off&&P().off.frame),v=>{ const p=P(); p.off=Object.assign({},p.off||{}); if(v){ delete p.off.frame; if(p.border==='none'){ const d=(Engine.stock(p.stock).defaults||{}).border; p.border=d||'35mm'; } } else p.off.frame=true; this.changed(); this.commit(); UI.refresh(); this.syncToggles(); }); }
     S(b,'push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box':(x>0?'+':'−')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
     UI.check(b,'autoExp','Auto exposure (lab metering)',()=>P().autoExp,v=>{ P().autoExp=v; this.changed(); this.commit(); });
     UI.note(b,'','stockNote');
@@ -84,8 +85,10 @@ const App = {
     S(b,'glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)});
     UI.note(b,'Halation is light bouncing off the film base back into the red layer. It\'s strong on CineStill (no anti-halation layer), faint on Portra. Diffusion acts like a Pro-Mist filter.');
     // Lens
-    b=UI.panel(root,'pLens','Lens',false,()=>{ P().falloff=DEFAULTS.falloff; this.changed(); this.commit(); UI.refresh(); });
+    b=UI.panel(root,'pLens','Lens',false,()=>{ P().falloff=DEFAULTS.falloff; P().softness=0; this.changed(); this.commit(); UI.refresh(); });
     S(b,'falloff','Falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)});
+    S(b,'softness','Softness',{min:0,max:100,step:1});
+    UI.note(b,'Softness blurs the whole frame the way instant film and old lenses resolve less detail; Diffusion (Halation & Glow) adds the hazy bloom.');
     // Frame
     b=UI.panel(root,'pFrame','Frame',false);
     UI.select(b,'border','Border',()=>Borders.styles,()=>P().border,v=>{ P().border=v; this.changed(); this.commit(); });
@@ -107,24 +110,42 @@ const App = {
     UI.button(row,'Demo',()=>this.loadDemo());
     const row2=document.createElement('div'); row2.className='btnrow'; b.appendChild(row2);
     const nb=UI.button(row2,'New scan from video / photos…',()=>this.newScan());
+    UI.button(row2,'▶ How to film',()=>Tutorial.open());
     if(!Native.available){ nb.disabled=true; nb.title='Available in the Mac app'; }
-    UI.seg(b,'up','Up axis',[['Y-up','Y up'],['Y-down','Y down'],['Z-up','Z up']],()=>c.up,v=>{ c.up=v; if(Splat.scene&&!Splat.scene.demo) Splat.frame(); Splat.lastSortView=null; this.scanKey=null; d(); });
+    UI.seg(b,'up','Up axis',[['Y-up','Y up'],['Y-down','Y down'],['Z-up','Z up']],()=>c.model?'':c.up,v=>{ c.up=v; c.model=null; c.roll=0; if(Splat.scene&&!Splat.scene.demo) Splat.frame(); Splat.lastSortView=null; this.scanKey=null; this.saveScanView(); d(); });
+    { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r);
+      UI.button(r,'⚖ Level  L',()=>this.levelScan(),'tbtn accent'); UI.button(r,'Level to view',()=>{ Splat.levelToView(); this.saveScanView(); UI.refresh(); d(); this.toast('Levelled to the current view'); }); }
+    UI.slider(b,'roll','Horizon',{min:-20,max:20,step:0.1,def:0,get:()=>c.roll||0,set:v=>{ c.roll=v; d(); },commit:()=>this.saveScanView(),fmt:x=>(x>0?'+':'')+x.toFixed(1)+'°'});
     UI.seg(b,'bg','Backdrop',[['#0a0a09','Black'],['#7d7a74','Grey'],['#f1efe9','White']],()=>c.bg,v=>{ c.bg=v; d(); });
     UI.slider(b,'scale','Scene scale',{min:0,max:1,step:0.001,def:Math.log(1/0.02)/Math.log(2500),
       get:()=>Math.log(c.scale/0.02)/Math.log(2500), set:v=>{ c.scale=0.02*Math.pow(2500,v); d(); }, fmt:()=>c.scale<1?Math.round(c.scale*100)+' cm':c.scale.toFixed(2)+' m'});
+    UI.note(b,'','scanInfo');
     UI.note(b,'Scans have arbitrary units. Set this so the subject is its real size and depth of field behaves like a real lens.');
     const vr=document.createElement('div'); vr.className='btnrow'; b.appendChild(vr);
     UI.button(vr,'Reset view',()=>{ Splat.frame(); this.scanKey=null; d(); },'tbtn');
     UI.button(vr,'Export orbit video…',()=>this.orbitDialog(),'tbtn accent');
     b=$('#cameraBody'); b.innerHTML='';
+    UI.select(b,'lens','Lens',()=>[['','Custom']].concat(LENSES.map(l=>[l.id,l.name])),()=>c.lens||'',v=>this.setLens(v));
+    UI.note(b,'','lensNote'); this.lensNote();
     UI.seg(b,'cfmt','Format',Object.keys(SCAN_FORMATS).map(k=>[k,k.replace('x','×')]),()=>c.format,v=>{ c.format=v; c.fmm=SCAN_FORMATS[v].f; UI.refresh(); d(); });
     UI.seg(b,'orient','Orientation',[['true','Vertical'],['false','Horizontal']],()=>String(c.portrait),v=>{ c.portrait=v==='true'; d(); });
     UI.slider(b,'fmm','Focal length',{min:14,max:760,step:1,def:150,get:()=>c.fmm,set:v=>{ c.fmm=v; d(); },fmt:x=>Math.round(x)+'mm'});
-    UI.slider(b,'stop','Aperture',{min:0,max:STOPS.length-1,step:1,def:4,get:()=>c.stop,set:v=>{ c.stop=v; d(); },fmt:x=>'ƒ/'+STOPS[x]});
+    UI.slider(b,'stop','Aperture',{min:0,max:STOPS.length-1,step:1,def:6,get:()=>c.stop,set:v=>{ c.stop=v; d(); },fmt:x=>'ƒ/'+STOPS[x]});
     UI.slider(b,'focusS','Focus',{min:0,max:1,step:0.001,def:0.5,get:()=>Math.log(c.focus/0.05)/Math.log(8000),set:v=>{ c.focusLock=null; c.focus=0.05*Math.pow(8000,v); d(); },
       fmt:()=>{ const m=c.focus*c.scale; return m<1?Math.round(m*100)+'cm':m.toFixed(2)+'m'; }});
     UI.slider(b,'tilt','Front tilt',{min:-12,max:12,step:0.5,def:0,get:()=>c.tilt,set:v=>{ c.tilt=v; d(); },fmt:x=>(x>0?'+':'')+x+'°'});
+    UI.slider(b,'tiltDir','Tilt direction',{min:-90,max:90,step:1,def:0,get:()=>c.tiltDir||0,set:v=>{ c.tiltDir=v; d(); },fmt:x=>x===0?'Tilt (up/down)':Math.abs(x)===90?'Swing (sideways)':Math.round(x)+'°'});
     UI.check(b,'dof','Depth of field',()=>c.dof,v=>{ c.dof=v; d(); });
+    UI.note(b,'<span class="sub">Lens character</span>');
+    UI.slider(b,'swirl','Swirl',{min:0,max:1.5,step:0.01,def:0,get:()=>c.swirl||0,set:v=>{ c.swirl=v; c.lens=''; d(); },fmt:x=>Math.round(x*100)});
+    UI.slider(b,'catEye',"Cat's-eye bokeh",{min:0,max:1,step:0.01,def:0,get:()=>c.catEye||0,set:v=>{ c.catEye=v; c.lens=''; d(); },fmt:x=>Math.round(x*100)});
+    UI.slider(b,'anam','Anamorphic',{min:0,max:1.5,step:0.01,def:0,get:()=>c.anam||0,set:v=>{ c.anam=v; c.lens=''; d(); },fmt:x=>Math.round(x*100)});
+    const PP=k=>({get:()=>((c.post||{})[k]??0),set:v=>{ c.post=Object.assign({},c.post||{}); c.post[k]=v; c.lens=''; d(); }});
+    UI.slider(b,'lglow','Glow',Object.assign({min:0,max:0.6,step:0.01,def:0,fmt:x=>Math.round(x*100)},PP('glow')));
+    UI.slider(b,'lfall','Vignette',Object.assign({min:0,max:1.5,step:0.01,def:0,fmt:x=>Math.round(x*100)},PP('falloff')));
+    UI.slider(b,'lfringe','Fringing',Object.assign({min:0,max:60,step:1,def:0},PP('fringe')));
+    UI.slider(b,'ldist','Distortion',Object.assign({min:-80,max:40,step:1,def:0},PP('distort')));
+    UI.slider(b,'lsoft','Soft corners',Object.assign({min:0,max:80,step:1,def:0},PP('softEdges')));
     UI.note(b,'Click the image to focus; focus stays locked to that point while you orbit. Double-click to orbit around it.');
   },
 
@@ -280,7 +301,7 @@ const App = {
       b.onclick=e=>{ e.stopPropagation(); const p=Engine.p; p.off=Object.assign({},p.off||{}); const off=!secs.every(k=>p.off[k]); secs.forEach(k=>{ if(off) p.off[k]=true; else delete p.off[k]; }); this.changed(); this.commit(); this.syncToggles(); };
       el.querySelector('h3').appendChild(b); }
     this.syncToggles(); },
-  syncToggles(){ const off=Engine.p.off||{}; for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el) continue; const o=this.PANEL_SECTIONS[id].every(k=>off[k]); el.classList.toggle('secoff',o); const b=el.querySelector('.ptog'); if(b) b.textContent=o?'OFF':'ON'; } },
+  syncToggles(){ if(UI.sliders.showFrame) UI.sliders.showFrame(); const off=Engine.p.off||{}; for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el) continue; const o=this.PANEL_SECTIONS[id].every(k=>off[k]); el.classList.toggle('secoff',o); const b=el.querySelector('.ptog'); if(b) b.textContent=o?'OFF':'ON'; } },
   dots(){ this.syncToggles&&this.syncToggles(); const e=Tools.edited(Engine.p), map={pMasks:'masks',pDetail:'effects',pFilm:'film',pBasic:'light',pCurve:'light',pCrop:'crop',pHSL:'color',pGrade:'color',pGrain:'effects',pHal:'effects',pLens:'effects',pFrame:'effects'};
     const own={pMasks:['masks'],pDetail:['sharpen','sharpRadius','nr','nrColor'],pBasic:['temp','tint','ev','contrast','highlights','shadows','whites','blacks','vibrance','saturation','hlExpand'],pCurve:['curve'],pHSL:['hslH','hslS','hslL'],pGrade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'],pGrain:['grain','grainSize','grainRough'],pHal:['halation','glow'],pLens:['falloff'],pFrame:['border'],pCrop:['crop','angle','rot','flip']};
     for(const id in map){ const el=document.getElementById(id); if(!el) continue; const ks=own[id]; const on = ks ? ks.some(k=>JSON.stringify(Engine.p[k])!==JSON.stringify(DEFAULTS[k])) : e[map[id]]; el.classList.toggle('edited',!!on); } },
@@ -375,7 +396,7 @@ const App = {
     if(this.module==='scan'){
       if(!this.scans.length){ el.innerHTML='<div class="stripNote">No scans yet — build one with “New scan from video / photos…”. Scans live in Documents/Splat/scans.</div>'; return; }
       this.scans.forEach(sc=>{ const t=document.createElement('div'); t.className='thumb scan'+(sc.path===this.scanPath?' on':''); t.title=sc.name;
-        t.innerHTML=(sc.thumb?`<img src="${sc.thumb}">`:'<div class="scanIco">3D</div>')+`<span class="badge">${sc.name}</span>`;
+        t.innerHTML=(sc.thumb?`<img src="${sc.thumb}">`:'<div class="scanIco">3D</div>')+`<span class="badge">${sc.name}${sc.size>0?' · '+this.fmtBytes(sc.size):''}</span>`;
         t.onclick=()=>this.loadScanPath(sc.path);
         const mb=document.createElement('button'); mb.className='tmore'; mb.textContent='⋯'; mb.title='Rename · Show in Finder · Remove';
         mb.onclick=e=>{ e.stopPropagation(); this.scanMenu(sc,mb); }; t.appendChild(mb); el.appendChild(t); });
@@ -450,8 +471,9 @@ const App = {
   async loadScanPath(path){
     this.busy('Reading scan…'); try{ const buf=await (await fetch(Native.fileURL(path))).arrayBuffer(); this.loadScanBuffer(buf,path.split('/').pop(),path); } catch(e){ this.toast('Could not read scan: '+e.message); } this.busy();
   },
-  loadScanBuffer(buf,name,path){
-    try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.load(s); this.scanName=name; this.scanPath=path||null;
+  loadScanBuffer(buf,name,path){ this._scanBytes=buf.byteLength; setTimeout(()=>this.renderScanInfo(),50);
+    try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.cam.model=null; Splat.cam.roll=0; Splat.load(s); this.scanName=name; this.scanPath=path||null;
+      { const sc=this.scans.find(x=>x.path===path); if(sc&&sc.view){ const v=sc.view; Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); Splat.frame(); } }
       if(path && !this.scans.find(x=>x.path===path)) this.scans.unshift({name:name.replace(/\.(ply|splat)$/i,''),path,thumb:null}); }
     catch(e){ this.toast(e.message); return; }
     this.scanKey=null; this.setModule('scan'); UI.refresh(); this.saveSoon();
@@ -465,8 +487,28 @@ const App = {
           const pick=plys.find(f=>f.replace(/\.\w+$/,'')===d) || plys.sort().reverse()[0];
           const path=root+'/'+d+'/'+pick; if((this.hiddenScans||[]).includes(path)) continue; if(!this.scans.find(x=>x.path===path)) this.scans.push({name:d,path,thumb:null}); }
       }catch(e){} }
-    this.renderStrip();
+    this.renderStrip(); this.statScans();
   },
+  fmtBytes(n){ if(!(n>=0)) return ''; const u=['B','KB','MB','GB']; let i=0; while(n>=1000&&i<3){ n/=1000; i++; } return (n>=100||i===0?Math.round(n):n.toFixed(1))+' '+u[i]; },
+  // sizes: the scan file itself, its folder (frames, camera solve, checkpoints) and the checkpoints you can clear
+  async statScans(){
+    if(!Native.available||!this.info||!(this.info.native>=3)) return;
+    try{ const paths=[]; this.scans.forEach(sc=>{ paths.push(sc.path); paths.push(sc.path.replace(/\/[^/]+$/,'')); });
+      const r=await Native.call('stat',{paths}); const m={}; r.forEach(x=>m[x.path]=x.size);
+      for(const sc of this.scans){ const dir=sc.path.replace(/\/[^/]+$/,''); sc.size=m[sc.path]; sc.dirSize=m[dir];
+        try{ const files=await Native.call('listDir',{path:dir}); const cps=files.filter(f=>/^export_\d+\.ply$/.test(f)&&dir+'/'+f!==sc.path).map(f=>dir+'/'+f);
+          const cs=cps.length?await Native.call('stat',{paths:cps}):[]; sc.checkpoints=cs.filter(x=>x.size>0); }catch(e){} }
+      this.renderStrip(); this.renderScanInfo(); }catch(e){} },
+  renderScanInfo(){ const el=$('#scanInfo'); if(!el) return; const sc=this.scans.find(x=>x.path===this.scanPath);
+    if(!Splat.scene){ el.innerHTML=''; return; }
+    const n=Splat.scene.n, size=sc&&sc.size>0?sc.size:(this._scanBytes||0);
+    let h=`<b>${(n/1e6).toFixed(n>=1e6?2:3)}M splats</b> · ${this.fmtBytes(size)} scan`;
+    if(sc&&sc.dirSize>0) h+=` · ${this.fmtBytes(sc.dirSize)} with working files`;
+    el.innerHTML=h;
+    const cps=(sc&&sc.checkpoints)||[]; if(cps.length){ const tot=cps.reduce((a,x)=>a+x.size,0);
+      const b=document.createElement('button'); b.className='tbtn'; b.style.marginTop='6px'; b.textContent=`Move ${cps.length} training checkpoints to Trash (${this.fmtBytes(tot)})`;
+      b.onclick=async()=>{ const n2=await Native.call('trash',{paths:cps.map(x=>x.path)}); this.toast(`Moved ${n2} checkpoint files to the Trash`); this.statScans(); };
+      el.appendChild(document.createElement('br')); el.appendChild(b); } },
   scanMenu(sc,anchor){
     const m=$('#ctxMenu'); m.innerHTML=''; const r=anchor.getBoundingClientRect();
     const item=(label,fn)=>{ const b=document.createElement('button'); b.textContent=label; b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
@@ -574,6 +616,19 @@ const App = {
   },
   flash(){ const v=$('#viewer'); v.animate([{background:'#fff'},{background:'#121212'}],{duration:250}); },
 
+  setLens(id){ const c=Splat.cam, L=LENSES.find(l=>l.id===id); c.lens=id; if(!L){ this.lensNote(); return; }
+    c.format=L.format; c.fmm=L.fmm; c.swirl=L.swirl||0; c.catEye=L.catEye||0; c.anam=L.anam||0; c.tilt=L.tilt||0; c.tiltDir=L.tiltDir||0; c.post=Object.assign({},L.post);
+    const i=STOPS.findIndex(x=>Math.abs(x-L.f)<0.01); if(i>=0) c.stop=i; if(L.landscape) c.portrait=false;
+    UI.refresh(); this.lensNote(); this.scanKey=null; Engine.dirty=true; this.toast(L.name); },
+  lensNote(){ const el=$('#lensNote'); if(!el) return; const L=LENSES.find(l=>l.id===Splat.cam.lens); el.innerHTML=L?L.desc:'Pick a lens to load its focal length, widest aperture and rendering character — then adjust anything.'; },
+  // the scan view renders with the photo look from Develop plus the lens's own traits
+  scanParams(base){ const post=Splat.cam.post||{}; const o=Object.assign({},base,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
+    if('falloff' in post) o.falloff=post.falloff; if('glow' in post) o.glow=Math.max(o.glow||0,post.glow);
+    for(const k of ['fringe','distort','softEdges']) if(k in post) o[k]=post[k]; return o; },
+  levelScan(){ if(!Splat.scene){ this.toast('Load a scan first'); return; } if(Splat.scene.demo){ this.toast('The demo is already level'); return; }
+    const ok=Splat.autoLevel(); this.saveScanView(); this.scanKey=null; Engine.dirty=true; UI.refresh();
+    this.toast(ok?'Levelled to the ground plane — use Horizon to fine-tune':'No clear ground plane — try “Level to view”'); },
+  saveScanView(){ const sc=this.scans.find(x=>x.path===this.scanPath); if(!sc) return; const c=Splat.cam; sc.view={model:c.model,up:c.up,roll:c.roll||0,lens:c.lens,scale:c.scale}; this.saveSoon(); },
   // ================================================================ orbit video (scan module)
   async sortSync(){ while(Splat.sortBusy) await new Promise(r=>setTimeout(r,4));
     await new Promise(r=>{ const prev=Splat.onDirty; Splat.onDirty=()=>{ Splat.onDirty=prev; r(); }; Splat.requestSort(); }); },
@@ -607,7 +662,7 @@ const App = {
     const cv=document.createElement('canvas'); cv.width=w; cv.height=h; let x=null; try{ x=cv.getContext('2d',{colorSpace:'display-p3'}); }catch(e){} if(!x) x=cv.getContext('2d');
     const p3=!!(x.getContextAttributes&&x.getContextAttributes().colorSpace==='display-p3');
     const id=p3?x.createImageData(w,h,{colorSpace:'display-p3'}):x.createImageData(w,h), px=new Uint8Array(w*h*4);
-    const EP=Object.assign(cloneParams(Engine.p),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,border:'none'});
+    const EP=Object.assign(this.scanParams(cloneParams(Engine.p)),{border:'none'});
     const L={W:w,H:h,dpr:1,scale:1,fx:0,fy:0,fw:w,fh:h,ix:0,iy:0,iw:w,ih:h,win:[0,0,1,1],b:{l:0,r:0,t:0,b:0}};
     this._cancelVideo=false; const t0=performance.now();
     try{
@@ -677,7 +732,7 @@ const App = {
       tmp=GLU.target(w,h,'rgba16f'); Splat.render(tmp); src={tex:tmp.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1}; }
     else if(this.cur && this.cur.path && Native.available && this.cur.kind==='photo'){ const max=st.size==='full'?Math.min(16384,gl.getParameter(gl.MAX_TEXTURE_SIZE)):Math.ceil(+st.size/Math.max(Engine.p.crop.w,Engine.p.crop.h,.05));
       const s2=await this.decode(this.cur,max); s2.key=Engine.src.key; src=s2; tmp={t:s2.tex}; }
-    const EP = Engine.eff(this.module==='scan' ? Object.assign(cloneParams(Engine.p),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false}) : Engine.p);
+    const EP = Engine.eff(this.module==='scan' ? this.scanParams(cloneParams(Engine.p)) : Engine.p);
     const [dw,dh]=Engine.dims(EP,src); let w=Math.round(dw), h=Math.round(dh);
     if(st.size!=='full'){ const s=Math.min(1,(+st.size)/Math.max(w,h)); w=Math.round(w*s); h=Math.round(h*s); }
     const b=Borders.margins(EP.border,w,h); const fw=Math.round(w*(1+b.l+b.r)), fh=Math.round(h*(1+b.t+b.b));
@@ -789,7 +844,7 @@ const App = {
         if(!Splat.scene){ if(Engine.dirty){ Engine.dirty=false; const keep=Engine.src; Engine.src=null; Engine.render({}); Engine.src=keep; UI.drawHisto($('#histo'),null); $('#status').textContent=''; } }
         else if(Engine.dirty){ Engine.dirty=false; const [w,h]=this.scanLayoutSize(); Splat.maybeSort();
           const src=this.renderScanSource(w,h); Engine.src=src; Engine.view={mode:'fit'};
-          const p=Object.assign({},Engine.hoverParams||Engine.p,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
+          const p=this.scanParams(Engine.hoverParams||Engine.p);
           const L=Engine.layout(p); this._lastL=L;
           Engine.render({params:p,layout:L,borderTex:this.borderFor(L,p)}); this.scanThumb(); this.histo(); this.status(); }
       } else if(this.module!=='library' && Engine.dirty){
@@ -815,7 +870,7 @@ const App = {
   bindEvents(){
     document.querySelectorAll('#modules button').forEach(b=>b.onclick=()=>this.setModule(b.dataset.m));
     document.querySelectorAll('#left .panel>h3, #right>.panel>h3').forEach(h=>h.addEventListener('click',e=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON') return; h.parentElement.classList.toggle('open'); }));
-    $('#btnImport').onclick=()=>this.importDialog(); $('#emptyImport').onclick=()=>this.importDialog(); $('#seOpen').onclick=()=>this.openScan(); $('#seNew').onclick=()=>this.newScan(); $('#seDemo').onclick=()=>this.loadDemo();
+    $('#btnImport').onclick=()=>this.importDialog(); $('#emptyImport').onclick=()=>this.importDialog(); $('#seOpen').onclick=()=>this.openScan(); $('#seHow').onclick=()=>Tutorial.open(); $('#seNew').onclick=()=>this.newScan(); $('#seDemo').onclick=()=>this.loadDemo();
     $('#btnExport').onclick=()=>this.exportDialog();
     $('#presetAdd').onclick=e=>{ e.stopPropagation(); $('#pUserPresets').classList.add('open'); $('#presetNew').classList.toggle('on'); if($('#presetNew').classList.contains('on')){ const n=$('#presetName'); n.value=Engine.stock().name+' — '; n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };
     $('#presetSave').onclick=()=>{ this.savePreset($('#presetName').value,$('#presetWB').checked); $('#presetNew').classList.remove('on'); };
@@ -876,6 +931,7 @@ const App = {
     else if(k==='g'||k==='G'){ this.setModule('library'); }
     else if(k==='d'||k==='D'){ this.setModule('develop'); }
     else if(k==='t'||k==='T'){ this.setModule('studio'); }
+    else if((k==='l'||k==='L')&&this.module==='scan'){ this.levelScan(); }
     else if(k==='s'||k==='S'){ this.setModule('scan'); }
     else if(k===' '&&this.module==='scan'){ e.preventDefault(); this.exposeFrame(); }
     else if(k==='ArrowRight'||k==='ArrowLeft'){ const i=this.items.indexOf(this.cur)+(k==='ArrowRight'?1:-1); if(this.items[i]){ e.preventDefault(); this.select(this.items[i].id); } }

@@ -347,13 +347,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
             if let p = body["path"] as? String { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]) }
             resolve(id, true)
         case "info":
-            resolve(id, ["splatDir": splatDir.path, "appDir": appDir.path, "home": home.path, "native": 2,
+            resolve(id, ["splatDir": splatDir.path, "appDir": appDir.path, "home": home.path, "native": 3,
                          "icloud": home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs").path,
                          "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "1"])
         case "listDir":
             let p = body["path"] as? String ?? ""
             let items = (try? FileManager.default.contentsOfDirectory(atPath: p)) ?? []
             resolve(id, items.sorted())
+        case "stat":         // sizes of files (folders: total of their contents)
+            let fm = FileManager.default
+            var out: [[String: Any]] = []
+            for p in (body["paths"] as? [String] ?? []) {
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: p, isDirectory: &isDir) else { out.append(["path": p, "size": -1]); continue }
+                var size: Int64 = 0
+                if isDir.boolValue {
+                    if let en = fm.enumerator(at: URL(fileURLWithPath: p), includingPropertiesForKeys: [.fileSizeKey]) {
+                        for case let u as URL in en { size += Int64((try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+                    }
+                } else { size = Int64(((try? fm.attributesOfItem(atPath: p))?[.size] as? NSNumber)?.int64Value ?? 0) }
+                let m = ((try? fm.attributesOfItem(atPath: p))?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+                out.append(["path": p, "size": size, "dir": isDir.boolValue, "mtime": m])
+            }
+            resolve(id, out)
+        case "trash":        // move files to the Trash (recoverable)
+            var n = 0
+            for p in (body["paths"] as? [String] ?? []) { if (try? FileManager.default.trashItem(at: URL(fileURLWithPath: p), resultingItemURL: nil)) != nil { n += 1 } }
+            resolve(id, n)
         case "update":       // run Splat/update.sh (check | apply); reports its output
             let mode = body["mode"] as? String ?? "check"
             let proc = Process(); proc.executableURL = URL(fileURLWithPath: "/bin/bash")

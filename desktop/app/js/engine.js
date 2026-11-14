@@ -16,7 +16,7 @@ const DEFAULTS = {
   leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
   dustAmt:0, scratchAmt:0, hairAmt:0, dustSeed:7, dustKind:'scan',
   ttOn:false, ttPalette:'red-cyan', ttGhost:80, ttMono:85, ttDX:6, ttDY:-4, ttScale:100, ttBand:0, ttBandPos:45,
-  zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
+  softness:0, distort:0, zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
   gShH:220, gShS:0, gShL:0, gMidH:40, gMidS:0, gMidL:0, gHiH:45, gHiS:0, gHiL:0, gBlend:50, gBalance:0,
 };
@@ -25,9 +25,9 @@ const MAX_MASKS = 4;
 // sections that can be switched off without losing their settings (p.off = {grain:true, …})
 const SECTIONS = { film:['filmAmt','push'], wb:['temp','tint'], tone:['ev','contrast','highlights','shadows','whites','blacks'], presence:['vibrance','saturation'],
   curve:['curve'], hsl:['hslH','hslS','hslL'], grade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'], detail:['sharpen','nr','nrColor'],
-  grain:['grain'], halation:['halation','glow'], lens:['falloff'], frame:['border'], masks:['masks'],
+  grain:['grain'], halation:['halation','glow'], lens:['falloff','softness'], frame:['border'], masks:['masks'],
   silver:['silver','sFilterAmt','structure','sBurn'], dbl:['dblId'], leak:['leakAmt'], dust:['dustAmt','scratchAmt','hairAmt'],
-  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe'], twotone:['ttOn'] };
+  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'] };
 const TT_PALETTES = { 'red-cyan':['#ff1a24','#12e6e0'], 'magenta-green':['#ff2bd0','#2bff6a'], 'blue-orange':['#2a6bff','#ff8a1a'], 'pink-blue':['#ff5aa8','#3a8bff'], 'purple-yellow':['#9a3cff','#ffd21a'], 'red-blue':['#ff2020','#2a4dff'] };
 const TONERS = { none:null, selenium:['#36303a','#f1f0f0'], sepia:['#3d2614','#f5e7d0'], gold:['#1d2a3c','#eef2f6'], platinum:['#2c2420','#f3ece1'],
   cyanotype:['#0c2550','#e6f0fa'], split:['#1a2840','#f6e5c6'], copper:['#43201a','#f6e2d6'], tintype:['#2a2418','#cfc6a8'], ambrotype:['#1e1a14','#e2d6b8'] };
@@ -328,14 +328,14 @@ const Engine = {
       const t=R.prep; R.prep=R.prep2; R.prep2=t;
     }
     // lens effects: zoom / motion blur, soft edges, tilt-shift, colour fringing (in image units)
-    if(p.zoomBlur>0.5||p.motionBlur>0.5||p.softEdges>0.5||p.tiltShift>0.5||p.fringe>0.5){
+    if(p.zoomBlur>0.5||p.motionBlur>0.5||p.softEdges>0.5||p.tiltShift>0.5||p.fringe>0.5||Math.abs(p.distort||0)>0.5||(p.softness||0)>0.5){
       R.prep2=GLU.ensure(R.prep2,vw,vh,'rgba16f');
       gl.useProgram(this.P.fx.p); u=this.P.fx.u;
       gl.bindFramebuffer(gl.FRAMEBUFFER,R.prep2.f); gl.viewport(0,0,vw,vh);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,R.prep.t); gl.uniform1i(u.uTex,0);
       gl.uniform4f(u.uWin,u0,v0,u1,v1); gl.uniform1f(u.uAspect,ow/oh);
       gl.uniform1f(u.uZoom,p.zoomBlur/100*0.12); gl.uniform2f(u.uMotion,Math.cos(p.motionAngle*Math.PI/180)*p.motionBlur/100*0.06,-Math.sin(p.motionAngle*Math.PI/180)*p.motionBlur/100*0.06);
-      gl.uniform1f(u.uSoft,p.softEdges/100*0.025); gl.uniform3f(u.uTilt,p.tiltShift/100*0.025,p.tiltPos/100,p.tiltWidth/100); gl.uniform1f(u.uFringe,p.fringe/100*0.008);
+      gl.uniform1f(u.uSoft,p.softEdges/100*0.025); gl.uniform3f(u.uTilt,p.tiltShift/100*0.025,p.tiltPos/100,p.tiltWidth/100); gl.uniform1f(u.uFringe,p.fringe/100*0.008); gl.uniform1f(u.uDistort,(p.distort||0)/100); gl.uniform1f(u.uBlurAll,(p.softness||0)/100*0.0045);
       GLU.drawQuad();
       const t=R.prep; R.prep=R.prep2; R.prep2=t;
     }
@@ -557,19 +557,25 @@ void main(){
   o=vec4(chroma*exp2(lY),1.);
 }`;
 const FX_FS = `#version 300 es
-precision highp float; uniform sampler2D uTex; uniform vec4 uWin; uniform float uAspect,uZoom,uSoft,uFringe; uniform vec2 uMotion; uniform vec3 uTilt;
+precision highp float; uniform sampler2D uTex; uniform vec4 uWin; uniform float uAspect,uZoom,uSoft,uFringe,uDistort,uBlurAll; uniform vec2 uMotion; uniform vec3 uTilt;
 in vec2 vUv; out vec4 o;
 void main(){
   vec2 span=vec2(uWin.z-uWin.x, uWin.w-uWin.y);
   vec2 iuv=vec2(mix(uWin.x,uWin.z,vUv.x), mix(uWin.y,uWin.w,1.-vUv.y));            // image uv, v from top
   vec2 toP=vec2(1./span.x,-1./span.y);                                                // image-uv delta → prep-uv delta
+  vec2 base=vUv;
+  if(uDistort!=0.){ // barrel (−) / pincushion (+), scaled so the frame stays filled
+    vec2 q0=(iuv-.5)*vec2(uAspect,1.); float r2=dot(q0,q0)/dot(vec2(uAspect,1.)*.5,vec2(uAspect,1.)*.5);
+    float k=uDistort; vec2 q=iuv-.5;
+    vec2 d = k<0. ? q*(1.-k*r2)/(1.-k) + .5 : q*(1.-.5*k*r2)/(1.-.5*k) + .5;
+    base=vUv+(d-iuv)*toP; iuv=d; }
   vec2 q=(iuv-.5)*vec2(uAspect,1.); float r=length(q)/length(vec2(uAspect,1.)*.5);
-  float rad=uSoft*smoothstep(.35,1.,r) + uTilt.x*smoothstep(uTilt.z*.5,uTilt.z*.5+.2,abs(iuv.y-uTilt.y));
+  float rad=uBlurAll + uSoft*smoothstep(.35,1.,r) + uTilt.x*smoothstep(uTilt.z*.5,uTilt.z*.5+.2,abs(iuv.y-uTilt.y));
   vec3 acc=vec3(0.); float w=0.;
   for(int i=0;i<24;i++){
     float t=(float(i)+.5)/24.; float ang=float(i)*2.39996; vec2 disc=vec2(cos(ang),sin(ang))*sqrt(t)*rad*vec2(1./uAspect,1.);
     vec2 off=(iuv-.5)*uZoom*(t-.5)*2. + uMotion*(t-.5)*vec2(1./uAspect,1.) + disc;
-    vec2 p=vUv+off*toP;
+    vec2 p=base+off*toP;
     vec3 s;
     if(uFringe>0.){ vec2 f=(iuv-.5)*uFringe*toP; s=vec3(texture(uTex,p+f).r, texture(uTex,p).g, texture(uTex,p-f).b); }
     else s=texture(uTex,p).rgb;
