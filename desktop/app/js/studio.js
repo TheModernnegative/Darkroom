@@ -21,12 +21,17 @@ const STUDIO_RECIPES = [
   ['Toy camera', {softEdges:60,fringe:40,falloff:1.2,leakAmt:25,leakColor:'magenta',saturation:20,contrast:15}],
   ['Zoom burst', {zoomBlur:55}],
   ['Tilt-shift miniature', {tiltShift:70,tiltPos:58,tiltWidth:16,saturation:25,contrast:15}],
+  ['Analog · Expired roll', {fx:{leak:{pick:0,amt:55},dust:{pick:0,amt:60},texture:{pick:0,amt:25}},softEdges:20,fringe:15,falloff:0.6,saturation:-10}],
+  ['Analog · Burnt ending', {fx:{burn:{pick:0,amt:85},dust:{pick:1,amt:40}},contrast:10}],
+  ['Analog · Summer leak', {fx:{leak:{pick:1,amt:80},flare:{pick:0,amt:45}},saturation:10}],
+  ['Analog · Lomo', {fx:{leak:{pick:2,amt:50},frame:{pick:0,amt:100}},softEdges:45,fringe:30,falloff:1.3,saturation:25,contrast:20}],
+  ['Analog · Darkroom print', {silver:true,sFilterHue:60,sFilterAmt:40,structure:20,sTone:'selenium',sToneAmt:40,fx:{texture:{pick:1,amt:35},dust:{pick:2,amt:45,invert:true},frame:{pick:1,amt:100}}}],
   ['Double exposure · In-camera', {dblMode:'add',dblAmt:70}],
   ['Double exposure · Silhouette', {dblMode:'silhouette',dblAmt:100,dblMask:0}],
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'];
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'];
 
 const Studio = {
   host:null,
@@ -36,10 +41,15 @@ const Studio = {
   S(parent,key,label,o){ return UI.slider(parent,'st_'+key,label,Object.assign({def:DEFAULTS[key],get:()=>this.P()[key],set:this.set(key),commit:()=>this.host.commit()},o)); },
   sel(parent,key,label,opts){ return UI.select(parent,'st_'+key,label,()=>opts,()=>String(this.P()[key]),v=>{ const d=DEFAULTS[key]; this.P()[key]= typeof d==='number'?+v:v; this.host.changed(); this.host.commit(); }); },
   reset(keys){ keys.forEach(k=>this.P()[k]=cloneParams(DEFAULTS[k])); this.host.changed(); this.host.commit(); UI.refresh(); },
-  recipeParams(r){ const o=cloneParams(this.P()); Object.assign(o,cloneParams(r)); if(r.border==='wetplate'&&!o.edgeText) o.edgeText='none'; return o; },
+  // ---- asset layers
+  assets(cat){ return (Engine.assetList||[]).filter(a=>a.cat===cat); },
+  resolveFx(fx){ const out={}; for(const cat in fx||{}){ const L=Object.assign({},fx[cat]); if(L.pick!==undefined){ const list=this.assets(cat); if(!list.length) continue; L.id=list[L.pick%list.length].id; delete L.pick; } out[cat]=L; } return out; },
+  layer(cat){ const p=this.P(); if(!p.fx||p.fx===DEFAULTS.fx) p.fx={}; return p.fx[cat]||(p.fx[cat]={id:'',amt:0}); },
+  recipeParams(r){ const o=cloneParams(this.P()); r=cloneParams(r); if(r.fx){ r.fx=this.resolveFx(r.fx); if(r.border==='wetplate'&&r.fx.frame) delete r.border; } Object.assign(o,r);
+    if(r.border==='wetplate'){ const t=this.assets('frame').find(a=>/tintype|wetplate|wet-plate/i.test(a.id+a.name)); if(t){ delete o.border; o.border=this.P().border; o.fx=Object.assign({},o.fx,{frame:{id:t.id,amt:100}}); } } if(r.border==='wetplate'&&!o.edgeText) o.edgeText='none'; return o; },
   applyRecipe(r,name){ const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!r.dblId) Engine.p.dblId=keep;
     if(r.dblMode && !Engine.p.dblId) this.host.toast('Pick the second photo in Double Exposure'); this.host.changed(); this.host.commit(); UI.refresh(); this.host.toast('Applied '+name); },
-  resetAll(){ this.reset(STUDIO_KEYS); if(this.P().border==='wetplate') this.P().border='none'; Engine.setDouble(null); this.host.changed(); },
+  resetAll(){ this.dragTarget=null; this.reset(STUDIO_KEYS); this.P().fx={}; if(this.P().border==='wetplate') this.P().border='none'; Engine.setDouble(null); this.host.changed(); },
 
   build(root,only){
     root.innerHTML=''; const H=this.host, P=()=>this.P(); const want=id=>!only||only===id; let b;
@@ -90,19 +100,38 @@ const Studio = {
     }
     // ---------------------------------------------------------------- Light leaks
     if(want('sLeak')){
-    b=UI.panel(root,'sLeak','Light Leaks',false,()=>this.reset(['leakAmt','leakColor','leakPos','leakSize','leakSeed']));
+    b=UI.panel(root,'sLeak','Light Leaks',false,()=>{ this.reset(['leakAmt','leakColor','leakPos','leakSize','leakSeed']); this.clearLayer('leak'); });
+    this.assetLayer(b,'leak','Scanned leaks');
+    UI.note(b,'Or paint a simple procedural leak:');
     this.S(b,'leakAmt','Amount',{min:0,max:150,step:1});
     this.sel(b,'leakColor','Color',[['warm','Warm orange'],['red','Red'],['yellow','Golden'],['magenta','Magenta'],['blue','Blue']]);
     this.sel(b,'leakPos','From',[['0','Left edge'],['1','Right edge'],['2','Top'],['3','Bottom'],['4','Top-left'],['5','Top-right'],['6','Bottom-left'],['7','Bottom-right']]);
     this.S(b,'leakSize','Size',{min:5,max:120,step:1});
     { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r); UI.button(r,'Shuffle shape',()=>{ P().leakSeed=Math.round(Math.random()*999); H.changed(); H.commit(); }); }
     }
+    // ---------------------------------------------------------------- Burns & flares
+    if(want('sBurn')){
+    b=UI.panel(root,'sBurn','Film Burns & Flares',false,()=>{ this.clearLayer('burn'); this.clearLayer('flare'); });
+    this.assetLayer(b,'burn','Film burns'); this.assetLayer(b,'flare','Flares & glow');
+    }
     // ---------------------------------------------------------------- Dust & scratches
     if(want('sDust')){
-    b=UI.panel(root,'sDust','Dust & Scratches',false,()=>this.reset(['dustAmt','scratchAmt','hairAmt','dustSeed','dustKind']));
+    b=UI.panel(root,'sDust','Dust & Scratches',false,()=>{ this.reset(['dustAmt','scratchAmt','hairAmt','dustSeed','dustKind']); this.clearLayer('dust'); });
+    this.assetLayer(b,'dust','Scanned dust & scratches');
+    UI.note(b,'Or generate fresh specks:');
     this.S(b,'dustAmt','Dust',{min:0,max:100,step:1}); this.S(b,'scratchAmt','Scratches',{min:0,max:100,step:1}); this.S(b,'hairAmt','Hair & fibres',{min:0,max:100,step:1});
     this.sel(b,'dustKind','Looks like',[['scan','Scanned negative (white specks)'],['print','Darkroom print (dark specks)']]);
     { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r); UI.button(r,'Shuffle',()=>{ P().dustSeed=Math.round(Math.random()*999); H.changed(); H.commit(); }); }
+    }
+    // ---------------------------------------------------------------- Texture + frames
+    if(want('sTexture')){
+    b=UI.panel(root,'sTexture','Paper & Texture',false,()=>this.clearLayer('texture'));
+    this.assetLayer(b,'texture','Textures');
+    }
+    if(want('sFrameFx')){
+    b=UI.panel(root,'sFrameFx','Frames & Edges',false,()=>this.clearLayer('frame'));
+    this.assetLayer(b,'frame','Frames');
+    UI.note(b,'Scanned negative carriers, plate edges and print borders, laid over the edges of the photo. Instant-film frames are under Develop → Frame.');
     }
     // ---------------------------------------------------------------- Lens
     if(want('sLens')){
@@ -116,6 +145,75 @@ const Studio = {
     UI.note(b,'Judge blur and fringing at 1:1 — the preview is computed at screen size.');
     }
   },
+  // what a drag on the photo moves: the double exposure, or a leak / burn / flare / dust layer
+  placeTarget(){ const p=this.P(), off=p.off||{}; let t=this.dragTarget;
+    if(t&&t!=='dbl'){ const Ly=(p.fx||{})[t]; if(!Ly||!Ly.id||!(Ly.amt>0)||off['fx_'+t]||!['leak','burn','flare','dust'].includes(t)) t=null; }
+    if(t==='dbl'&&!(p.dblId&&Engine.dblSrc&&!off.dbl)) t=null;
+    if(!t){ if(p.dblId&&Engine.dblSrc&&!off.dbl) t='dbl'; else return null; }
+    if(t==='dbl') return {kind:t,get:()=>({x:p.dblX||0,y:p.dblY||0,scale:p.dblScale||1,rot:p.dblRot||0}),set:o=>{ p.dblX=o.x; p.dblY=o.y; p.dblScale=o.scale; p.dblRot=o.rot; },B:Engine.dblSrc.w/Engine.dblSrc.h};
+    const Ly=p.fx[t], tx=Engine.assetTex(Ly.id); if(!tx) return null;
+    return {kind:t,get:()=>({x:Ly.x||0,y:Ly.y||0,scale:Ly.scale||1,rot:Ly.rot||0}),set:o=>{ Object.assign(Ly,{x:o.x,y:o.y,scale:o.scale,rot:o.rot}); },B:tx.w/tx.h}; },
+  clearLayer(cat){ const p=this.P(); if(p.fx&&p.fx[cat]){ p.fx=Object.assign({},p.fx); delete p.fx[cat]; } if(this.dragTarget===cat) this.dragTarget=null; this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); },
+  // a thumbnail grid of library assets + the controls for the chosen one
+  assetLayer(b,cat,label){ const H=this.host, P=()=>this.P(), L=()=>this.layer(cat), movable=['leak','burn','flare','dust'].includes(cat);
+    const wrap=document.createElement('div'); wrap.className='alayer'; b.appendChild(wrap);
+    const hd=document.createElement('div'); hd.className='ahead'; hd.textContent=label; wrap.appendChild(hd);
+    const grid=document.createElement('div'); grid.className='agrid'; wrap.appendChild(grid);
+    const ctl=document.createElement('div'); ctl.className='actl'; wrap.appendChild(ctl);
+    const set=(k,v)=>{ L()[k]=v; H.changed(); };
+    const sl=(k,lab,o,def)=>UI.slider(ctl,'fx_'+cat+'_'+k,lab,Object.assign({def,get:()=>{ const x=(P().fx||{})[cat]; return x&&x[k]!==undefined?x[k]:def; },set:v=>set(k,v),commit:()=>H.commit()},o));
+    sl('amt','Amount',{min:0,max:100,step:1},0);
+    if(cat!=='frame'){ sl('scale','Scale',{min:0.3,max:4,step:0.01,fmt:x=>Math.round(x*100)+'%'},1); }
+    sl('rot','Rotate',{min:-180,max:180,step:0.5,fmt:x=>x.toFixed(0)+'°'},0);
+    if(['leak','burn','flare'].includes(cat)) sl('hue','Color shift',{min:-180,max:180,step:1,fmt:x=>Math.round(x)+'°',track:'linear-gradient(90deg,#3cf,#93f,#f36,#f93,#fc3,#3f9,#3cf)'},0);
+    const row=document.createElement('div'); row.className='btnrow'; ctl.appendChild(row);
+    UI.button(row,'Flip',()=>{ L().flip=!L().flip; H.changed(); H.commit(); });
+    if(cat==='dust'||cat==='frame') UI.button(row,'Invert',()=>{ L().invert=!L().invert; H.changed(); H.commit(); });
+    if(movable) UI.button(row,'Place with mouse',()=>{ this.dragTarget=cat; H.changed(); H.toast&&H.toast('Drag on the photo to move it · scroll to scale · ⇧-drag to rotate'); });
+    const render=()=>{ grid.innerHTML=''; const list=this.assets(cat), cur=((P().fx||{})[cat]||{}).id||'';
+      const none=document.createElement('div'); none.className='atile none'+(cur?'':' on'); none.innerHTML='<span>None</span>'; none.onclick=()=>this.clearLayer(cat); grid.appendChild(none);
+      if(!list.length){ const n=document.createElement('div'); n.className='note'; n.style.gridColumn='2/-1'; n.textContent=Engine.assetList?'No assets installed yet.':'Loading the asset library…'; grid.appendChild(n); }
+      list.forEach(a=>{ const t=document.createElement('div'); t.className='atile'+(a.id===cur?' on':''); t.title=a.name;
+        t.innerHTML=`<img loading="lazy" src="data/assets/${a.thumb}"><span></span>`; t.querySelector('span').textContent=a.name;
+        t.onclick=()=>{ const Ly=L(); if(Ly.id===a.id){ this.clearLayer(cat); return; } Object.assign(Ly,{id:a.id,amt:Ly.amt>0?Ly.amt:(cat==='frame'?100:cat==='texture'?40:70)}); if(movable) this.dragTarget=cat; H.changed(); H.commit(); UI.refresh(); this.refreshAssets(); };
+        if(H.hover) { t.onmouseenter=()=>{ const o=cloneParams(P()); o.fx=Object.assign({},o.fx,{[cat]:Object.assign({},(o.fx||{})[cat]||{},{id:a.id,amt:((o.fx||{})[cat]||{}).amt||(cat==='frame'?100:70)})}); H.hover(o); }; t.onmouseleave=()=>H.hover(null); }
+        grid.appendChild(t); });
+      ctl.style.display=cur?'':'none'; };
+    render(); (this._agrids=this._agrids||[]).push([grid,render]); },
+  // Develop → Frame → Wet plate uses the best tintype plate from the library
+  loadPlate(){ const a=(Engine.assetList||[]).find(a=>a.id==='frame_tintype_1')||(Engine.assetList||[]).find(a=>a.cat==='frame'&&/tintype|plate/i.test(a.id)); if(!a||typeof Borders==='undefined') return;
+    const im=new Image(); im.onload=()=>{ Borders.plateImg=im; Borders.cache.key=''; Engine.dirty=true; this.host.changed&&this.host.changed(); }; im.src='data/assets/'+a.file; },
+  refreshAssets(){ this._agrids=(this._agrids||[]).filter(([g])=>g.isConnected||!this._agridsSeen); this._agridsSeen=true; this._agrids.forEach(([g,f])=>f()); },
+  // ---- 🎲 random looks: a coherent theme, then random choices inside it
+  randomLook(){ const p=this.P(); if(p.dblId) this._lastDbl=p.dblId; const keep=p.dblId||this._lastDbl, R=(a,b)=>a+Math.random()*(b-a), RI=(a,b)=>Math.round(R(a,b)), pick=a=>a[Math.floor(Math.random()*a.length)], chance=x=>Math.random()<x;
+    STUDIO_KEYS.forEach(k=>p[k]=cloneParams(DEFAULTS[k])); p.fx={}; p.off=Object.assign({},p.off||{}); Object.keys(p.off).forEach(k=>{ if(/^(silver|twotone|dbl|leak|dust|lensfx|fx_)/.test(k)) delete p.off[k]; });
+    const lay=(cat,amt,o)=>{ const l=this.assets(cat); if(!l.length) return false; p.fx[cat]=Object.assign({id:pick(l).id,amt,rot:chance(.5)?0:RI(-25,25),flip:chance(.5),scale:R(0.9,1.6),x:R(-.2,.2),y:R(-.2,.2),hue:chance(.3)?RI(-60,60):0},o||{}); return true; };
+    const themes=['analog','analog','silver','silver','toy','twotone','dreamy','burnt'].concat(keep?['double','double']:[]);
+    const th=pick(themes);
+    if(th==='analog'||th==='burnt'){ if(!lay('leak',RI(40,90))) { p.leakAmt=RI(40,100); p.leakColor=pick(['warm','red','yellow','magenta']); p.leakPos=RI(0,7); p.leakSize=RI(25,90); }
+      if(th==='burnt'||chance(.4)) lay('burn',RI(60,100)); if(chance(.7)) lay('dust',RI(30,70),{x:0,y:0,rot:0}); else { p.dustAmt=RI(20,60); p.scratchAmt=RI(0,40); }
+      if(chance(.4)) lay('texture',RI(15,40),{x:0,y:0}); if(chance(.35)) lay('frame',100,{x:0,y:0,rot:0,scale:1,hue:0});
+      p.softEdges=RI(0,40); p.fringe=RI(0,30); }
+    if(th==='silver'){ p.silver=true; const f=pick(FILTERS.slice(1)); p.sFilterHue=f[2]; p.sFilterAmt=RI(30,95); p.structure=RI(-20,70); p.sBurn=RI(10,60); p.sBurnSize=RI(25,60);
+      p.sTone=pick(['none','selenium','sepia','gold','platinum','copper','split','cyanotype','tintype']); p.sToneAmt=RI(40,100);
+      if(chance(.6)) lay('dust',RI(25,60),{x:0,y:0,rot:0,invert:chance(.5)}); if(chance(.4)) lay('texture',RI(20,45),{x:0,y:0}); if(chance(.45)) lay('frame',100,{x:0,y:0,rot:0,scale:1,hue:0}); if(chance(.2)) lay('burn',RI(40,80)); }
+    if(th==='toy'){ p.softEdges=RI(40,80); p.fringe=RI(25,60); p.distort=RI(-40,-5); lay('leak',RI(30,70)); if(chance(.5)) lay('frame',100,{x:0,y:0,rot:0,scale:1,hue:0}); if(chance(.4)) p.zoomBlur=RI(10,35); }
+    if(th==='twotone'){ p.ttOn=true; p.ttPalette=pick(['red-cyan','magenta-green','blue-orange','pink-blue','purple-yellow','red-blue']); p.ttGhost=RI(60,130); p.ttMono=RI(55,95); p.ttDX=R(-15,15); p.ttDY=R(-15,15); p.ttScale=RI(95,115); p.ttBand=chance(.35)?RI(20,60):0; p.ttBandPos=RI(20,80); if(chance(.4)) p.motionBlur=RI(10,40), p.motionAngle=RI(-60,60); }
+    if(th==='dreamy'){ lay('flare',RI(50,90)); lay('leak',RI(30,60)); p.softEdges=RI(30,70); if(chance(.5)) p.zoomBlur=RI(5,25); p.fringe=RI(10,40); }
+    if(th==='double'){ p.dblId=keep; p.dblMode=pick(['add','screen','lighten','silhouette']); p.dblAmt=RI(50,100); p.dblScale=R(0.9,1.8); p.dblX=R(-.25,.25); p.dblY=R(-.2,.2); p.dblRot=chance(.6)?0:RI(-30,30); p.dblFlip=chance(.4); if(chance(.5)) p.silver=true, p.sTone=pick(['none','selenium','sepia']); if(chance(.5)) lay('leak',RI(30,60)); this.dragTarget='dbl'; }
+    else { p.dblId=''; Engine.setDouble(null); }
+    if(th==='double'&&this.host.loadDouble) this.host.loadDouble().then(()=>{ Engine.dirty=true; });
+    this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); this.host.toast&&this.host.toast('🎲 '+{analog:'Analog accident',silver:'Silver print',toy:'Toy camera',twotone:'Two-tone flash',dreamy:'Dreamy flare',burnt:'Burnt roll',double:'Double exposure'}[th]+' — press again for another (⌘Z to undo)'); },
+  // recipes as a Nik-style grid of live previews of the current photo
+  buildRecipeGrid(el,onHover){ el.innerHTML=''; el.classList.add('rgrid'); this._rtiles=[];
+    STUDIO_RECIPES.forEach(([name,r])=>{ const d=document.createElement('div'); d.className='rtile'; d.innerHTML='<div class="rim"></div><span></span>'; d.querySelector('span').textContent=name.replace(' · ',' — ');
+      d.onclick=()=>this.applyRecipe(r,name); if(onHover){ d.onmouseenter=()=>onHover(this.recipeParams(r)); d.onmouseleave=()=>onHover(null); } el.appendChild(d); this._rtiles.push([d,r]); }); },
+  // render the previews a few at a time so the UI stays responsive
+  refreshRecipeThumbs(key){ if(!this._rtiles||!this.host.renderThumb||!Engine.src) return; if(key&&key===this._rkey) return; this._rkey=key; const job=this._rjob=(this._rjob||0)+1; let i=0;
+    const step=()=>{ if(job!==this._rjob) return; const t0=performance.now();
+      while(i<this._rtiles.length&&performance.now()-t0<24){ const [d,r]=this._rtiles[i++]; const u=this.host.renderThumb(this.recipeParams(r),220); if(u) d.querySelector('.rim').style.backgroundImage=`url(${u})`; }
+      if(i<this._rtiles.length) setTimeout(step,16); };
+    setTimeout(step,60); },
   buildRecipes(el,onHover){
     el.innerHTML='';
     STUDIO_RECIPES.forEach(([name,r])=>{ const d=document.createElement('div'); d.className='preset recipe'; d.textContent=name;

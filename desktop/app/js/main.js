@@ -11,7 +11,7 @@ const App = {
     this.editMax=Math.min(6144, Engine.gl.getParameter(Engine.gl.MAX_TEXTURE_SIZE));
     await Engine.loadManifest();
     $('#credits').innerHTML = 'Colour film models: <a href="https://github.com/andreavolpato/spektrafilm">spektrafilm</a> by Andrea Volpato — profiles &amp; LUTs CC BY-SA 4.0. Black-and-white film and paper models, grain and halation: Splat Darkroom.';
-    this.buildDevelopPanels(); this.addToggles(); Studio.init(this); Studio.build($('#fxPanels')); Studio.buildRecipes($('#recipeList'),p=>this.hover(p)); this.addStudioToggles(); this.buildScanPanels(); this.buildPresets();
+    this.buildDevelopPanels(); this.addToggles(); Studio.init(this); Studio.build($('#fxPanels')); Studio.buildRecipeGrid($('#recipeList'),p=>this.hover(p)); { const r0=UI.refresh; UI.refresh=function(){ r0.apply(UI,arguments); Studio.refreshAssets(); }; } Engine.loadAssets().then(()=>{ Studio.refreshAssets(); Studio.loadPlate(); Studio._rkey=null; Engine.dirty=true; }); this.addStudioToggles(); this.buildScanPanels(); this.buildPresets();
     this.bindEvents();
     await Engine.ensureLuts(Engine.p);
     await this.restore();
@@ -293,8 +293,8 @@ const App = {
 
   // ================================================================ edits / history
   // on/off switch in each panel header: hides that section's effect without losing its settings
-  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak'],sDust:['dust'],sLens:['lensfx']},
-  addStudioToggles(){ Object.assign(this.PANEL_SECTIONS,this.STUDIO_SECTIONS); this.addToggles(); $('#studioReset').onclick=e=>{ e.stopPropagation(); Studio.resetAll(); this.toast('Studio effects cleared'); }; },
+  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sLens:['lensfx']},
+  addStudioToggles(){ Object.assign(this.PANEL_SECTIONS,this.STUDIO_SECTIONS); this.addToggles(); $('#studioRandom').onclick=e=>{ e.stopPropagation(); Studio.randomLook(); }; $('#studioReset').onclick=e=>{ e.stopPropagation(); Studio.resetAll(); this.toast('Studio effects cleared'); }; },
   PANEL_SECTIONS:{pFilm:['film'],pBasic:['wb','tone','presence'],pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pDetail:['detail'],pGrain:['grain'],pHal:['halation'],pLens:['lens'],pFrame:['frame'],pMasks:['masks']},
   addToggles(){
     for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el||el.querySelector('.ptog')) continue; const secs=this.PANEL_SECTIONS[id];
@@ -406,7 +406,49 @@ const App = {
       if(it.sel&&it!==this.cur) t.className+=' sel';
       t.innerHTML=(it.thumb?`<img src="${it.thumb}">`:'')+`<span class="badge">${(Engine.stock(it.settings.stock).name||'').replace('Superia ','')}</span><span class="marks">${this.badge(it)}</span>`;
       t.onclick=e=>this.stripClick(it,e);
+      t.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); };
+      const mb=document.createElement('button'); mb.className='tmore'; mb.textContent='⋯'; mb.title='Duplicate · Reset · Remove';
+      mb.onclick=e=>{ e.stopPropagation(); const r=mb.getBoundingClientRect(); this.photoMenu(it,r.left,r.top); }; t.appendChild(mb);
       el.appendChild(t); });
+  },
+  // ---- reset / duplicate (virtual copies share the original file)
+  isEdited(set){ const d=withDefaults({}); return Object.keys(d).some(k=>k!=='off'&&JSON.stringify(set[k])!==JSON.stringify(d[k])); },
+  async resetPhoto(keepVersion){ const it=this.cur; if(!it) return;
+    if(!this.isEdited(Engine.p)){ this.toast('Already the original'); return; }
+    if(keepVersion){ this.saveVersion(); }
+    if(this.compare) this.setCompare(null);
+    await this.applySettings(withDefaults({})); Engine.p.dblId=''; Engine.setDouble&&Engine.setDouble(null); this.commit(); this.renderVersions();
+    this.toast(keepVersion?'Saved your edit as a version and reset to the original (⌘Z to undo)':'Reset to the original (⌘Z to undo)'); },
+  async duplicate(it,asOriginal){ it=it||this.cur; if(!it) return;
+    const base=it.name.replace(/ \((copy|original)( \d+)?\)$/,'');
+    const n=this.items.filter(x=>x.name.startsWith(base+' (')).length+1, tag=asOriginal?'original':'copy';
+    const set=asOriginal?withDefaults({}):cloneParams(it===this.cur?Engine.p:it.settings);
+    const d=this.newItem({name:`${base} (${tag}${n>1?' '+n:''})`,path:it.path,file:it.file,kind:it.kind==='scanframe'?'photo':it.kind,settings:set,thumb:asOriginal?null:it.thumb});
+    if(it.kind==='scanframe'&&it.src){ d.kind='scanframe'; d.src=it.src; }
+    this.items.splice(this.items.indexOf(d),1); this.items.splice(this.items.indexOf(it)+1,0,d);
+    this.renderStrip(); this.renderGrid&&this.renderGrid(); this.saveSoon(); await this.select(d.id);
+    this.toast(asOriginal?'Duplicated as the original — your edit is still on the first copy':'Duplicated with this edit'); },
+  photoMenuReset(x0,y0){ const m=$('#ctxMenu'); m.innerHTML='';
+    const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
+    item('Reset to original',()=>this.resetPhoto(false),'⇧⌘R'); item('Save as version, then reset',()=>this.resetPhoto(true));
+    m.appendChild(document.createElement('hr'));
+    item('Duplicate with this edit',()=>this.duplicate(this.cur,false),'⌘D'); item('Duplicate as original',()=>this.duplicate(this.cur,true),'⇧⌘D');
+    m.style.left=Math.min(innerWidth-230,x0)+'px'; m.classList.add('on'); m.style.top=Math.max(8,y0-m.offsetHeight-4)+'px';
+    setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
+  photoMenu(it,x0,y0){
+    const m=$('#ctxMenu'); m.innerHTML='';
+    const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
+    const sep=()=>{ const h=document.createElement('hr'); m.appendChild(h); };
+    const open=async()=>{ if(it!==this.cur) await this.select(it.id); };
+    item('Duplicate',()=>this.duplicate(it,false),'⌘D');
+    item('Duplicate as original',()=>this.duplicate(it,true),'⇧⌘D');
+    sep();
+    item('Save as version, then reset',async()=>{ await open(); this.resetPhoto(true); });
+    item('Reset to original',async()=>{ await open(); this.resetPhoto(false); },'⇧⌘R');
+    sep();
+    item('Remove from library',()=>this.remove(it.id));
+    m.style.left=Math.min(innerWidth-230,x0)+'px'; m.classList.add('on'); m.style.top=Math.max(8,y0-m.offsetHeight-4)+'px';
+    setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0);
   },
   // multi-select (⌘-click toggles, ⇧-click extends) for Sync and batch export
   stripClick(it,e){
@@ -437,7 +479,7 @@ const App = {
     const g=$('#grid'); if(!g.classList.contains('on')) return; g.innerHTML='';
     this.visible().forEach(it=>{ const c=document.createElement('div'); c.className='cell'+(it===this.cur?' on':'')+(it.flag==='reject'?' rej':'');
       c.innerHTML=(it.thumb?`<img src="${it.thumb}">`:'')+`<div class="cap">${it.name} · ${Engine.stock(it.settings.stock).name}</div><span class="marks">${this.badge(it)}</span>`;
-      c.className+=(it.sel&&it!==this.cur?' sel':''); c.onclick=e=>{ if(e.metaKey||e.ctrlKey||e.shiftKey) this.stripClick(it,e); else { this.items.forEach(x=>x.sel=false); this.select(it.id); } }; c.ondblclick=()=>{ this.setModule('develop'); this.select(it.id); };
+      c.className+=(it.sel&&it!==this.cur?' sel':''); c.onclick=e=>{ if(e.metaKey||e.ctrlKey||e.shiftKey) this.stripClick(it,e); else { this.items.forEach(x=>x.sel=false); this.select(it.id); } }; c.ondblclick=()=>{ this.setModule('develop'); this.select(it.id); }; c.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); };
       g.appendChild(c); });
   },
   thumbSoon(ms=500){ clearTimeout(this._tt); this._tt=setTimeout(()=>this.makeThumb(),ms); },
@@ -815,7 +857,7 @@ const App = {
   },
 
   // ================================================================ module / view
-  setModule(m){
+  setModule(m){ $('#placeBox')&&$('#placeBox').classList.remove('on');
     if(Engine.cropMode && m!=='develop') Tools.setCropMode(false);
     if(m==='studio') this.renderDoubleChooser&&this.renderDoubleChooser();
     if(m!=='develop' && this.compare) this.setCompare(null);
@@ -854,7 +896,8 @@ const App = {
         const L=Engine.layout(); this._lastL=L;
         if(this.compare && Engine.src && !Engine.cropMode){ const Ls=Engine.renderSplit(this.compare.settings,p,(L2,p2)=>this.borderFor(L2,p2)); document.body.classList.toggle('splitV',!!Engine.splitVertical); this._lastL=Object.assign({},Ls[1],{W:L.W,H:L.H}); }
         else Engine.render({params:p,borderTex:this.borderFor(L,p)});
-        Tools.overlay(); this.histo(); this.status(); this.navPreview(p);
+        Tools.overlay(); this.placeBox(); this.histo(); this.status(); this.navPreview(p);
+        if(this.module==='studio'&&this.cur){ clearTimeout(this._rt); this._rt=setTimeout(()=>{ const q=cloneParams(Engine.p); STUDIO_KEYS.forEach(k=>delete q[k]); Studio.refreshRecipeThumbs(this.cur.id+JSON.stringify(q)+Object.values(Engine.assetTexs).filter(t=>t.ready).length); },500); }
       }
     }catch(e){ console.error(e); }
     requestAnimationFrame(()=>this.loop());
@@ -880,6 +923,7 @@ const App = {
     $('#tbCrop').onclick=()=>{ if(this.module!=='develop') this.setModule('develop'); Tools.setCropMode(!Engine.cropMode); };
     $('#tbSync').onclick=()=>this.syncDialog();
     $('#libFilter').onchange=e=>{ this.filter=e.target.value; this.renderStrip(); this.renderGrid(); };
+    $('#tbReset').onclick=e=>{ const r=e.target.getBoundingClientRect(); if(this.cur) this.photoMenuReset(r.left,r.top); };
     $('#tbCompare').onclick=()=>{ if(this.module!=='develop') this.setModule('develop'); this.toggleCompare(); };
     $('#verAdd').onclick=e=>{ e.stopPropagation(); this.saveVersion(); };
     $('#presetExport').onclick=e=>{ e.stopPropagation(); this.exportPresets(); };
@@ -913,6 +957,8 @@ const App = {
     if(meta&&e.shiftKey&&k.toLowerCase()==='c'){ e.preventDefault(); const cp=cloneParams(Engine.p); PER_PHOTO_KEYS.forEach(k=>delete cp[k]); this.clipboard=JSON.stringify(Engine.p); this._clipLite=JSON.stringify(cp); this.toast('Settings copied'); return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='v'){ e.preventDefault(); if(this.clipboard){ this.applySettings(Object.assign(cloneParams(Engine.p),JSON.parse(this._clipLite||this.clipboard))); this.commit(); this.toast('Settings pasted'); } return; }
     if(meta&&k.toLowerCase()==='a'&&this.module!=='scan'){ e.preventDefault(); this.items.forEach(x=>x.sel=true); this.renderStrip(); this.renderGrid(); this.updateSync(); this.toast(this.items.length+' photos selected'); return; }
+    if(meta&&k.toLowerCase()==='d'&&this.cur&&this.module!=='scan'){ e.preventDefault(); this.duplicate(this.cur,e.shiftKey); return; }
+    if(meta&&e.shiftKey&&k.toLowerCase()==='r'&&this.cur){ e.preventDefault(); this.resetPhoto(false); return; }
     if(meta&&k==="'"){ e.preventDefault(); this.saveVersion(); return; }
     if(meta&&k.toLowerCase()==='e'){ e.preventDefault(); this.exportDialog(); return; }
     if(meta&&k.toLowerCase()==='o'){ e.preventDefault(); this.importDialog(); return; }
@@ -938,8 +984,39 @@ const App = {
     else if(k==='ArrowRight'||k==='ArrowLeft'){ const i=this.items.indexOf(this.cur)+(k==='ArrowRight'?1:-1); if(this.items[i]){ e.preventDefault(); this.select(this.items[i].id); } }
     else if((k==='Backspace'||k==='Delete')&&this.cur&&this.module!=='scan'){ this.remove(this.cur.id); }
   },
+  // ---- Studio direct manipulation: the double exposure (or a light leak / burn / flare layer) follows the mouse
+  placeTarget(){ if(this.module!=='studio'||!this.cur||this.compare||Engine.cropMode) return null; return Studio.placeTarget(); },
+  placeBox(){ const el=$('#placeBox'); const T=this.placeTarget(), L=this._lastL;
+    if(!T||!L||Engine.view.mode!=='fit'){ el.classList.remove('on'); return; }
+    const o=T.get(), A=L.iw/L.ih, B=T.B, ovW=B>=A?B:A, ovH=B>=A?1:A/B, dpr=L.dpr, r=$('#view').getBoundingClientRect();
+    const cl=$('#placeClip'); Object.assign(cl.style,{left:r.left+L.ix/dpr+'px',top:r.top+(L.H-L.iy-L.ih)/dpr+'px',width:L.iw/dpr+'px',height:L.ih/dpr+'px'});
+    const cx=(.5+o.x)*L.iw/dpr, cy=(.5+o.y)*L.ih/dpr;
+    Object.assign(el.style,{left:cx+'px',top:cy+'px',width:ovW*o.scale*L.ih/dpr+'px',height:ovH*o.scale*L.ih/dpr+'px',transform:`translate(-50%,-50%) rotate(${o.rot}deg)`});
+    el.dataset.label={dbl:'Second exposure',leak:'Light leak',burn:'Film burn',flare:'Flare',dust:'Dust'}[T.kind]; el.classList.add('on'); },
+  bindPlace(v){ let drag=null; const T=()=>this.placeTarget();
+    const toImg=(L)=>({sx:L.dpr/L.iw, sy:L.dpr/L.ih});
+    v.addEventListener('pointerdown',e=>{ const t=T(); if(!t||Engine.view.mode!=='fit'||e.button!==0) return; const L=this._lastL; if(!L) return;
+      const o=t.get(), r=v.getBoundingClientRect(), b=$('#placeBox').getBoundingClientRect(), c={x:b.left+b.width/2,y:b.top+b.height/2};
+      drag={t,o0:o,x0:e.clientX,y0:e.clientY,c,a0:Math.atan2(e.clientY-c.y,e.clientX-c.x),d0:Math.hypot(e.clientX-c.x,e.clientY-c.y),mode:e.shiftKey?'rot':e.altKey?'scale':'move'};
+      v.setPointerCapture(e.pointerId); e.stopImmediatePropagation(); v.style.cursor=drag.mode==='move'?'move':'crosshair'; },true);
+    v.addEventListener('pointermove',e=>{ if(!drag) return; e.stopImmediatePropagation(); const L=this._lastL, k=toImg(L), o=Object.assign({},drag.o0);
+      if(drag.mode==='move'){ o.x=drag.o0.x+(e.clientX-drag.x0)*k.sx; o.y=drag.o0.y+(e.clientY-drag.y0)*k.sy; }
+      else if(drag.mode==='rot'){ let a=drag.o0.rot+(Math.atan2(e.clientY-drag.c.y,e.clientX-drag.c.x)-drag.a0)*180/Math.PI; if(e.metaKey) a=Math.round(a/15)*15; o.rot=((a+540)%360)-180; }
+      else { o.scale=Math.max(0.2,Math.min(5,drag.o0.scale*Math.hypot(e.clientX-drag.c.x,e.clientY-drag.c.y)/Math.max(8,drag.d0))); }
+      drag.t.set(o); this.changed(); this.placeBox(); UI.refresh(); },true);
+    const end=e=>{ if(!drag) return; e.stopImmediatePropagation(); drag=null; v.style.cursor=''; this.commit(); };
+    v.addEventListener('pointerup',end,true); v.addEventListener('pointercancel',end,true);
+    v.addEventListener('dblclick',e=>{ const t=T(); if(!t) return; t.set({x:0,y:0,scale:1,rot:0}); this.changed(); this.commit(); this.placeBox(); UI.refresh(); this.toast('Placement reset'); });
+    v.addEventListener('wheel',e=>{ const t=T(); if(!t||Engine.view.mode!=='fit') return; e.preventDefault(); const o=t.get();
+      if(e.shiftKey||e.altKey){ o.rot=((o.rot-(e.deltaY||e.deltaX)*0.15+540)%360)-180; } else o.scale=Math.max(0.2,Math.min(5,o.scale*Math.exp(-e.deltaY*0.0015)));
+      t.set(o); this.changed(); this.placeBox(); UI.refresh(); clearTimeout(this._pw); this._pw=setTimeout(()=>this.commit(),400); },{passive:false});
+    // trackpad pinch-rotate (Safari / WKWebView gesture events)
+    let g0=null; v.addEventListener('gesturestart',e=>{ const t=T(); if(!t) return; e.preventDefault(); g0={t,o:t.get()}; });
+    v.addEventListener('gesturechange',e=>{ if(!g0) return; e.preventDefault(); const o=Object.assign({},g0.o); o.scale=Math.max(0.2,Math.min(5,g0.o.scale*e.scale)); o.rot=((g0.o.rot+e.rotation+540)%360)-180; g0.t.set(o); this.changed(); this.placeBox(); });
+    v.addEventListener('gestureend',()=>{ if(g0){ g0=null; this.commit(); UI.refresh(); } });
+  },
   bindViewer(){
-    const v=$('#view'); const ptrs=new Map(); let g=null, lastTap=0;
+    const v=$('#view'); const ptrs=new Map(); let g=null, lastTap=0; this.bindPlace(v);
     v.addEventListener('pointermove',e=>{ Tools.cropCursor(e,v); if(Tools.maskEdit&&!this._maskDrag) Tools.maskPointer('hover',e,v); });
     v.addEventListener('pointerleave',()=>{ Tools._cursor=null; Tools.overlay(); });
     v.addEventListener('pointerdown',e=>{ v.setPointerCapture(e.pointerId);

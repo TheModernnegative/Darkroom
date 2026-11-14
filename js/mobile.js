@@ -8,7 +8,7 @@ const M = {
     await Engine.loadManifest();
     try{ this.presets=JSON.parse(localStorage.getItem('dr.presets')||'[]'); const last=JSON.parse(localStorage.getItem('dr.last')||'null');  }catch(e){}
     await Engine.ensureLuts(Engine.p);
-    this.kit(); Tools.init(this); Studio.init(this); this.bind(); this.showTab('film'); this.title();
+    this.kit(); Tools.init(this); Studio.init(this); Engine.loadAssets().then(()=>{ Studio.refreshAssets(); Studio.loadPlate(); if(this.tab==='studio') this.showTab('studio',true); }); this.bind(); this.showTab('film'); this.title();
     if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
     const loop=()=>{ if(Engine.dirty&&Engine.src){ Engine.dirty=false; const p=Engine.hoverParams||Engine.p; this._lastL=Engine.layout(p);
         if(this.compare&&!Engine.cropMode){ Engine.renderSplit(this.compare.settings,p,(L,pp)=>pp.border==='none'?null:Borders.texture(pp.border,L.fw,L.fh,L.b,Engine.stock(pp.stock),this.edgeP(pp))); }
@@ -76,7 +76,7 @@ const M = {
   },
   // ----------------------------------------------------------------- edits
   thumbSoon(){},
-  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; { const q=Engine.p; e.studio=!!(q.silver||q.ttOn||q.dblId||q.leakAmt||q.dustAmt||q.scratchAmt||q.hairAmt||q.zoomBlur||q.motionBlur||q.softEdges||q.tiltShift||q.fringe); } document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
+  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; { const q=Engine.p; e.studio=!!(Object.keys(q.fx||{}).some(k=>q.fx[k]&&q.fx[k].id&&q.fx[k].amt>0)||q.silver||q.ttOn||q.dblId||q.leakAmt||q.dustAmt||q.scratchAmt||q.hairAmt||q.zoomBlur||q.motionBlur||q.softEdges||q.tiltShift||q.fringe); } document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
   changed(){ Engine.dirty=true; this.title(); clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),100); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
   commit(){ const s=JSON.stringify(Engine.p); if(this.hist[this.hist.length-1]!==s){ this.hist.push(s); this.fut=[]; if(this.hist.length>100) this.hist.shift(); } },
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
@@ -89,7 +89,7 @@ const M = {
     const sp=h.querySelector('span'); sp.after(b); },
   kit(){
     const M=this;
-    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks'],sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak'],sDust:['dust'],sLens:['lensfx']};
+    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks'],sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sLens:['lensfx']};
     UI.panel=(parent,id,title,open,reset)=>{ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(reset?'<button class="rst">Reset</button>':''); if(SEC[id]) M.secSwitch(h,SEC[id]);
       if(reset) h.querySelector('.rst').onclick=()=>{ reset(); M.showTab(M.tab,true); }; parent.appendChild(h); const b=document.createElement('div'); parent.appendChild(b); return b; };
     UI.slider=(parent,key,label,o)=>M.slider(parent,key,label||'',o);
@@ -182,16 +182,24 @@ const M = {
         this.seg(pane,'Edge print',[['stock','Film stock'],['custom','Custom'],['none','None']],()=>p.edgeText,v=>{ p.edgeText=v; this.changed(); this.commit(); this.showTab('effects',true); });
         if(p.edgeText==='custom'){ const r=document.createElement('div'); r.className='pnew'; r.innerHTML='<input placeholder="Your edge text" maxlength="40">'; const i=r.querySelector('input'); i.value=p.edgeCustom||''; i.oninput=()=>{ p.edgeCustom=i.value; this.changed(); }; i.onchange=()=>this.commit(); pane.appendChild(r); } }
     } else if(t==='studio'){
-      const h=document.createElement('div'); h.className='paneHead'; h.innerHTML='<span>Recipes</span><button class="rst">Clear all</button>'; h.querySelector('.rst').onclick=()=>{ Studio.resetAll(); this.showTab('studio',true); }; pane.appendChild(h);
-      const rl=document.createElement('div'); rl.className='recipes'; pane.appendChild(rl);
-      STUDIO_RECIPES.forEach(([name,r])=>{ const b=document.createElement('button'); b.className='rcp'; b.textContent=name; b.onclick=()=>{ Studio.applyRecipe(r,name); this.showTab('studio',true); }; rl.appendChild(b); });
+      const h=document.createElement('div'); h.className='paneHead'; h.innerHTML='<span>Looks</span><button class="dice">🎲 Random</button><button class="rst">Clear all</button>';
+      h.querySelector('.rst').onclick=()=>{ Studio.resetAll(); this.showTab('studio',true); }; h.querySelector('.dice').onclick=()=>{ Studio.randomLook(); this.showTab('studio',true); }; pane.appendChild(h);
+      const rl=document.createElement('div'); rl.className='rgridm'; pane.appendChild(rl); const tiles=[];
+      STUDIO_RECIPES.forEach(([name,r])=>{ const b=document.createElement('button'); b.className='rtm'; b.innerHTML='<i></i><span></span>'; b.querySelector('span').textContent=name.replace(' · ',' — '); b.onclick=()=>{ Studio.applyRecipe(r,name); this.showTab('studio',true); }; rl.appendChild(b); tiles.push([b,r]); });
+      { let i=0; const job=this._rjob=(this._rjob||0)+1; const step=()=>{ if(job!==this._rjob||this.tab!=='studio'||!Engine.src) return; const t0=performance.now();
+          while(i<tiles.length&&performance.now()-t0<30){ const [b,r]=tiles[i++]; const u=this.thumb(Studio.recipeParams(r),192,128); if(u) b.querySelector('i').style.backgroundImage=`url(${u})`; }
+          if(i<tiles.length) setTimeout(step,30); }; setTimeout(step,80); }
+      if(Studio.placeTarget()){ const n=document.createElement('div'); n.className='note'; n.textContent='Drag the photo to move the '+(Studio.placeTarget().kind==='dbl'?'second exposure':'overlay')+' · pinch to scale and rotate.'; pane.appendChild(n); }
+      const has=c=>p.fx&&p.fx[c]&&p.fx[c].id&&p.fx[c].amt>0;
       const on=k=>Tools.edited ? false : false;
       [['sSilver','Silver — Black & White',p.silver?'On':'B&W with real colour filters, structure, toning'],['sTwoTone','Two-Tone Flash',p.ttOn?'On':'Red/cyan gel ghost'],
-       ['sDouble','Double Exposure',p.dblId?'On':'Blend a second photo'],['sLeak','Light Leaks',p.leakAmt?'On':'Warm edge flares'],
-       ['sDust','Dust & Scratches',(p.dustAmt||p.scratchAmt||p.hairAmt)?'On':'Specks, scratches, hair'],['sLens','Lens Effects',(p.zoomBlur||p.motionBlur||p.softEdges||p.tiltShift||p.fringe)?'On':'Zoom, motion, tilt-shift, fringing']]
+       ['sDouble','Double Exposure',p.dblId?'On':'Blend a second photo'],['sLeak','Light Leaks',(p.leakAmt||has('leak'))?'On':'Scanned leaks and edge flares'],['sBurn','Film Burns & Flares',(has('burn')||has('flare'))?'On':'Burnt ends, sun flares, glow'],
+       ['sDust','Dust & Scratches',(p.dustAmt||p.scratchAmt||p.hairAmt||has('dust'))?'On':'Specks, scratches, hair'],['sTexture','Paper & Texture',has('texture')?'On':'Paper, emulsion and print textures'],['sFrameFx','Frames & Edges',has('frame')?'On':'Negative carriers, plate edges, borders'],['sLens','Lens Effects',(p.zoomBlur||p.motionBlur||p.softEdges||p.tiltShift||p.fringe)?'On':'Zoom, motion, tilt-shift, fringing']]
         .forEach(([id,title,sub])=>this.toolRow(pane,title,sub,()=>this.openTool(title,b=>Studio.build(b,id)),sub==='On'));
     } else if(t==='presets'){
       const vh=document.createElement('div'); vh.className='paneHead'; vh.innerHTML='<span>Versions of this photo</span><button>+ Save version</button>'; vh.querySelector('button').onclick=()=>this.addVersion(); pane.appendChild(vh);
+      { const r=document.createElement('div'); r.className='btnrow'; pane.appendChild(r);
+        UI.button(r,'Reset to original',()=>this.resetPhoto(false)); UI.button(r,'Save version, then reset',()=>this.resetPhoto(true)); }
       if(!(this.versions||[]).length){ const n=document.createElement('div'); n.className='note'; n.textContent='Save a version, try another film or edit, then tap A|B at the top to see them side by side.'; pane.appendChild(n); }
       else { const vl=document.createElement('div'); vl.className='plist'+(this.editing?' editing':'');
         this.versions.forEach(v=>{ const c=document.createElement('div'); c.className='pc'+(this.compare&&this.compare.id===v.id?' cmp':'');
@@ -310,6 +318,19 @@ const M = {
     const place=(a,zoom)=>{ const l=L(); const fw0=l.fw/l.scale, fh0=l.fh/l.scale, fw=fw0*zoom, fh=fh0*zoom;
       Engine.view={mode:'zoom',zoom,cx:(l.W/2-a.px)/fw+a.u,cy:1-((l.H/2-a.py)/fh+a.v)}; };
     const before=on=>{ if(Engine.before===on) return; Engine.before=on; $('#tag').classList.toggle('on',on); Engine.dirty=true; };
+    // Studio: move / pinch-scale / twist the double exposure or an overlay
+    const pp=new Map(); let pg=null; const PT=()=>this.tab==='studio'&&Engine.src&&!Engine.cropMode&&!this.compare&&Engine.view.mode==='fit'?Studio.placeTarget():null;
+    const pstart=()=>{ const t=PT(); if(!t) return; const v=[...pp.values()]; const c=v.length>1?{x:(v[0].x+v[1].x)/2,y:(v[0].y+v[1].y)/2}:v[0];
+      pg={t,o:t.get(),c,d:v.length>1?Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y):0,a:v.length>1?Math.atan2(v[1].y-v[0].y,v[1].x-v[0].x):0}; };
+    st.addEventListener('pointerdown',e=>{ if(!PT()) return; e.stopImmediatePropagation(); st.setPointerCapture(e.pointerId); pp.set(e.pointerId,{x:e.clientX,y:e.clientY}); pstart(); },true);
+    st.addEventListener('pointermove',e=>{ if(!pp.has(e.pointerId)) return; e.stopImmediatePropagation(); pp.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(!pg) return;
+      const l=L(), v=[...pp.values()], o=Object.assign({},pg.o);
+      if(v.length>1&&pg.d){ const c={x:(v[0].x+v[1].x)/2,y:(v[0].y+v[1].y)/2}, d=Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y), a=Math.atan2(v[1].y-v[0].y,v[1].x-v[0].x);
+        o.scale=Math.max(0.2,Math.min(5,pg.o.scale*d/pg.d)); o.rot=((pg.o.rot+(a-pg.a)*180/Math.PI+540)%360)-180; o.x=pg.o.x+(c.x-pg.c.x)*dpr()/l.iw; o.y=pg.o.y+(c.y-pg.c.y)*dpr()/l.ih; }
+      else { o.x=pg.o.x+(v[0].x-pg.c.x)*dpr()/l.iw; o.y=pg.o.y+(v[0].y-pg.c.y)*dpr()/l.ih; }
+      pg.t.set(o); this.changed(); },true);
+    const pend=e=>{ if(!pp.has(e.pointerId)) return; e.stopImmediatePropagation(); pp.delete(e.pointerId); if(pp.size) pstart(); else { pg=null; this.commit(); } };
+    st.addEventListener('pointerup',pend,true); st.addEventListener('pointercancel',pend,true);
     st.addEventListener('pointerdown',e=>{ if(!Engine.src||Engine.cropMode) return; st.setPointerCapture(e.pointerId); ptr.set(e.pointerId,{x:e.clientX,y:e.clientY}); moved=false;
       clearTimeout(holdT);
       if(ptr.size===1){ holdT=setTimeout(()=>{ if(!moved&&ptr.size===1) before(true); },380); pan={x:e.clientX,y:e.clientY}; }
@@ -344,6 +365,9 @@ const M = {
   loadVersions(){ try{ const all=JSON.parse(localStorage.getItem('dr.versions')||'{}'); this.versions=all[this.photoKey]||[]; }catch(e){ this.versions=[]; } },
   saveVersions(){ try{ const all=JSON.parse(localStorage.getItem('dr.versions')||'{}'); all[this.photoKey]=this.versions.map(v=>({id:v.id,name:v.name,settings:v.settings}));
       const keys=Object.keys(all); while(keys.length>40) delete all[keys.shift()]; localStorage.setItem('dr.versions',JSON.stringify(all)); }catch(e){} },
+  resetPhoto(keep){ if(!Engine.src) return; const d=withDefaults({}); if(!Object.keys(d).some(k=>k!=='off'&&JSON.stringify(Engine.p[k])!==JSON.stringify(d[k]))){ this.toast('Already the original'); return; }
+    if(keep) this.addVersion(); if(this.compare) this.setCompare(null); Engine.p=d; Engine.setDouble(null); Engine.curveKey=''; this.activePreset=null; this.changed(); this.commit(); this.showTab(this.tab,true); this.title&&this.title();
+    this.toast(keep?'Saved as a version and reset — undo brings it back':'Reset to the original — undo brings it back'); },
   addVersion(){ if(!Engine.src){ this.toast('Open a photo first'); return; } this.versions=this.versions||[];
     const v={id:'v'+Date.now(),name:`Version ${this.versions.length+1} · ${Engine.stock().name}`,settings:cloneParams(Engine.p)}; this.versions.push(v); this.saveVersions(); this.toast('Saved '+v.name+' — tap A|B to compare'); this.showTab(this.tab,true); },
   setCompare(v){ this.compare=v||null; const b=$('#btnAB'); if(b) b.classList.toggle('on',!!v);

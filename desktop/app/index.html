@@ -32,7 +32,7 @@
       </section>
       <!-- studio: one-click recipes -->
       <section class="panel open mod-studio" id="pRecipes">
-        <h3><i></i>Recipes<span class="hbtns"><button class="hbtn" id="studioReset" title="Clear all Studio effects">⟲</button></span></h3>
+        <h3><i></i>Looks<span class="hbtns"><button class="hbtn dice" id="studioRandom" title="Random look — press again for another">🎲 Random</button><button class="hbtn" id="studioReset" title="Clear all Studio effects">⟲</button></span></h3>
         <div class="body"><div id="recipeList"></div></div>
       </section>
       <!-- develop: versions of this photo -->
@@ -71,7 +71,7 @@
     <!-- ===================================================== centre -->
     <section id="centre">
       <div id="viewer">
-        <canvas id="view"></canvas>
+        <canvas id="view"></canvas><div id="placeClip"><div id="placeBox"><i class="hint">Drag to move · scroll to scale · ⇧-drag or ⌥-scroll to rotate · ⌥-drag to resize · double-click to reset</i></div></div>
         <div id="grid"></div>
         <div id="ring"></div>
         <canvas id="cropOv"></canvas>
@@ -98,6 +98,7 @@
         <div class="tgroup">
           <button class="ibtn" id="tbBefore" title="Before / After (\)">Before / After</button>
           <button class="ibtn" id="tbZoom" title="Zoom (Z / Space)">1:1</button>
+          <button class="ibtn devonly" id="tbReset" title="Reset to original · duplicate (⇧⌘R / ⌘D)">Reset ▾</button>
           <button class="ibtn devonly" id="tbCompare" title="Compare a saved version side by side (C)">Compare</button>
           <button class="ibtn devonly" id="tbCrop" title="Crop &amp; straighten (R)">Crop</button>
           <button class="ibtn devonly" id="tbSync" title="⌘-click photos in the filmstrip, then sync settings to them" disabled>Sync…</button>

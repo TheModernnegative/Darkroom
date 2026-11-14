@@ -15,7 +15,7 @@ const Borders = {
       case '4x5':  return f({l:.06,r:.06,t:.06,b:.06});
       case 'print':return f({l:.07,r:.07,t:.07,b:.07});
       case 'peel': return f({l:.075,r:.075,t:.075,b:.12});
-      case 'wetplate': return f({l:.06,r:.06,t:.06,b:.06});
+      case 'wetplate': return this.plateImg ? f({l:.015,r:.015,t:.015,b:.015}) : f({l:.06,r:.06,t:.06,b:.06});
       default: { const I=this.INSTANT[style]; if(I) return {l:I.side/I.w,r:I.side/I.w,t:I.top/I.h,b:I.bot/I.h}; return {l:0,r:0,t:0,b:0}; }
     }
   },
@@ -38,7 +38,12 @@ const Borders = {
     const ix=b.l/(1+b.l+b.r)*W, iw=W/(1+b.l+b.r), iy=b.t/(1+b.t+b.b)*H, ih=H/(1+b.t+b.b);
     let seed=7; const r=()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; };
     const film = stock.type==='positive' ? '#0b0b0d' : stock.type==='bw' ? '#0e0e0e' : '#120d0a';
-    if(style==='wetplate'){
+    if(style==='wetplate'&&this.plateImg&&this.plateImg.complete&&this.plateImg.naturalWidth){
+      // scanned-quality plate edge from the asset library, rotated for portrait photos
+      const im=this.plateImg, port=H>W; x.save();
+      if(port){ x.translate(W,0); x.rotate(Math.PI/2); x.drawImage(im,0,0,H,W); } else x.drawImage(im,0,0,W,H);
+      x.restore();
+    } else if(style==='wetplate'){
       // collodion plate: dark japanned edge, poured emulsion with an irregular, silvery boundary
       let sd=29; const rr=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
       x.fillStyle='#16130f'; x.fillRect(0,0,W,H);
