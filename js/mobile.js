@@ -11,7 +11,7 @@ const M = {
     this.kit(); Tools.init(this); this.bind(); this.showTab('film'); this.title();
     if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
     const loop=()=>{ if(Engine.dirty&&Engine.src){ Engine.dirty=false; const p=Engine.hoverParams||Engine.p; this._lastL=Engine.layout(p);
-        if(this.compare&&!Engine.cropMode){ Engine.renderSplit(this.compare.settings,p,(L,pp)=>pp.border==='none'?null:Borders.texture(pp.border,L.fw,L.fh,L.b,Engine.stock(pp.stock))); }
+        if(this.compare&&!Engine.cropMode){ Engine.renderSplit(this.compare.settings,p,(L,pp)=>pp.border==='none'?null:Borders.texture(pp.border,L.fw,L.fh,L.b,Engine.stock(pp.stock),this.edgeP(pp))); }
         else Engine.render({params:p,layout:this._lastL,borderTex:this.borderTex()});
         Tools.overlay(); this.histo(); this.zoomLabel(); } requestAnimationFrame(loop); };
     requestAnimationFrame(loop);
@@ -25,7 +25,7 @@ const M = {
       if(Engine.src) Engine.gl.deleteTexture(Engine.src.tex);
       PER_PHOTO_KEYS.filter(k=>!['ev','temp','tint'].includes(k)).forEach(k=>Engine.p[k]=cloneParams(DEFAULTS[k])); delete Engine.p.cropPortrait;
       Engine.setSource(src); $('#empty').classList.add('off'); $('#btnSave').disabled=false;
-      this.activePreset=null; this.dots();
+      this.activePreset=null; this.dots(); Tools.maskSel=null; Engine.maskTexCache={};
       this.hist=[JSON.stringify(Engine.p)]; this.fut=[]; this.hires=null; this.hiresLoading=null; Engine.view={mode:'fit',cx:.5,cy:.5}; this.setCompare(null);
       this.photoKey=(f.name||'')+'|'+(f.size||0)+'|'+(f.lastModified||0); this.loadVersions();
       this.thumbs={}; this.busy(); this.showTab(this.tab);
@@ -49,7 +49,8 @@ const M = {
     bmp.close&&bmp.close();
     return {tex,w,h,dispRef:true,encoded:false,flipY:false,key:Engine.keyFromSamples(lum,sw,sh)};
   },
-  borderTex(){ const p=Engine.hoverParams||Engine.p; if(!Engine.src||p.border==='none'||Engine.cropMode) return null; const L=this._lastL||Engine.layout(); return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock)); },
+  borderTex(){ const p=Engine.hoverParams||Engine.p; if(!Engine.src||p.border==='none'||Engine.cropMode) return null; const L=this._lastL||Engine.layout(); return Borders.texture(p.border,L.fw,L.fh,L.b,Engine.stock(p.stock),this.edgeP(p)); },
+  edgeP(p){ const h=[...(this.name||'x')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7); return Object.assign({},p,{frameNo:p.frameNo||(h%36)+1}); },
   // small offscreen render of the current photo with params → dataURL
   thumb(params,W,H){
     const s=Engine.src; if(!s) return ''; const [sw,sh]=Engine.dims(params);
@@ -75,7 +76,7 @@ const M = {
   },
   // ----------------------------------------------------------------- edits
   thumbSoon(){},
-  dots(){ const e=Tools.edited(Engine.p); document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
+  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
   changed(){ Engine.dirty=true; this.title(); clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),100); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
   commit(){ const s=JSON.stringify(Engine.p); if(this.hist[this.hist.length-1]!==s){ this.hist.push(s); this.fut=[]; if(this.hist.length>100) this.hist.shift(); } },
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
@@ -89,6 +90,7 @@ const M = {
     UI.seg=(parent,key,label,opts,get,set)=>M.seg(parent,label,opts,get,set);
     UI.select=(parent,key,label,optsFn,get,set)=>M.seg(parent,label,optsFn(),get,set);
     UI.note=(parent,html)=>{ const n=document.createElement('div'); n.className='note'; n.innerHTML=html; parent.appendChild(n); return n; };
+    UI.check=(parent,key,label,get,set)=>M.toggle(parent,label,get,set);
     UI.button=(parent,label,fn,cls)=>{ const b=document.createElement('button'); b.className='pbtn'; b.textContent=label; b.onclick=fn; parent.appendChild(b); return b; };
   },
   // ----------------------------------------------------------------- panes
@@ -133,6 +135,7 @@ const M = {
       this.seg(pane,'Print',s.papers.map(x=>[x.id,x.name.replace('Kodak Professional ','').replace('Fujifilm ','Fuji ').replace('Kodak ','')]),()=>Engine.paperFor(p).id,async v=>{ p.paper=v; await Engine.ensureLuts(p); this.changed(); this.commit(); });
       this.seg(pane,'Format',Object.entries(FORMATS).map(([k,f])=>[k,f.label]),()=>p.format,v=>{ p.format=v; this.changed(); this.commit(); });
       S('filmAmt','Film strength',{min:0,max:100,step:1,fmt:x=>Math.round(x)+'%'});
+      S('push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box speed':(x>0?'Push +':'Pull −')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
       this.toggle(pane,'Auto exposure (lab metering)',()=>p.autoExp,v=>{ p.autoExp=v; this.changed(); this.commit(); });
     } else if(t==='light'){
       this.head(pane,'Light',['ev','contrast','highlights','shadows','whites','blacks']);
@@ -142,11 +145,13 @@ const M = {
       this.head(pane,'Source',['hlExpand']);
       S('hlExpand','Highlight room',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)});
       const n=document.createElement('div'); n.className='note'; n.textContent='Re-opens highlights the iPhone compressed, so the film shoulder can roll them off.'; pane.appendChild(n);
+      this.toolRow(pane,'Masks',(p.masks||[]).length?`${p.masks.length} mask${p.masks.length>1?'s':''}`:'Gradient, radial or brush — dodge & burn',()=>this.openTool('Masks',b=>{ Tools.buildMaskPanel(b,true); if(Tools.masks().length){ if(!Tools.maskSel) Tools.maskSel=Tools.masks()[0].id; Tools.setMaskEdit(true); Tools.renderMasks(); } }),!!(p.masks||[]).length);
       this.toolRow(pane,'Tone Curve',Engine.curveIsIdentity(p)?'Tap to shape RGB or single channels':'Edited',()=>this.openTool('Tone Curve',b=>Tools.buildCurvePanel(b,true)),!Engine.curveIsIdentity(p));
     } else if(t==='color'){
       this.head(pane,'White balance',['temp','tint']);
       S('temp','Temp',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3c6bd6,#777 50%,#e4c03a)'});
       S('tint','Tint',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3fae4a,#777 50%,#c446c0)'});
+      { const r=document.createElement('div'); r.className='btnrow'; pane.appendChild(r); UI.button(r,'Auto',()=>Tools.autoWB()); const w=UI.button(r,Tools.eyedrop?'Tap something grey…':'⌖ Pick neutral',()=>{ Tools.pickWB(!Tools.eyedrop); this.showTab('color',true); }); w.id='wbPick'; }
       this.head(pane,'Presence',['vibrance','saturation']);
       S('vibrance','Vibrance',{min:-100,max:100,step:1}); S('saturation','Saturation',{min:-100,max:100,step:1});
       Tools.buildHSLPanel(pane,true);
@@ -157,12 +162,16 @@ const M = {
       Tools.buildCropPanel(pane,true);
       const tb=pane.querySelector('.pbtn'); if(tb){ tb.textContent='Done'; tb.onclick=()=>this.showTab('film'); }
     } else if(t==='effects'){
+      this.head(pane,'Detail',['sharpen','sharpRadius','nr','nrColor']);
+      S('sharpen','Sharpening',{min:0,max:150,step:1}); S('nr','Noise reduction',{min:0,max:100,step:1}); S('nrColor','Color noise',{min:0,max:100,step:1});
       this.head(pane,'Grain',['grain','grainSize','grainRough']);
       S('grain','Amount',{min:0,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainSize','Size',{min:0.4,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainRough','Softness',{min:0.05,max:0.8,step:0.01,fmt:x=>Math.round(x*100)});
       this.head(pane,'Light & lens',['halation','glow','falloff']);
       S('halation','Halation',{min:0,max:4,step:0.01,fmt:x=>Math.round(x*100)}); S('glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)}); S('falloff','Lens falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)});
       this.head(pane,'Frame');
-      this.seg(pane,'',Borders.styles.map(([k,t])=>[k,t.replace(' scan','').replace(' holder','').replace('Print border','Print')]),()=>p.border,v=>{ p.border=v; this.changed(); this.commit(); });
+      this.seg(pane,'',Borders.styles.map(([k,t])=>[k,t.replace(' scan','').replace(' holder','').replace('Print border','Print')]),()=>p.border,v=>{ p.border=v; this.changed(); this.commit(); this.showTab('effects',true); });
+      if(p.border!=='none'){ this.seg(pane,'Edge print',[['stock','Film stock'],['custom','Custom'],['none','None']],()=>p.edgeText,v=>{ p.edgeText=v; this.changed(); this.commit(); this.showTab('effects',true); });
+        if(p.edgeText==='custom'){ const r=document.createElement('div'); r.className='pnew'; r.innerHTML='<input placeholder="Your edge text" maxlength="40">'; const i=r.querySelector('input'); i.value=p.edgeCustom||''; i.oninput=()=>{ p.edgeCustom=i.value; this.changed(); }; i.onchange=()=>this.commit(); pane.appendChild(r); } }
     } else if(t==='presets'){
       const vh=document.createElement('div'); vh.className='paneHead'; vh.innerHTML='<span>Versions of this photo</span><button>+ Save version</button>'; vh.querySelector('button').onclick=()=>this.addVersion(); pane.appendChild(vh);
       if(!(this.versions||[]).length){ const n=document.createElement('div'); n.className='note'; n.textContent='Save a version, try another film or edit, then tap A|B at the top to see them side by side.'; pane.appendChild(n); }
@@ -186,6 +195,7 @@ const M = {
       if(this.activePreset){ const a=this.activePreset; this.slider(pane,'presetAmt','Amount · '+a.ps.name,{min:0,max:150,step:1,def:100,fmt:x=>Math.round(x)+'%',get:()=>a.amt,
         set:v=>{ a.amt=v; Engine.p=Tools.blendPreset(Engine.p,a.ps.settings,v/100); Engine.curveKey=''; this.changed(); }}); }
       const io=document.createElement('div'); io.className='btnrow'; pane.appendChild(io);
+      { const n=document.createElement('div'); n.className='note'; n.textContent='Sync with the Mac: Share presets → Save to Files → iCloud Drive › Splat Darkroom. The Mac app picks them up automatically and saves its own presets in the same folder for you to import here.'; pane.appendChild(n); }
       UI.button(io,'Import presets…',()=>this.importPresets()); UI.button(io,'Share presets…',()=>this.exportPresets());
       const list=document.createElement('div'); list.className='plist'+(this.editing?' editing':'');
       if(!this.presets.length){ const n=document.createElement('div'); n.className='note'; n.textContent='Dial in a look, name it above and save. Exposure and white balance stay with each photo.'; pane.appendChild(n); }
@@ -220,7 +230,7 @@ const M = {
       let fw=Math.round(w*(1+b.l+b.r)), fh=Math.round(h*(1+b.t+b.b));
       const L={W:fw,H:fh,dpr:1,scale:w/dw,fx:0,fy:0,fw,fh,ix:Math.round(b.l*w),iy:Math.round(b.b*h),iw:w,ih:h,win:[0,0,1,1],b};
       Engine.src=src;
-      const bt=Engine.p.border!=='none'?Borders.texture(Engine.p.border,fw,fh,b,Engine.stock()):null;
+      const bt=Engine.p.border!=='none'?Borders.texture(Engine.p.border,fw,fh,b,Engine.stock(),this.edgeP(Engine.p)):null;
       const c=document.createElement('canvas'); c.width=fw; c.height=fh;
       let x=null; try{ x=c.getContext('2d',{colorSpace:'display-p3'}); }catch(e){}
       if(!x) x=c.getContext('2d'); const p3=!!(x.getContextAttributes&&x.getContextAttributes().colorSpace==='display-p3');
@@ -245,9 +255,12 @@ const M = {
   },
   // ----------------------------------------------------------------- crop gestures on the photo
   cropEvents(){ const st=$('#stage'), v=$('#view');
-    st.addEventListener('pointerdown',e=>{ if(!Engine.cropMode) return; e.stopImmediatePropagation(); st.setPointerCapture(e.pointerId); Tools.cropPointer('down',e,v); },true);
-    st.addEventListener('pointermove',e=>{ if(!Engine.cropMode) return; Tools.cropPointer('move',e,v); },true);
-    ['pointerup','pointercancel'].forEach(t=>st.addEventListener(t,e=>{ if(!Engine.cropMode) return; e.stopImmediatePropagation(); Tools.cropPointer('up',e,v); },true));
+    st.addEventListener('pointerdown',e=>{
+      if(Tools.eyedrop){ e.stopImmediatePropagation(); Tools.eyedropClick(e,v); if(this.tab==='color') this.showTab('color',true); return; }
+      if(Tools.maskEdit && this.toolOpen && Tools.mask()){ e.stopImmediatePropagation(); st.setPointerCapture(e.pointerId); this._md=Tools.maskPointer('down',e,v); return; }
+      if(!Engine.cropMode) return; e.stopImmediatePropagation(); st.setPointerCapture(e.pointerId); Tools.cropPointer('down',e,v); },true);
+    st.addEventListener('pointermove',e=>{ if(this._md){ e.stopImmediatePropagation(); Tools.maskPointer('move',e,v); return; } if(!Engine.cropMode) return; Tools.cropPointer('move',e,v); },true);
+    ['pointerup','pointercancel'].forEach(t=>st.addEventListener(t,e=>{ if(this._md){ this._md=false; e.stopImmediatePropagation(); Tools.maskPointer('up',e,v); return; } if(!Engine.cropMode) return; e.stopImmediatePropagation(); Tools.cropPointer('up',e,v); },true));
   },
   // ----------------------------------------------------------------- zoom: pinch, pan, double-tap, 1×/2×/4× (of the full-res photo)
   async ensureHires(){
@@ -302,7 +315,7 @@ const M = {
   },
   // ----------------------------------------------------------------- tool editors that take over the panel (no accidental drags while scrolling)
   openTool(title,build){ this.toolOpen=true; $('#tsTitle').textContent=title; const b=$('#tsBody'); b.innerHTML=''; UI.sliders={}; build(b); $('#toolSheet').classList.add('on'); },
-  closeTool(){ $('#toolSheet').classList.remove('on'); this.toolOpen=false; this.commit(); this.showTab(this.tab,true); },
+  closeTool(){ $('#toolSheet').classList.remove('on'); this.toolOpen=false; if(Tools.maskEdit) Tools.setMaskEdit(false); this.commit(); this.showTab(this.tab,true); },
   toolRow(parent,title,sub,fn,changed){ const d=document.createElement('button'); d.className='toolRow'+(changed?' changed':''); d.innerHTML=`<span><b></b><small></small></span><i>›</i>`;
     d.querySelector('b').textContent=title; d.querySelector('small').textContent=sub; d.onclick=fn; parent.appendChild(d); },
   // ----------------------------------------------------------------- versions of this photo + A|B compare

@@ -20,9 +20,11 @@ const Borders = {
     if(stock.group==='Motion Picture') return 'KODAK '+n.replace(/ /g,'')+'  5207';
     return mk+' '+n;
   },
-  texture(style, fw, fh, b, stock, rng){
+  texture(style, fw, fh, b, stock, p){
+    p=p||{}; const edgeMode=p.edgeText||'stock', fno=Math.max(1,Math.min(38,p.frameNo||12));
+    const edge = edgeMode==='none' ? '' : edgeMode==='custom' ? String(p.edgeCustom||'').toUpperCase().slice(0,40) : this.edgeText(stock);
     const gl=GLU.gl; const W=Math.min(4096,Math.round(fw)), H=Math.round(fh*W/fw);
-    const key=[style,W,H,stock.id].join('|');
+    const key=[style,W,H,stock.id,edgeMode,p.edgeCustom||'',fno].join('|');
     if(this.cache.key===key) return this.cache.tex;
     const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
     const ix=b.l/(1+b.l+b.r)*W, iw=W/(1+b.l+b.r), iy=b.t/(1+b.t+b.b)*H, ih=H/(1+b.t+b.b);
@@ -48,14 +50,28 @@ const Borders = {
       if(style==='35mm'){
         const land=W>=H;
         x.save(); if(!land){ x.translate(W,0); x.rotate(Math.PI/2); }
-        const LW=land?W:H, LH=land?H:W, sh=LH*0.055, sw=sh*0.72, gap=sw*1.9;
-        x.fillStyle='rgba(225,220,210,.92)';
-        for(let px=gap*.3; px<LW; px+=gap){
-          for(const py of [LH*0.045, LH-LH*0.045-sh]){ x.beginPath(); if(x.roundRect) x.roundRect(px,py,sw,sh,sw*.18); else x.rect(px,py,sw,sh); x.fill(); } }
-        x.fillStyle=txtCol; x.font=`600 ${Math.round(LH*0.034)}px "SF Mono",Menlo,monospace`; x.textBaseline='middle';
-        const t=this.edgeText(stock), y=LH*0.135;
-        x.fillText(t, LW*0.08, y); x.fillText('▸ 12', LW*0.52, y); x.fillText('12A', LW*0.78, y);
-        x.font=`600 ${Math.round(LH*0.03)}px "SF Mono",Menlo,monospace`; x.fillText('13', LW*0.3, LH-LH*0.12);
+        const LW=land?W:H, LH=land?H:W;
+        // geometry (scaled from ISO 1007): perforations 1.98 × 2.79 mm on 4.75 mm pitch, 35 mm film
+        const mm=LH/35, sh=1.98*mm, sw=2.79*mm*0.68, pitch=4.75*mm, edgeY=2.01*mm, ph0=LH-edgeY-sh;
+        x.fillStyle='rgba(228,224,214,.94)';
+        const off=(fno*3.7)%pitch;
+        for(let px=off-pitch; px<LW+pitch; px+=pitch){
+          for(const py of [edgeY, ph0]){ x.beginPath(); if(x.roundRect) x.roundRect(px,py,sw,sh,sw*.2); else x.rect(px,py,sw,sh); x.fill(); } }
+        x.textBaseline='middle';
+        const fs=Math.round(1.25*mm), stripTop=edgeY*0.5, stripBot=LH-edgeY*0.5;
+        x.font=`600 ${fs}px "Helvetica Neue",Arial,sans-serif`; x.fillStyle=txtCol;
+        // top strip: stock name repeated with frame number latent image
+        if(edge){ const tw=x.measureText(edge).width; for(let tx=LW*0.06; tx<LW; tx+=tw+LW*0.42) x.fillText(edge, tx, stripTop); }
+        // bottom strip: frame numbers, half-frame "A" marks and arrows (as printed by the maker)
+        x.font=`600 ${Math.round(1.45*mm)}px "Helvetica Neue",Arial,sans-serif`;
+        const fW=36*mm*(LW/(LH*36/24))/(1), span=LW/(1+(b.l+b.r)); // frame pitch ≈ image width
+        const ix0=land?ix:iy, iw0=land?iw:ih;
+        x.fillText(String(fno), ix0+iw0*0.12, stripBot); x.fillText('▶'+fno+'A', ix0+iw0*0.62, stripBot);
+        x.fillText(String(fno+1), ix0+iw0*1.05, stripBot); x.fillText(String(fno-1)+'A', ix0-iw0*0.38, stripBot);
+        // DX code: clock track + data track between perforations and film edge (bottom)
+        const bx=ix0+iw0*0.28, bw=0.6*mm, by=LH-edgeY*0.92, bh=edgeY*0.34, seed=[...(stock.id||'x')].reduce((a,c)=>a*31+c.charCodeAt(0)>>>0,7);
+        x.fillStyle=txtCol.replace(/[\d.]+\)$/,'.5)');
+        for(let k=0;k<22;k++){ x.fillRect(bx+k*bw*2,by,bw,bh*0.45); if((seed>>(k%30))&1) x.fillRect(bx+k*bw*2,by+bh*0.55,bw,bh*0.45); }
         x.restore();
       } else if(style==='120'){
         x.fillStyle=txtCol; x.font=`600 ${Math.round(s*0.026)}px "SF Mono",Menlo,monospace`; x.textBaseline='middle';

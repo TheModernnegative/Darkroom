@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Splat Darkroom</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <!-- ======================================================= top bar -->
+  <header id="topbar">
+    <div class="brand"><span class="dot"></span>Splat Darkroom</div>
+    <nav id="modules">
+      <button data-m="library">Library</button><span>|</span>
+      <button data-m="develop" class="on">Develop</button><span>|</span>
+      <button data-m="scan">3D Scan</button>
+    </nav>
+    <div class="topright">
+      <button class="tbtn" id="btnImport" title="Import photos (⌘O)">Import</button>
+      <button class="tbtn accent" id="btnExport" title="Export (⌘E)">Export</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <!-- ===================================================== left panel -->
+    <aside id="left" class="side">
+      <section class="panel open mod-develop mod-library" id="pNavigator">
+        <h3><i></i>Navigator<span class="hdrval" id="navZoom">FIT</span></h3>
+        <div class="body"><canvas id="navCanvas"></canvas></div>
+      </section>
+      <!-- develop: versions of this photo -->
+      <section class="panel open mod-develop" id="pVersions">
+        <h3><i></i>Versions<span class="hbtns"><button class="hbtn" id="verAdd" title="Save this edit as a version (⌘')">+</button></span></h3>
+        <div class="body"><div id="verList"></div></div>
+      </section>
+      <!-- develop: user presets -->
+      <section class="panel open mod-develop mod-library" id="pUserPresets">
+        <h3><i></i>Presets<span class="hbtns"><button class="hbtn" id="presetImport" title="Import presets (.json)">↓</button><button class="hbtn" id="presetExport" title="Export presets to share with the phone app">↑</button><button class="hbtn" id="presetAdd" title="Create preset from current settings">+</button></span></h3>
+        <div class="body">
+          <div id="presetNew" class="pnew">
+            <div class="row"><input id="presetName" placeholder="Preset name" spellcheck="false"><button class="tbtn accent" id="presetSave">Save</button></div>
+            <label class="chk"><input type="checkbox" id="presetWB"><span>Include exposure &amp; white balance</span></label>
+          </div>
+          <div id="userPresetList"></div>
+          <div id="presetAmt" style="display:none" title="How much of the last applied preset (0% neutral · 100% as saved · 150% stronger)"></div>
+        </div>
+      </section>
+      <!-- develop: film stocks -->
+      <section class="panel open mod-develop mod-library" id="pPresets">
+        <h3><i></i>Film Stocks<input id="presetSearch" placeholder="Search" spellcheck="false"></h3>
+        <div class="body" id="presetList"></div>
+      </section>
+      <!-- scan: camera -->
+      <section class="panel open mod-scan" id="pScanSource">
+        <h3><i></i>Scan</h3>
+        <div class="body" id="scanSourceBody"></div>
+      </section>
+      <section class="panel open mod-scan" id="pCamera">
+        <h3><i></i>Camera &amp; Lens</h3>
+        <div class="body" id="cameraBody"></div>
+      </section>
+    </aside>
+
+    <!-- ===================================================== centre -->
+    <section id="centre">
+      <div id="viewer">
+        <canvas id="view"></canvas>
+        <div id="grid"></div>
+        <div id="ring"></div>
+        <canvas id="cropOv"></canvas>
+        <div id="beforeTag">Before</div>
+        <div id="cmpTags"><span id="cmpA"></span><span id="cmpB"></span></div>
+        <div id="empty">
+          <div class="emptyCard">
+            <div class="emptyTitle">Drop photos here</div>
+            <div class="emptySub">JPEG · HEIC · ProRAW / RAW · PNG · TIFF</div>
+            <div class="emptyBtns"><button class="tbtn accent" id="emptyImport">Import Photos</button></div>
+          </div>
+        </div>
+        <div id="scanEmpty">
+          <div class="emptyCard">
+            <div class="emptyTitle">3D Scan library</div>
+            <div class="emptySub">Your scans are listed in the strip below. Pick one, open a .ply / .splat, or build a new scan from a walk-around video.<br>Photos stay in the Library / Develop — they are never sent to the scanner.</div>
+            <div class="emptyBtns"><button class="tbtn accent" id="seNew">New scan from video…</button><button class="tbtn" id="seOpen">Open scan…</button><button class="tbtn" id="seDemo">Demo scene</button></div>
+          </div>
+        </div>
+        <div id="busy"><div class="spin"></div><span id="busyMsg"></span></div>
+        <div id="toast"></div>
+      </div>
+      <div id="toolbar">
+        <div class="tgroup">
+          <button class="ibtn" id="tbBefore" title="Before / After (\)">Before / After</button>
+          <button class="ibtn" id="tbZoom" title="Zoom (Z / Space)">1:1</button>
+          <button class="ibtn devonly" id="tbCompare" title="Compare a saved version side by side (C)">Compare</button>
+          <button class="ibtn devonly" id="tbCrop" title="Crop &amp; straighten (R)">Crop</button>
+          <button class="ibtn devonly" id="tbSync" title="⌘-click photos in the filmstrip, then sync settings to them" disabled>Sync…</button>
+        </div>
+        <div class="tgroup scanonly">
+          <span class="hint">drag orbit · ⇧/right-drag pan · scroll dolly · click focus · double-click pivot</span>
+          <button class="ibtn accent" id="tbExpose" title="Expose a frame into the library">● Expose</button>
+        </div>
+        <div class="tgroup right"><span id="status"></span></div>
+      </div>
+      <div id="filmstrip"><div id="stripBar" class="devonly"><select id="libFilter" title="Filter (rate 1–5 · P pick · X reject · U clear)"><option value="all">All photos</option><option value="picks">⚑ Picks</option><option value="1">★ 1+</option><option value="2">★★ 2+</option><option value="3">★★★ 3+</option><option value="4">★★★★ 4+</option><option value="5">★★★★★</option><option value="unrated">Unrated</option><option value="rejects">✕ Rejects</option></select></div><div id="strip"></div></div>
+<div id="ctxMenu"></div>
+    </section>
+
+    <!-- ===================================================== right panel -->
+    <aside id="right" class="side">
+      <section class="panel open" id="pHisto">
+        <h3><i></i>Histogram</h3>
+        <div class="body">
+          <div id="histoWrap"><canvas id="histo"></canvas><b id="clipLo" title="Shadow clipping"></b><b id="clipHi" title="Highlight clipping"></b></div>
+          <div id="histoInfo"></div>
+        </div>
+      </section>
+      <div id="devPanels"></div>
+      <div class="credits" id="credits"></div>
+    </aside>
+  </div>
+</div>
+
+<!-- export dialog -->
+<div id="dlg" class="modal">
+  <div class="sheet">
+    <h2>Export</h2>
+    <div id="dlgBody"></div>
+    <div class="dlgBtns"><button class="tbtn" id="dlgCancel">Cancel</button><button class="tbtn accent" id="dlgOk">Export</button></div>
+  </div>
+</div>
+<!-- pipeline log -->
+<div id="pipe" class="modal">
+  <div class="sheet wide">
+    <h2 id="pipeTitle">Building scan…</h2>
+    <div id="pipeStages"></div>
+    <div class="pbar"><i id="pipeFill"></i></div>
+    <div class="pmeta"><span id="pipeNow">Starting…</span><span id="pipeEta"></span></div>
+    <details id="pipeDetails"><summary>Details</summary><pre id="pipeLog"></pre></details>
+    <div class="dlgBtns"><button class="tbtn" id="pipeCancel">Cancel</button><button class="tbtn accent" id="pipeClose" disabled>Close</button></div>
+  </div>
+</div>
+<input type="file" id="fileIn" multiple accept="image/*,.heic,.heif,.dng,.ply,.splat" hidden>
+
+<script src="js/native.js"></script>
+<script src="js/glutil.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/splat.js"></script>
+<script src="js/borders.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

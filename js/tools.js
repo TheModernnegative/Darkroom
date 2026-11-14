@@ -8,6 +8,134 @@ const Tools = {
   init(host){ this.host=host; },
   P(){ return Engine.p; },
 
+
+  // ------------------------------------------------------------------ coordinates: viewer ⇄ source uv
+  toSrc(cx,cy,el){ const L=this.host._lastL; if(!L||!Engine.src) return null; const b=el.getBoundingClientRect(), dpr=L.dpr;
+    const px=(cx-b.left)*dpr, py=L.H-(cy-b.top)*dpr; const u=(px-L.ix)/L.iw, vt=(L.iy+L.ih-py)/L.ih;
+    const s=CM.vec(Engine.geom(this.P(),Engine.src,Engine.cropMode),[u,vt,1]); return {x:s[0],y:s[1],u,vt}; },
+  toView(sx,sy){ const L=this.host._lastL; const M=CM.inv(Engine.geom(this.P(),Engine.src,Engine.cropMode)); const o=CM.vec(M,[sx,sy,1]);
+    return [L.ix+o[0]*L.iw, (L.H-L.iy-L.ih)+o[1]*L.ih]; },   // canvas px, top-left origin
+
+  // ------------------------------------------------------------------ white balance eyedropper + auto
+  pickWB(on){ this.eyedrop=on; document.body.classList.toggle('eyedrop',on); const b=document.getElementById('wbPick'); if(b) b.classList.toggle('on',on); },
+  eyedropClick(e,el){ if(!this.eyedrop) return false; const L=this.host._lastL, b=el.getBoundingClientRect(), dpr=L.dpr;
+    const c=Engine.sampleAt((e.clientX-b.left)*dpr, L.H-(e.clientY-b.top)*dpr, L); this.pickWB(false);
+    if(!c){ this.host.toast('Click on the photo'); return true; }
+    const [t,ti]=Engine.solveWB(c,this.P().temp,this.P().tint); this.P().temp=t; this.P().tint=ti; this.host.changed(); this.host.commit(); UI.refresh(); this.host.toast(`White balance: temp ${t>0?'+':''}${t} · tint ${ti>0?'+':''}${ti}`); return true; },
+  autoWB(){ const r=Engine.autoWB(this.P()); if(!r) return; this.P().temp=r[0]; this.P().tint=r[1]; this.host.changed(); this.host.commit(); UI.refresh(); this.host.toast(`Auto white balance: ${r[0]>0?'+':''}${r[0]} / ${r[1]>0?'+':''}${r[1]}`); },
+
+  // ------------------------------------------------------------------ masks: gradient, radial, brush
+  maskSel:null, maskEdit:false, brush:{size:60,flow:60,erase:false},
+  masks(){ const p=this.P(); if(!Array.isArray(p.masks)) p.masks=[]; return p.masks; },
+  mask(){ return this.masks().find(m=>m.id===this.maskSel)||null; },
+  addMask(type){
+    if(!Engine.src){ this.host.toast('Open a photo first'); return; }
+    const ms=this.masks(); if(ms.length>=MAX_MASKS){ this.host.toast('Up to '+MAX_MASKS+' masks per photo'); return; }
+    const n={linear:'Gradient',radial:'Radial',brush:'Brush'}[type];
+    const m={id:'m'+Date.now().toString(36),type,name:n+' '+(ms.filter(x=>x.type===type).length+1),on:true,feather:type==='radial'?50:100,amount:100,invert:false,
+      adj:{ev:0,temp:0,tint:0,sat:0,contrast:0},g:type==='linear'?{x0:.5,y0:.15,x1:.5,y1:.55}:type==='radial'?{cx:.5,cy:.45,rx:.22,ry:.3,angle:0}:{}};
+    if(type==='brush'){ const [W,H]=[Engine.src.w,Engine.src.h], k=Math.min(1,1024/Math.max(W,H)); const c=document.createElement('canvas'); c.width=Math.max(8,Math.round(W*k)); c.height=Math.max(8,Math.round(H*k)); m._canvas=c; m.ver=1; }
+    ms.push(m); this.maskSel=m.id; this.setMaskEdit(true); this.host.changed(); this.host.commit(); this.renderMasks();
+    this.host.toast(type==='brush'?'Paint where you want the adjustment (⌥ / Erase to remove)':type==='linear'?'Drag the gradient lines; adjust with the sliders':'Drag the ellipse to move it, its edge to resize');
+  },
+  removeMask(id){ const p=this.P(); p.masks=this.masks().filter(m=>m.id!==id); if(this.maskSel===id) this.maskSel=null; delete Engine.maskTexCache[id]; this.host.changed(); this.host.commit(); this.renderMasks(); this.overlay(); },
+  setMaskEdit(on){ this.maskEdit=on; document.body.classList.toggle('masking',on); if(on&&Engine.cropMode) this.setCropMode(false); Engine.dirty=true; requestAnimationFrame(()=>this.overlay()); },
+  drawMasks(x,L){
+    const m=this.mask(); if(!m||!this.maskEdit||!Engine.src) return;
+    const dpr=L.dpr; x.save(); x.beginPath(); x.rect(L.ix,L.H-L.iy-L.ih,L.iw,L.ih); x.clip(); x.lineWidth=1.4*dpr; x.strokeStyle='rgba(255,255,255,.9)'; x.fillStyle='#fff';
+    const dot=(a,b,r=5)=>{ x.beginPath(); x.arc(a,b,r*dpr,0,7); x.fill(); x.strokeStyle='#000'; x.lineWidth=1*dpr; x.stroke(); x.strokeStyle='rgba(255,255,255,.9)'; x.lineWidth=1.4*dpr; };
+    if(m.type==='linear'){ const g=m.g, A=this.toView(g.x0,g.y0), B=this.toView(g.x1,g.y1);
+      const dx=B[0]-A[0], dy=B[1]-A[1], len=Math.hypot(dx,dy)||1, nx=-dy/len*4000, ny=dx/len*4000;
+      for(const [P,dash] of [[A,[]],[B,[6*dpr,5*dpr]]]){ x.setLineDash(dash); x.beginPath(); x.moveTo(P[0]-nx,P[1]-ny); x.lineTo(P[0]+nx,P[1]+ny); x.stroke(); }
+      x.setLineDash([]); dot(A[0],A[1]); dot(B[0],B[1]); dot((A[0]+B[0])/2,(A[1]+B[1])/2,4); this._mh={A,B}; }
+    else if(m.type==='radial'){ const g=m.g, C=this.toView(g.cx,g.cy), Rx=this.toView(g.cx+g.rx,g.cy), Ry=this.toView(g.cx,g.cy+g.ry);
+      const rx=Math.hypot(Rx[0]-C[0],Rx[1]-C[1]), ry=Math.hypot(Ry[0]-C[0],Ry[1]-C[1]), an=Math.atan2(Rx[1]-C[1],Rx[0]-C[0]);
+      x.beginPath(); x.ellipse(C[0],C[1],rx,ry,an,0,7); x.stroke();
+      const f=Math.max(0.01,1-(m.feather??50)/100); x.setLineDash([5*dpr,5*dpr]); x.beginPath(); x.ellipse(C[0],C[1],rx*f,ry*f,an,0,7); x.stroke(); x.setLineDash([]);
+      dot(C[0],C[1]); dot(Rx[0],Rx[1],4); dot(Ry[0],Ry[1],4); this._mh={C,Rx,Ry}; }
+    else if(m.type==='brush'){ if(m._canvas){ // tint the painted area
+        const cv=this._tint||(this._tint=document.createElement('canvas')); cv.width=m._canvas.width; cv.height=m._canvas.height; const t=cv.getContext('2d');
+        t.clearRect(0,0,cv.width,cv.height); t.drawImage(m._canvas,0,0); t.globalCompositeOperation='source-in'; t.fillStyle='rgba(230,60,50,.38)'; t.fillRect(0,0,cv.width,cv.height); t.globalCompositeOperation='source-over';
+        if(!Engine.cropMode && !this.P().angle && !this.P().rot && !this.P().flip){ const A=this.toView(0,0), B=this.toView(1,1); x.drawImage(cv,A[0],A[1],B[0]-A[0],B[1]-A[1]); } }
+      if(this._cursor){ const [cx,cy]=this._cursor; const A=this.toView(0,0), B=this.toView(1,1); const r=this.brush.size/2/1024*Math.max(Math.abs(B[0]-A[0]),Math.abs(B[1]-A[1]));
+        x.beginPath(); x.arc(cx,cy,Math.max(3,r),0,7); x.stroke(); } }
+    x.restore();
+  },
+  maskPointer(type,e,el){
+    if(!this.maskEdit||!Engine.src) return false; const m=this.mask(); if(!m) return false;
+    const L=this.host._lastL, b=el.getBoundingClientRect(), dpr=L.dpr, px=(e.clientX-b.left)*dpr, py=(e.clientY-b.top)*dpr, S=this.toSrc(e.clientX,e.clientY,el);
+    if(type==='hover'){ if(m.type==='brush'){ this._cursor=[px,py]; this.overlay(); } return false; }
+    if(type==='down'){
+      this._mdrag=null; const near=(P,r=14)=>P&&Math.hypot(P[0]-px,P[1]-py)<r*dpr;
+      if(m.type==='brush'){ this._mdrag={k:'paint',erase:this.brush.erase||e.altKey}; this.paint(m,S,true); return true; }
+      const h=this._mh||{};
+      if(m.type==='linear'){ const mid=h.A&&[(h.A[0]+h.B[0])/2,(h.A[1]+h.B[1])/2];
+        this._mdrag = near(h.A)?{k:'A'} : near(h.B)?{k:'B'} : near(mid,18)?{k:'move',s:S,g:Object.assign({},m.g)} : {k:'new',s:S}; }
+      else if(m.type==='radial'){ this._mdrag = near(h.Rx)?{k:'rx'} : near(h.Ry)?{k:'ry'} : near(h.C,22)?{k:'move',s:S,g:Object.assign({},m.g)} : {k:'newR',s:S}; }
+      return true;
+    }
+    if(type==='move' && this._mdrag){ const d=this._mdrag, g=m.g;
+      if(d.k==='paint'){ this._cursor=[px,py]; this.paint(m,S,false,d.erase); }
+      else if(d.k==='A'){ g.x0=S.x; g.y0=S.y; } else if(d.k==='B'){ g.x1=S.x; g.y1=S.y; }
+      else if(d.k==='move'){ const dx=S.x-d.s.x, dy=S.y-d.s.y; if(m.type==='linear') Object.assign(g,{x0:d.g.x0+dx,y0:d.g.y0+dy,x1:d.g.x1+dx,y1:d.g.y1+dy}); else Object.assign(g,{cx:d.g.cx+dx,cy:d.g.cy+dy}); }
+      else if(d.k==='new'){ Object.assign(g,{x0:d.s.x,y0:d.s.y,x1:S.x,y1:S.y}); }
+      else if(d.k==='rx'){ g.rx=Math.max(.005,Math.hypot(S.x-g.cx,(S.y-g.cy)*Engine.src.h/Engine.src.w)); }
+      else if(d.k==='ry'){ g.ry=Math.max(.005,Math.hypot((S.x-g.cx)*Engine.src.w/Engine.src.h,S.y-g.cy)); }
+      else if(d.k==='newR'){ g.cx=d.s.x; g.cy=d.s.y; g.rx=Math.max(.005,Math.abs(S.x-d.s.x)); g.ry=Math.max(.005,Math.abs(S.y-d.s.y)); }
+      Engine.dirty=true; this.host.changed(); this.overlay(); return true; }
+    if(type==='up' && this._mdrag){ const d=this._mdrag; this._mdrag=null; if(d.k==='paint'){ m.data=m._canvas.toDataURL('image/png'); this._last=null; }
+      this.host.commit(); this.host.changed(); this.overlay(); return true; }
+    return false;
+  },
+  paint(m,S,first,erase){
+    if(!m._canvas||!S) return; const c=m._canvas, x=c.getContext('2d'), X=S.x*c.width, Y=S.y*c.height;
+    const R=Math.max(1.5,this.brush.size/2*Math.max(c.width,c.height)/1024);
+    x.globalCompositeOperation=erase?'destination-out':'source-over';
+    const dab=(px,py)=>{ const g=x.createRadialGradient(px,py,0,px,py,R); const a=this.brush.flow/100*.5; g.addColorStop(0,`rgba(255,255,255,${a})`); g.addColorStop(.55,`rgba(255,255,255,${a*.8})`); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.beginPath(); x.arc(px,py,R,0,7); x.fill(); };
+    if(first||!this._last) dab(X,Y); else { const [lx,ly]=this._last, d=Math.hypot(X-lx,Y-ly), n=Math.max(1,Math.ceil(d/(R*.25))); for(let i=1;i<=n;i++) dab(lx+(X-lx)*i/n,ly+(Y-ly)*i/n); }
+    this._last=[X,Y]; x.globalCompositeOperation='source-over'; m.ver=(m.ver||0)+1; Engine.dirty=true;
+  },
+  buildMaskPanel(root,open=false){
+    const H=this.host, P=()=>this.P();
+    const b=UI.panel(root,'pMasks','Masks',open,()=>{ P().masks=[]; this.maskSel=null; H.changed(); H.commit(); this.renderMasks(); this.overlay(); });
+    const row=document.createElement('div'); row.className='btnrow'; b.appendChild(row);
+    UI.button(row,'+ Gradient',()=>this.addMask('linear')); UI.button(row,'+ Radial',()=>this.addMask('radial')); UI.button(row,'+ Brush',()=>this.addMask('brush'));
+    this._maskBody=document.createElement('div'); b.appendChild(this._maskBody); this.renderMasks();
+  },
+  renderMasks(){
+    const el=this._maskBody; if(!el) return; el.innerHTML=''; const H=this.host, ms=this.masks();
+    if(!ms.length){ UI.note(el,'Gradient for skies, radial to lift a face, brush to dodge and burn. Adjustments happen before the film, like dodging in the darkroom.'); return; }
+    const list=document.createElement('div'); list.className='maskList'; el.appendChild(list);
+    ms.forEach(m=>{ const d=document.createElement('div'); d.className='mrow'+(m.id===this.maskSel?' on':'')+(m.on===false?' off':'');
+      d.innerHTML=`<span class="mi">${m.type==='linear'?'▤':m.type==='radial'?'◎':'✎'}</span><span class="mn"></span><button class="me" title="Show / hide">${m.on===false?'○':'●'}</button><button class="md" title="Delete">×</button>`;
+      d.querySelector('.mn').textContent=m.name;
+      d.onclick=e=>{ if(e.target.tagName==='BUTTON') return; this.maskSel=m.id; this.setMaskEdit(true); this.renderMasks(); };
+      d.querySelector('.me').onclick=()=>{ m.on=m.on===false; H.changed(); H.commit(); this.renderMasks(); };
+      d.querySelector('.md').onclick=()=>this.removeMask(m.id);
+      list.appendChild(d); });
+    const m=this.mask(); if(!m) return;
+    const sub=document.createElement('div'); sub.className='msub'; el.appendChild(sub);
+    const A=(k,label,o)=>UI.slider(sub,'mk_'+k,label,Object.assign({def:0,get:()=>m.adj[k]||0,set:v=>{ m.adj[k]=v; H.changed(); },commit:()=>H.commit()},o));
+    A('ev','Exposure',{min:-3,max:3,step:0.01,fmt:x=>(x>0?'+':'')+x.toFixed(2)});
+    A('contrast','Contrast',{min:-100,max:100,step:1});
+    A('temp','Temp',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3c6bd6,#888 50%,#e4c03a)'});
+    A('tint','Tint',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3fae4a,#888 50%,#c446c0)'});
+    A('sat','Saturation',{min:-100,max:100,step:1});
+    UI.slider(sub,'mk_feather',m.type==='brush'?'Softness':'Feather',{min:1,max:100,step:1,def:m.type==='radial'?50:100,get:()=>m.feather,set:v=>{ m.feather=v; H.changed(); this.overlay(); },commit:()=>H.commit()});
+    UI.slider(sub,'mk_amount','Amount',{min:0,max:100,step:1,def:100,get:()=>m.amount??100,set:v=>{ m.amount=v; H.changed(); },commit:()=>H.commit(),fmt:x=>Math.round(x)+'%'});
+    UI.check(sub,'mk_inv','Invert',()=>!!m.invert,v=>{ m.invert=v; H.changed(); H.commit(); });
+    if(m.type==='brush'){
+      UI.slider(sub,'br_size','Brush size',{min:4,max:400,step:1,def:60,get:()=>this.brush.size,set:v=>{ this.brush.size=v; this.overlay(); }});
+      UI.slider(sub,'br_flow','Flow',{min:5,max:100,step:1,def:60,get:()=>this.brush.flow,set:v=>{ this.brush.flow=v; }});
+      UI.check(sub,'br_erase','Erase (or hold ⌥)',()=>this.brush.erase,v=>{ this.brush.erase=v; });
+      const r2=document.createElement('div'); r2.className='btnrow'; sub.appendChild(r2);
+      UI.button(r2,'Clear',()=>{ const c=m._canvas; c.getContext('2d').clearRect(0,0,c.width,c.height); m.data=c.toDataURL(); m.ver=(m.ver||0)+1; H.changed(); H.commit(); });
+      UI.button(r2,'Fill',()=>{ const c=m._canvas, x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); m.data=c.toDataURL(); m.ver=(m.ver||0)+1; H.changed(); H.commit(); });
+    }
+    const r3=document.createElement('div'); r3.className='btnrow'; sub.appendChild(r3);
+    UI.button(r3,this.maskEdit?'Hide overlay':'Show overlay',()=>{ this.setMaskEdit(!this.maskEdit); this.renderMasks(); });
+  },
+
   // ------------------------------------------------------------------ crop
   aspectValue(p){ // width/height of the crop in pixels, or null for free
     if(p.aspect==='free') return null;
@@ -35,6 +163,7 @@ const Tools = {
   flip(){ const p=this.P(); p.flip=!p.flip; this.host.changed(); this.host.commit(); },
   resetCrop(){ const p=this.P(); Object.assign(p,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'}); delete p.cropPortrait; this.host.changed(); this.host.commit(); UI.refresh(); this.overlay(); },
   setCropMode(on){
+    if(on&&this.maskEdit) this.setMaskEdit(false);
     Engine.cropMode=on; document.body.classList.toggle('cropping',on);
     const b=document.getElementById('tbCrop'); if(b) b.classList.toggle('on',on);
     Engine.view={mode:'fit',cx:.5,cy:.5}; Engine.dirty=true;
@@ -44,10 +173,12 @@ const Tools = {
   // overlay canvas over the viewer: dim outside crop, rule-of-thirds, handles
   overlay(){
     const ov=document.getElementById('cropOv'); if(!ov) return;
-    const L=this.host._lastL; const on=Engine.cropMode&&Engine.src&&L&&L.iw;
+    const L=this.host._lastL; const showM=this.maskEdit&&this.mask()&&Engine.src&&L&&L.iw&&!this.host.compare;
+    const on=(Engine.cropMode&&Engine.src&&L&&L.iw)||showM;
     ov.style.display=on?'block':'none'; if(!on) return;
     const dpr=L.dpr; if(ov.width!==L.W||ov.height!==L.H){ ov.width=L.W; ov.height=L.H; }
     const x=ov.getContext('2d'); x.clearRect(0,0,L.W,L.H);
+    if(!Engine.cropMode){ this.drawMasks(x,L); return; }
     const c=this.P().crop, top=L.H-L.iy-L.ih;
     const rx=L.ix+c.x*L.iw, ry=top+c.y*L.ih, rw=c.w*L.iw, rh=c.h*L.ih; this._r={rx,ry,rw,rh,L,top};
     x.fillStyle='rgba(0,0,0,.62)'; x.beginPath(); x.rect(0,0,L.W,L.H); x.rect(rx,ry,rw,rh); x.fill('evenodd');
@@ -213,9 +344,9 @@ const Tools = {
   },
 
   // ------------------------------------------------------------------ which areas have edits (tab / panel dots)
-  GROUPS:{ film:['paper','format','filmAmt','autoExp'], light:['ev','contrast','highlights','shadows','whites','blacks','hlExpand','curve'],
+  GROUPS:{ film:['paper','format','filmAmt','autoExp','push'], light:['ev','contrast','highlights','shadows','whites','blacks','hlExpand','curve'],
     color:['temp','tint','vibrance','saturation','hslH','hslS','hslL','gShS','gShL','gMidS','gMidL','gHiS','gHiL'],
-    crop:['crop','angle','rot','flip'], effects:['grain','grainSize','grainRough','halation','glow','falloff','border'] },
+    crop:['crop','angle','rot','flip'], effects:['grain','grainSize','grainRough','halation','glow','falloff','border','sharpen','nr','nrColor'], masks:['masks'] },
   edited(p){ const out={}; const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
     for(const g in this.GROUPS) out[g]=this.GROUPS[g].some(k=>{ const v=p[k], d=DEFAULTS[k]; if(typeof v==='number'&&typeof d==='number') return Math.abs(v-d)>1e-6; return k==='paper'?false:!same(v,d); });
     out.film = out.film || (p.paper!=null && p.paper!==Engine.stock(p.stock).papers[0].id);
@@ -237,6 +368,7 @@ const Tools = {
   // ------------------------------------------------------------------ preset files (.darkroom.json) — portable between Mac and phone
   presetFile(presets){ return JSON.stringify({type:'splat-darkroom-presets',v:1,author:'Daniel S. Workman',presets},null,1); },
   parsePresetFile(text){ const d=JSON.parse(text); const a=Array.isArray(d)?d:(d.presets||(d.settings?[d]:[]));
-    return a.filter(p=>p&&p.name&&p.settings).map(p=>({name:String(p.name).slice(0,60),settings:p.settings,id:p.id||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,5))})); },
-  mergePresets(list,incoming){ let added=0; incoming.forEach(p=>{ const i=list.findIndex(q=>q.name===p.name); if(i>=0) list[i].settings=p.settings; else { list.push(p); added++; } }); return added; },
+    return a.filter(p=>p&&p.name&&p.settings).map(p=>({name:String(p.name).slice(0,60),settings:p.settings,t:p.t||0,id:p.id||('u'+Date.now().toString(36)+Math.random().toString(36).slice(2,5))})); },
+  mergePresets(list,incoming){ let added=0, changed=0; incoming.forEach(p=>{ const i=list.findIndex(q=>q.name===p.name);
+      if(i>=0){ if((p.t||0)>(list[i].t||0) || (!p.t&&!list[i].t&&JSON.stringify(p.settings)!==JSON.stringify(list[i].settings))){ list[i].settings=p.settings; list[i].t=p.t; changed++; } } else { list.push(p); added++; } }); this._mergeChanged=changed; return added; },
 };

@@ -8,9 +8,12 @@ const DEFAULTS = {
   crop:{x:0,y:0,w:1,h:1}, angle:0, rot:0, flip:false, aspect:'free',
   curve:{m:[[0,0],[1,1]], r:[[0,0],[1,1]], g:[[0,0],[1,1]], b:[[0,0],[1,1]]},
   hslH:[0,0,0,0,0,0,0,0], hslS:[0,0,0,0,0,0,0,0], hslL:[0,0,0,0,0,0,0,0],
+  edgeText:'stock', edgeCustom:'', frameNo:0,
+  sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
   gShH:220, gShS:0, gShL:0, gMidH:40, gMidS:0, gMidL:0, gHiH:45, gHiS:0, gHiL:0, gBlend:50, gBalance:0,
 };
-const PER_PHOTO_KEYS = ['ev','temp','tint','crop','angle','rot','flip','aspect'];
+const PER_PHOTO_KEYS = ['ev','temp','tint','crop','angle','rot','flip','aspect','masks'];
+const MAX_MASKS = 4;
 function cloneParams(p){ return JSON.parse(JSON.stringify(p)); }
 function withDefaults(p){ return Object.assign(cloneParams(DEFAULTS), cloneParams(p||{})); }
 const FORMATS = { '35mm':{gauge:2.4,diag:43.3,label:'35mm'}, '645':{gauge:1.6,diag:69.8,label:'6×4.5'}, '6x7':{gauge:1.35,diag:89.6,label:'6×7'}, '4x5':{gauge:1.0,diag:162.6,label:'4×5'} };
@@ -27,6 +30,7 @@ const Engine = {
       bright: GLU.program(GLU.QUAD_VS, BRIGHT_FS),
       blur: GLU.program(GLU.QUAD_VS, BLUR_FS),
       final: GLU.program(GLU.QUAD_VS, FINAL_FS),
+      detail: GLU.program(GLU.QUAD_VS, DETAIL_FS),
     };
     this.borderTex = GLU.tex2D(1,1,'rgba8',new Uint8Array([0,0,0,0]));
     this.curveTex = GLU.tex2D(256,1,'rgba16f',null);
@@ -96,6 +100,50 @@ const Engine = {
     return {x:mx-c.w*lo/2,y:my-c.h*lo/2,w:c.w*lo,h:c.h*lo};
   },
 
+  // brush masks: painted at up to 1024px (source aspect), stored as a PNG data-URL in the edit
+  maskTexCache:{},
+  maskTex(m){
+    const gl=this.gl, c=this.maskTexCache[m.id];
+    if(c && c.ver===m.ver) return c.tex;
+    const t=c?c.tex:gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,t);
+    const cv=m._canvas;
+    if(cv){ gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cv); }
+    else { gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
+      if(m.data && !m._loading){ m._loading=true; const im=new Image(); im.onload=()=>{ const k=document.createElement('canvas'); k.width=im.width; k.height=im.height; k.getContext('2d').drawImage(im,0,0); m._canvas=k; m.ver=(m.ver||0)+1; m._loading=false; this.dirty=true; }; im.src=m.data; } }
+    for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+    this.maskTexCache[m.id]={tex:t,ver:m.ver}; return t;
+  },
+  // sample the working (scene-linear AP1) image at a viewer pixel → linear Rec.709 (for the WB eyedropper)
+  sampleAt(px,py,L,R){
+    R=R||this.RT; if(!R.prep||!L) return null; const gl=this.gl, [u0,v0,u1,v1]=L.win;
+    const u=(px-L.ix)/L.iw, vt=(L.iy+L.ih-py)/L.ih; if(u<0||u>1||vt<0||vt>1) return null;
+    const i=Math.round((u-u0)/(u1-u0)*R.prep.w), j=Math.round((v1-vt)/(v1-v0)*R.prep.h);
+    const n=5, x0=Math.max(0,Math.min(R.prep.w-n,i-2)), y0=Math.max(0,Math.min(R.prep.h-n,j-2)), f=new Float32Array(n*n*4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,R.prep.f); gl.readPixels(x0,y0,n,n,gl.RGBA,gl.FLOAT,f); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    const a=[0,0,0]; for(let k=0;k<n*n;k++) for(let c=0;c<3;c++) a[c]+=f[k*4+c]/(n*n);
+    return CM.vec(CM.inv(CM.REC709_TO_AP1),a);
+  },
+  // white balance that makes linear-709 colour c (rendered with temp0/tint0) neutral
+  solveWB(c,temp0,tint0){
+    const W0i=CM.inv(CM.wbMatrix(temp0,tint0)), raw=CM.vec(W0i,c.map(v=>Math.max(v,1e-6)));
+    const cost=(t,ti)=>{ const v=CM.vec(CM.wbMatrix(t,ti),raw); const lr=Math.log(Math.max(v[0],1e-6)/Math.max(v[1],1e-6)), lb=Math.log(Math.max(v[2],1e-6)/Math.max(v[1],1e-6)); return lr*lr+lb*lb; };
+    let best=[temp0,tint0], bc=1e9;
+    for(let t=-100;t<=100;t+=5) for(let ti=-100;ti<=100;ti+=5){ const k=cost(t,ti); if(k<bc){ bc=k; best=[t,ti]; } }
+    for(let step of [2,1,0.5]) for(let it=0;it<6;it++){ let moved=false;
+      for(const [dt,di] of [[step,0],[-step,0],[0,step],[0,-step]]){ const t=Math.max(-100,Math.min(100,best[0]+dt)), ti=Math.max(-100,Math.min(100,best[1]+di)), k=cost(t,ti); if(k<bc){ bc=k; best=[t,ti]; moved=true; } }
+      if(!moved) break; }
+    return best.map(v=>Math.round(v));
+  },
+  autoWB(p){
+    this.histogram(p); const R=this.histRT; if(!R||!R.prep) return null; const gl=this.gl, w=R.prep.w, h=R.prep.h, f=new Float32Array(w*h*4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,R.prep.f); gl.readPixels(0,0,w,h,gl.RGBA,gl.FLOAT,f); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    const M=CM.inv(CM.REC709_TO_AP1), px=[]; for(let i=0;i<w*h;i++){ const v=CM.vec(M,[f[i*4],f[i*4+1],f[i*4+2]]); const Y=.2126*v[0]+.7152*v[1]+.0722*v[2]; if(Y>0) px.push([Y,v]); }
+    px.sort((a,b)=>a[0]-b[0]); const lo=Math.floor(px.length*.1), hi=Math.floor(px.length*.97); const a=[0,0,0];
+    // grey-world on mid/high tones, weighted toward low-saturation pixels
+    let ws=0; for(let i=lo;i<hi;i++){ const v=px[i][1], Y=px[i][0]; const s=Math.hypot(v[0]/Y-1,v[2]/Y-1); const wt=1/Math.pow(0.03+s,2.5); for(let c=0;c<3;c++) a[c]+=v[c]*wt; ws+=wt; }
+    const r=this.solveWB(a.map(x=>x/ws),p.temp,p.tint); return [Math.max(-60,Math.min(60,r[0])),Math.max(-40,Math.min(40,r[1]))];
+  },
   // ---------------------------------------------------------------- tone curve texture
   curveLUT(p){
     const key=JSON.stringify(p.curve); if(key===this.curveKey) return this.curveTex;
@@ -174,7 +222,34 @@ const Engine = {
     const [ow,oh]=this.dims(p,s,full);
     gl.uniform1f(u.uFalloff,p.falloff); gl.uniform1f(u.uAspect,ow/oh);
     gl.uniform1f(u.uTanHalfDiag, F.diag/2/(F.diag*1.15));
+    gl.uniform1f(u.uPush,p.push||0); gl.uniform1f(u.uSrcAspect,s.w/s.h);
+    const ms=(p.masks||[]).filter(m=>m&&m.on!==false).slice(0,MAX_MASKS);
+    const mt=new Int32Array(4), mA=new Float32Array(16), mB=new Float32Array(16), mC=new Float32Array(16), mW=new Float32Array(36);
+    ms.forEach((m,i)=>{ const g=m.g||{}, a=m.adj||{};
+      mt[i]= m.type==='linear'?1 : m.type==='radial'?2 : m.type==='brush'?3 : 0;
+      if(m.type==='linear') mA.set([g.x0,g.y0,g.x1,g.y1],i*4);
+      if(m.type==='radial') mA.set([g.cx,g.cy,g.rx,g.ry],i*4);
+      mB.set([g.angle||0,Math.max(0.001,(m.feather??50)/100),m.invert?1:0,(m.amount??100)/100],i*4);
+      mC.set([a.ev||0,(a.sat||0)/100,(a.contrast||0)/100,(a.clarity||0)/100],i*4);
+      const W=CM.wbMatrix(a.temp||0,a.tint||0); for(let r=0;r<3;r++) for(let c=0;c<3;c++) mW[i*9+c*3+r]=W[r*3+c];
+      if(m.type==='brush'){ const t=this.maskTex(m); gl.activeTexture(gl.TEXTURE1+i); gl.bindTexture(gl.TEXTURE_2D,t); } });
+    gl.uniform1iv(u.uMType,mt); gl.uniform4fv(u.uMA,mA); gl.uniform4fv(u.uMB,mB); gl.uniform4fv(u.uMC,mC); gl.uniformMatrix3fv(u.uMWB,false,mW);
+    gl.uniform1iv(u.uMTex,new Int32Array([1,2,3,4]));
+    for(let i=ms.length;i<4;i++){ gl.activeTexture(gl.TEXTURE1+i); gl.bindTexture(gl.TEXTURE_2D,this.borderTex); }
+    gl.activeTexture(gl.TEXTURE0);
     GLU.drawQuad();
+    // detail: noise reduction + sharpening at the working resolution (scaled to source pixels)
+    if((p.sharpen||0)>0.5 || (p.nr||0)>0.5 || (p.nrColor||0)>0.5){
+      R.prep2=GLU.ensure(R.prep2,vw,vh,'rgba16f');
+      gl.useProgram(this.P.detail.p); u=this.P.detail.u;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,R.prep2.f); gl.viewport(0,0,vw,vh);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,R.prep.t); gl.uniform1i(u.uTex,0);
+      gl.uniform2f(u.uPx,1/vw,1/vh);
+      gl.uniform1f(u.uSharp,(p.sharpen||0)/100); gl.uniform1f(u.uSRad,Math.max(0.35,(p.sharpRadius||1)*L.scale));
+      gl.uniform1f(u.uNR,(p.nr||0)/100); gl.uniform1f(u.uNRC,(p.nrColor||0)/100); gl.uniform1f(u.uNRad,Math.max(1,1.5*L.scale));
+      GLU.drawQuad();
+      const t=R.prep; R.prep=R.prep2; R.prep2=t;
+    }
     const imgPx = Math.max(L.iw,L.ih);
     const blurChain=(a,b,thr,radiusFrac)=>{
       gl.useProgram(this.P.bright.p); u=this.P.bright.u;
@@ -188,7 +263,7 @@ const Engine = {
         gl.bindFramebuffer(gl.FRAMEBUFFER,a.f); gl.bindTexture(gl.TEXTURE_2D,b.t); gl.uniform2f(u.uDir,0,step/qh); GLU.drawQuad(); }
     };
     const ahAmt = {strong:0.16, weak:0.45, none:1.5}[st.antihalation] ?? 0.3;
-    const halAmt = ahAmt*p.halation;
+    const halAmt = ahAmt*p.halation*(1+0.15*Math.max(0,p.push||0));
     if(halAmt>0.001) blurChain(R.ha,R.hb,1.6,0.006);
     if(p.glow>0.001) blurChain(R.ga,R.gb,0.0,0.03);
     gl.useProgram(this.P.final.p); u=this.P.final.u;
@@ -217,9 +292,10 @@ const Engine = {
     gl.uniform2f(u.uGBlend,p.gBlend/100,p.gBalance/100);
     const pgi=st.pgi||35; const baseAmt=Math.max(0.012,(pgi-14)/40)*0.055;
     const [gw,gh]=this.dims(p,s);
-    const fullCell = Math.max(gw,gh)/(1400/F.gauge)*(0.75+pgi/120)*p.grainSize;
+    const pu=p.push||0, pushG = pu>=0 ? 1+0.32*pu : 1+0.12*pu, pushS = pu>=0 ? 1+0.07*pu : 1+0.04*pu;
+    const fullCell = Math.max(gw,gh)/(1400/F.gauge)*(0.75+pgi/120)*p.grainSize*pushS;
     const cellOut = fullCell*L.scale;
-    gl.uniform1f(u.uGrain, p.grain*baseAmt*Math.min(1,cellOut));
+    gl.uniform1f(u.uGrain, p.grain*baseAmt*pushG*Math.min(1,cellOut));
     gl.uniform1f(u.uGrainCell, Math.max(1.0,cellOut)); gl.uniform1f(u.uGrainSoft,p.grainRough);
     gl.uniform1i(u.uMono, st.type==='bw'?1:0); gl.uniform1ui(u.uSeed,this.grainSeed);
     gl.uniform1f(u.uClip,this.showClip&&!target?1:0); gl.uniform3f(u.uBg,.071,.071,.071);
@@ -275,8 +351,20 @@ const Engine = {
 const PREP_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc; uniform vec4 uWin; uniform float uFlip,uEncoded,uDispRef,uHL,uK,uFalloff,uAspect,uTanHalfDiag;
-uniform mat3 uWB,uToAP1,uGeo;
+uniform mat3 uWB,uToAP1,uGeo; uniform float uPush,uSrcAspect;
+uniform int uMType[4]; uniform vec4 uMA[4]; uniform vec4 uMB[4]; uniform vec4 uMC[4]; uniform mat3 uMWB[4]; uniform sampler2D uMTex[4];
 in vec2 vUv; out vec4 o;
+float maskW(int i, vec2 s){
+  int t=uMType[i]; if(t==0) return 0.;
+  float w=0., fe=uMB[i].y;
+  if(t==1){ vec2 a=uMA[i].xy, b=uMA[i].zw; vec2 d=(b-a)*vec2(uSrcAspect,1.); float L2=max(dot(d,d),1e-8);
+    float k=dot((s-a)*vec2(uSrcAspect,1.),d)/L2; w=1.-smoothstep(0.,1.,k); }
+  else if(t==2){ vec2 q=(s-uMA[i].xy)*vec2(uSrcAspect,1.); float an=uMB[i].x; mat2 R=mat2(cos(an),-sin(an),sin(an),cos(an)); q=R*q;
+    vec2 r=max(uMA[i].zw*vec2(uSrcAspect,1.),vec2(1e-4)); float d=length(q/r); w=1.-smoothstep(1.-fe,1.,d); }
+  else { if(i==0) w=texture(uMTex[0],s).a; else if(i==1) w=texture(uMTex[1],s).a; else if(i==2) w=texture(uMTex[2],s).a; else w=texture(uMTex[3],s).a; }
+  if(uMB[i].z>.5) w=1.-w;
+  return clamp(w*uMB[i].w,0.,1.);
+}
 vec3 dec(vec3 c){ return mix(c/12.92, pow((c+.055)/1.055,vec3(2.4)), step(.04045,c)); }
 void main(){
   float u=mix(uWin.x,uWin.z,vUv.x), vt=mix(uWin.y,uWin.w,1.-vUv.y);
@@ -290,10 +378,44 @@ void main(){
     c*= Ye/max(Y,1e-6);
   }
   c = uWB*c*uK;
+  // push / pull: steeper (or flatter) characteristic, pushed shadows lose density
+  if(uPush!=0.){ vec3 l=log2(max(c,vec3(1e-7))/.18); c=.18*exp2(l*(1.+.09*uPush)); if(uPush>0.) c=max(c-.0012*uPush*.18,0.)*(1.+.0012*uPush); }
+  // local adjustments (gradient / radial / brush)
+  for(int i=0;i<4;i++){ float w=maskW(i,s); if(w<=0.) continue;
+    vec4 a=uMC[i];
+    vec3 m=uMWB[i]*c*exp2(a.x);
+    float Y=dot(m,vec3(.2126,.7152,.0722)); m=max(Y+(m-Y)*(1.+a.y),0.);
+    if(a.z!=0.){ vec3 l=log2(max(m,vec3(1e-7))/.18); m=.18*exp2(l*(1.+a.z*.6)); }
+    c=mix(c,m,w); }
   vec2 q=(vec2(u,vt)*2.-1.)*vec2(uAspect,1.)/length(vec2(uAspect,1.));
   float t=length(q)*uTanHalfDiag*1.6; float c2=1./(1.+t*t);
   c*=mix(1.,c2*c2,uFalloff);
   o=vec4(uToAP1*c,1.);
+}`;
+const DETAIL_FS = `#version 300 es
+precision highp float; uniform sampler2D uTex; uniform vec2 uPx; uniform float uSharp,uSRad,uNR,uNRC,uNRad; in vec2 vUv; out vec4 o;
+float lum(vec3 c){ return max(dot(c,vec3(.2722,.6741,.0537)),1e-6); }
+void main(){
+  vec3 c=texture(uTex,vUv).rgb; float Y=lum(c), lY=log2(Y);
+  vec3 chroma=c/Y;
+  // luminance NR: bilateral in log space; colour NR: wide blur of chroma
+  if(uNR>0.||uNRC>0.){
+    float sr=.08+uNR*.6; float acc=0., wsum=0.; vec3 cacc=vec3(0.); float cw=0.;
+    for(int j=-2;j<=2;j++) for(int i=-2;i<=2;i++){
+      vec3 q=texture(uTex,vUv+vec2(i,j)*uPx*uNRad).rgb; float qY=lum(q), d=log2(qY)-lY;
+      float ws=exp(-float(i*i+j*j)/4.5)*exp(-d*d/(2.*sr*sr)); acc+=log2(qY)*ws; wsum+=ws;
+      vec3 qc=texture(uTex,vUv+vec2(i,j)*uPx*uNRad*2.).rgb; float wc=exp(-float(i*i+j*j)/8.)*exp(-pow(log2(lum(qc))-lY,2.)/0.5); cacc+=qc/lum(qc)*wc; cw+=wc; }
+    lY=mix(lY,acc/wsum,clamp(uNR*1.2,0.,1.));
+    chroma=mix(chroma,cacc/cw,clamp(uNRC,0.,1.));
+  }
+  // sharpening: unsharp mask on log luminance, edge-limited so grain and noise aren't boosted as much
+  if(uSharp>0.){
+    float b=0., w=0.;
+    for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ float k=(i==0&&j==0)?4.:(i==0||j==0)?2.:1.; b+=log2(lum(texture(uTex,vUv+vec2(i,j)*uPx*uSRad).rgb))*k; w+=k; }
+    float d=lY-b/w; float lim=.35; d=clamp(d,-lim,lim);
+    lY+=d*uSharp*1.6;
+  }
+  o=vec4(chroma*exp2(lY),1.);
 }`;
 const BRIGHT_FS = `#version 300 es
 precision highp float; uniform sampler2D uTex; uniform float uThr; in vec2 vUv; out vec4 o;
