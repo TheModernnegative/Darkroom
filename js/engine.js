@@ -2,9 +2,9 @@
 // → tone (Basic, curve, HSL, colour grading) → grain → frame.  Output: Display P3 (or sRGB fallback).
 const HSL_BANDS = [['Red',0],['Orange',30],['Yellow',60],['Green',120],['Aqua',180],['Blue',225],['Purple',270],['Magenta',315]];
 const DEFAULTS = {
-  stock:'kodak_portra_400', paper:null, filmAmt:100, format:'35mm', autoExp:true, ev:0, temp:0, tint:0, hlExpand:0.55,
+  stock:'original', paper:null, filmAmt:100, format:'35mm', autoExp:true, ev:0, temp:0, tint:0, hlExpand:0.55,
   contrast:0, highlights:0, shadows:0, whites:0, blacks:0, vibrance:0, saturation:0,
-  grain:1, grainSize:1, grainRough:0.35, halation:1, glow:0, falloff:0.35, border:'none',
+  grain:0, grainSize:1, grainRough:0.35, halation:0, glow:0, falloff:0, border:'none',
   crop:{x:0,y:0,w:1,h:1}, angle:0, rot:0, flip:false, aspect:'free',
   curve:{m:[[0,0],[1,1]], r:[[0,0],[1,1]], g:[[0,0],[1,1]], b:[[0,0],[1,1]]},
   hslH:[0,0,0,0,0,0,0,0], hslS:[0,0,0,0,0,0,0,0], hslL:[0,0,0,0,0,0,0,0],

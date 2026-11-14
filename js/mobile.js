@@ -6,7 +6,7 @@ const M = {
     try{ Engine.init($('#view')); }catch(e){ $('#empty').innerHTML='<div class="big">This needs a newer iPhone browser (WebGL 2).</div>'; return; }
     Engine.pad=6;
     await Engine.loadManifest();
-    try{ this.presets=JSON.parse(localStorage.getItem('dr.presets')||'[]'); const last=JSON.parse(localStorage.getItem('dr.last')||'null'); if(last){ Engine.p=withDefaults(last); PER_PHOTO_KEYS.forEach(k=>Engine.p[k]=cloneParams(DEFAULTS[k])); } }catch(e){}
+    try{ this.presets=JSON.parse(localStorage.getItem('dr.presets')||'[]'); const last=JSON.parse(localStorage.getItem('dr.last')||'null');  }catch(e){}
     await Engine.ensureLuts(Engine.p);
     this.kit(); Tools.init(this); Studio.init(this); this.bind(); this.showTab('film'); this.title();
     if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -23,7 +23,7 @@ const M = {
     try{
       const src=await this.decode(f, 2048);
       if(Engine.src) Engine.gl.deleteTexture(Engine.src.tex);
-      PER_PHOTO_KEYS.filter(k=>!['ev','temp','tint'].includes(k)).forEach(k=>Engine.p[k]=cloneParams(DEFAULTS[k])); delete Engine.p.cropPortrait;
+      Engine.p=withDefaults({}); await Engine.ensureLuts(Engine.p);   // every new photo starts untouched
       Engine.setSource(src); $('#empty').classList.add('off'); $('#btnSave').disabled=false;
       this.activePreset=null; this.dots(); Tools.maskSel=null; Engine.maskTexCache={};
       this.hist=[JSON.stringify(Engine.p)]; this.fut=[]; this.hires=null; this.hiresLoading=null; Engine.view={mode:'fit',cx:.5,cy:.5}; this.setCompare(null);
@@ -145,6 +145,8 @@ const M = {
       this.toggle(pane,'Show frame / border',()=>p.border!=='none'&&!(p.off&&p.off.frame),v=>{ p.off=Object.assign({},p.off||{}); if(v){ delete p.off.frame; if(p.border==='none'){ p.border=(Engine.stock(p.stock).defaults||{}).border||'35mm'; } } else p.off.frame=true; this.changed(); this.commit(); });
       S('push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box speed':(x>0?'Push +':'Pull −')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
       this.toggle(pane,'Auto exposure (lab metering)',()=>p.autoExp,v=>{ p.autoExp=v; this.changed(); this.commit(); });
+      this.head(pane,'Grain',['grain','grainSize','grainRough'],['grain']);
+      S('grain','Amount',{min:0,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainSize','Size',{min:0.4,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainRough','Softness',{min:0.05,max:0.8,step:0.01,fmt:x=>Math.round(x*100)});
     } else if(t==='light'){
       this.head(pane,'Light',['ev','contrast','highlights','shadows','whites','blacks'],['tone']);
       S('ev','Exposure',{min:-4,max:4,step:0.01,fmt:x=>(x>0?'+':'')+x.toFixed(2)});
@@ -172,8 +174,6 @@ const M = {
     } else if(t==='effects'){
       this.head(pane,'Detail',['sharpen','sharpRadius','nr','nrColor'],['detail']);
       S('sharpen','Sharpening',{min:0,max:150,step:1}); S('nr','Noise reduction',{min:0,max:100,step:1}); S('nrColor','Color noise',{min:0,max:100,step:1});
-      this.head(pane,'Grain',['grain','grainSize','grainRough'],['grain']);
-      S('grain','Amount',{min:0,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainSize','Size',{min:0.4,max:3,step:0.01,fmt:x=>Math.round(x*100)}); S('grainRough','Softness',{min:0.05,max:0.8,step:0.01,fmt:x=>Math.round(x*100)});
       this.head(pane,'Light & lens',['halation','glow','falloff','softness'],['halation','lens']);
       S('halation','Halation',{min:0,max:4,step:0.01,fmt:x=>Math.round(x*100)}); S('glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)}); S('falloff','Lens falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)}); S('softness','Softness',{min:0,max:100,step:1});
       this.head(pane,'Frame',null,['frame']);

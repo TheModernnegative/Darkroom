@@ -1,7 +1,7 @@
 // Splat Darkroom — application.
 const $ = s=>document.querySelector(s);
 const App = {
-  items:[], scans:[], cur:null, module:'develop', lastStock:'kodak_portra_400', clipboard:null, scanItem:null,
+  items:[], scans:[], cur:null, module:'develop', lastStock:'original', clipboard:null, scanItem:null,
   scanRT:null, scanKey:null, editMax:6144,
 
   async start(){
@@ -73,7 +73,7 @@ const App = {
     S(b,'nr','Luminance',{min:0,max:100,step:1});
     S(b,'nrColor','Color',{min:0,max:100,step:1});
     UI.note(b,'Clean up phone noise first, then add film grain on top. Judge sharpening and noise at 1:1 (Z).');
-    // Grain
+    // Grain (placed right under Film below)
     b=UI.panel(root,'pGrain','Grain',true,()=>{ ['grain','grainSize','grainRough'].forEach(k=>P()[k]=DEFAULTS[k]); this.changed(); this.commit(); UI.refresh(); });
     S(b,'grain','Amount',{min:0,max:3,step:0.01,fmt:x=>Math.round(x*100)});
     S(b,'grainSize','Size',{min:0.4,max:3,step:0.01,fmt:x=>Math.round(x*100)});
@@ -100,6 +100,7 @@ const App = {
     UI.sliders.edgeCustom=()=>{ if(document.activeElement!==ci) ci.value=P().edgeCustom||''; ct.style.display=P().edgeText==='custom'?'':'none'; };
     S(b,'frameNo','Frame number',{min:0,max:38,step:1,fmt:x=>x?String(Math.round(x)):'Auto'});
     UI.note(b,'Edge print, frame numbers and DX code appear on the 35mm border; 120 and 4×5 show the edge text.');
+    root.insertBefore($('#pGrain'),$('#pFilm').nextSibling);
   },
 
   buildScanPanels(){
@@ -313,7 +314,7 @@ const App = {
   async applySettings(s){ Engine.p=withDefaults(s); setTimeout(()=>Tools.renderMasks(),0); if(this.cur) this.cur.settings=Engine.p; await Engine.ensureLuts(Engine.p); UI.refresh(); UI.markPreset(Engine.p.stock); this.updateStockNote(); Engine.dirty=true; this.thumbSoon(); this.saveSoon(); },
 
   // ================================================================ library
-  newItem(o){ const it=Object.assign({id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), settings:withDefaults({stock:this.lastStock}), thumb:null, hist:[], fut:[]},o);
+  newItem(o){ const it=Object.assign({id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), settings:withDefaults({}), thumb:null, hist:[], fut:[]},o);
     it.hist=[JSON.stringify(it.settings)]; this.items.push(it); return it; },
   async addPaths(paths){
     let first=null;

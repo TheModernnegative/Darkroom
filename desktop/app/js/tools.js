@@ -355,7 +355,8 @@ const Tools = {
   // returns a copy of p switched to stock id, with the new stock's defaults applied where the user hasn't changed things
   stockParams(p,id,applyAspect){
     const prev=Engine.stock(p.stock), next=Engine.stock(id), o=cloneParams(p); o.stock=id; o.paper=null;
-    const pd=prev.defaults||{}, nd=next.defaults||{}, same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    const FILM_BASE={grain:1,halation:1,falloff:0.35};   // what choosing any real film brings (until you change it)
+    const pd=Object.assign({},prev.type!=='original'?FILM_BASE:{},prev.defaults||{}), nd=Object.assign({},next.type!=='original'?FILM_BASE:{},next.defaults||{}), same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
     for(const k in pd){ if(k==='aspect'||k==='frameTone') continue; if(!(k in nd) && same(o[k],pd[k])) o[k]=cloneParams(DEFAULTS[k]); }
     if(Borders.isInstant(o.border) && !Borders.isInstant(nd.border||'none') && !('border' in nd)) o.border='none';
     for(const k in nd){ if(k==='aspect'){ continue; } if(k==='frameTone'){ continue; }
