@@ -8,7 +8,7 @@ const M = {
     await Engine.loadManifest();
     try{ this.presets=JSON.parse(localStorage.getItem('dr.presets')||'[]'); const last=JSON.parse(localStorage.getItem('dr.last')||'null'); if(last){ Engine.p=withDefaults(last); PER_PHOTO_KEYS.forEach(k=>Engine.p[k]=cloneParams(DEFAULTS[k])); } }catch(e){}
     await Engine.ensureLuts(Engine.p);
-    this.kit(); Tools.init(this); this.bind(); this.showTab('film'); this.title();
+    this.kit(); Tools.init(this); Studio.init(this); this.bind(); this.showTab('film'); this.title();
     if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
     const loop=()=>{ if(Engine.dirty&&Engine.src){ Engine.dirty=false; const p=Engine.hoverParams||Engine.p; this._lastL=Engine.layout(p);
         if(this.compare&&!Engine.cropMode){ Engine.renderSplit(this.compare.settings,p,(L,pp)=>pp.border==='none'?null:Borders.texture(pp.border,L.fw,L.fh,L.b,Engine.stock(pp.stock),this.edgeP(pp))); }
@@ -76,7 +76,7 @@ const M = {
   },
   // ----------------------------------------------------------------- edits
   thumbSoon(){},
-  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
+  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; { const q=Engine.p; e.studio=!!(q.silver||q.ttOn||q.dblId||q.leakAmt||q.dustAmt||q.scratchAmt||q.hairAmt||q.zoomBlur||q.motionBlur||q.softEdges||q.tiltShift||q.fringe); } document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
   changed(){ Engine.dirty=true; this.title(); clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),100); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
   commit(){ const s=JSON.stringify(Engine.p); if(this.hist[this.hist.length-1]!==s){ this.hist.push(s); this.fut=[]; if(this.hist.length>100) this.hist.shift(); } },
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
@@ -89,7 +89,7 @@ const M = {
     const sp=h.querySelector('span'); sp.after(b); },
   kit(){
     const M=this;
-    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks']};
+    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks'],sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak'],sDust:['dust'],sLens:['lensfx']};
     UI.panel=(parent,id,title,open,reset)=>{ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(reset?'<button class="rst">Reset</button>':''); if(SEC[id]) M.secSwitch(h,SEC[id]);
       if(reset) h.querySelector('.rst').onclick=()=>{ reset(); M.showTab(M.tab,true); }; parent.appendChild(h); const b=document.createElement('div'); parent.appendChild(b); return b; };
     UI.slider=(parent,key,label,o)=>M.slider(parent,key,label||'',o);
@@ -180,6 +180,15 @@ const M = {
       if(p.border!=='none'){ this.seg(pane,'Frame color',[['auto','Auto'],['white','White'],['cream','Cream'],['black','Black']],()=>p.frameTone||'auto',v=>{ p.frameTone=v; this.changed(); this.commit(); });
         this.seg(pane,'Edge print',[['stock','Film stock'],['custom','Custom'],['none','None']],()=>p.edgeText,v=>{ p.edgeText=v; this.changed(); this.commit(); this.showTab('effects',true); });
         if(p.edgeText==='custom'){ const r=document.createElement('div'); r.className='pnew'; r.innerHTML='<input placeholder="Your edge text" maxlength="40">'; const i=r.querySelector('input'); i.value=p.edgeCustom||''; i.oninput=()=>{ p.edgeCustom=i.value; this.changed(); }; i.onchange=()=>this.commit(); pane.appendChild(r); } }
+    } else if(t==='studio'){
+      const h=document.createElement('div'); h.className='paneHead'; h.innerHTML='<span>Recipes</span><button class="rst">Clear all</button>'; h.querySelector('.rst').onclick=()=>{ Studio.resetAll(); this.showTab('studio',true); }; pane.appendChild(h);
+      const rl=document.createElement('div'); rl.className='recipes'; pane.appendChild(rl);
+      STUDIO_RECIPES.forEach(([name,r])=>{ const b=document.createElement('button'); b.className='rcp'; b.textContent=name; b.onclick=()=>{ Studio.applyRecipe(r,name); this.showTab('studio',true); }; rl.appendChild(b); });
+      const on=k=>Tools.edited ? false : false;
+      [['sSilver','Silver — Black & White',p.silver?'On':'B&W with real colour filters, structure, toning'],['sTwoTone','Two-Tone Flash',p.ttOn?'On':'Red/cyan gel ghost'],
+       ['sDouble','Double Exposure',p.dblId?'On':'Blend a second photo'],['sLeak','Light Leaks',p.leakAmt?'On':'Warm edge flares'],
+       ['sDust','Dust & Scratches',(p.dustAmt||p.scratchAmt||p.hairAmt)?'On':'Specks, scratches, hair'],['sLens','Lens Effects',(p.zoomBlur||p.motionBlur||p.softEdges||p.tiltShift||p.fringe)?'On':'Zoom, motion, tilt-shift, fringing']]
+        .forEach(([id,title,sub])=>this.toolRow(pane,title,sub,()=>this.openTool(title,b=>Studio.build(b,id)),sub==='On'));
     } else if(t==='presets'){
       const vh=document.createElement('div'); vh.className='paneHead'; vh.innerHTML='<span>Versions of this photo</span><button>+ Save version</button>'; vh.querySelector('button').onclick=()=>this.addVersion(); pane.appendChild(vh);
       if(!(this.versions||[]).length){ const n=document.createElement('div'); n.className='note'; n.textContent='Save a version, try another film or edit, then tap A|B at the top to see them side by side.'; pane.appendChild(n); }
@@ -324,6 +333,10 @@ const M = {
   // ----------------------------------------------------------------- tool editors that take over the panel (no accidental drags while scrolling)
   openTool(title,build){ this.toolOpen=true; $('#tsTitle').textContent=title; const b=$('#tsBody'); b.innerHTML=''; UI.sliders={}; build(b); $('#toolSheet').classList.add('on'); },
   closeTool(){ $('#toolSheet').classList.remove('on'); this.toolOpen=false; if(Tools.maskEdit) Tools.setMaskEdit(false); this.commit(); this.showTab(this.tab,true); },
+  doubleChooser(b){ const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r);
+    UI.button(r,Engine.p.dblId?'Change second photo…':'Choose second photo…',()=>{ const i=document.createElement('input'); i.type='file'; i.accept='image/*';
+      i.onchange=async()=>{ const f=i.files[0]; if(!f) return; this.busy('Opening…'); try{ const src=await this.decode(f,3072); src.own=true; const id='file:'+f.name+':'+f.size; Engine.setDouble(src,id); Engine.p.dblId=id; this.changed(); this.commit(); }catch(e){ this.toast('Could not open'); } this.busy(); }; i.click(); });
+    if(Engine.p.dblId) UI.button(r,'Remove',()=>{ Engine.p.dblId=''; Engine.setDouble(null); this.changed(); this.commit(); this.closeTool(); }); },
   toolRow(parent,title,sub,fn,changed){ const d=document.createElement('button'); d.className='toolRow'+(changed?' changed':''); d.innerHTML=`<span><b></b><small></small></span><i>›</i>`;
     d.querySelector('b').textContent=title; d.querySelector('small').textContent=sub; d.onclick=fn; parent.appendChild(d); },
   // ----------------------------------------------------------------- versions of this photo + A|B compare

@@ -174,6 +174,11 @@ nav button.on i{color:var(--accent)}
 .secTog{margin-left:8px;margin-right:auto;height:20px;min-width:36px;border-radius:10px;background:#2b2b2b;color:#ddd;font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:0 8px}
 .secTog.off{background:#e0533d33;color:#ff8a78}
 .paneHead.secoff>span{opacity:.5}
+.recipes{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.rcp{background:#232323;border-radius:16px;padding:7px 12px;font-size:12.5px;color:var(--text)}
+.rcp:active{background:#3d4a5e}
+#tabs button i{font-style:normal}
+#tabs button{font-size:10.5px}
 </style>
 </head>
 <body>
@@ -206,6 +211,7 @@ nav button.on i{color:var(--accent)}
       <button data-t="color"><i>◑</i>Color</button>
       <button data-t="crop"><i>⌗</i>Crop</button>
       <button data-t="effects"><i>✦</i>Effects</button>
+      <button data-t="studio"><i>✺</i>Studio</button>
       <button data-t="presets"><i>☰</i>Presets</button>
     </nav>
   </div>
@@ -223,6 +229,7 @@ nav button.on i{color:var(--accent)}
 <script src="js/borders.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/tools.js"></script>
+<script src="js/studio.js"></script>
 <script src="js/mobile.js"></script>
 </body>
 </html>

@@ -9,6 +9,14 @@ const DEFAULTS = {
   curve:{m:[[0,0],[1,1]], r:[[0,0],[1,1]], g:[[0,0],[1,1]], b:[[0,0],[1,1]]},
   hslH:[0,0,0,0,0,0,0,0], hslS:[0,0,0,0,0,0,0,0], hslL:[0,0,0,0,0,0,0,0],
   edgeText:'stock', edgeCustom:'', frameNo:0, frameTone:'auto',
+  // Studio — Silver (B&W lab)
+  silver:false, sFilterHue:30, sFilterAmt:0, structure:0, sBurn:0, sBurnSize:40, sTone:'none', sToneAmt:60,
+  // Studio — Analog
+  dblId:'', dblMode:'add', dblAmt:60, dblEv:0, dblScale:1, dblX:0, dblY:0, dblRot:0, dblFlip:false, dblMask:0,
+  leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
+  dustAmt:0, scratchAmt:0, hairAmt:0, dustSeed:7, dustKind:'scan',
+  ttOn:false, ttPalette:'red-cyan', ttGhost:80, ttMono:85, ttDX:6, ttDY:-4, ttScale:100, ttBand:0, ttBandPos:45,
+  zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
   gShH:220, gShS:0, gShL:0, gMidH:40, gMidS:0, gMidL:0, gHiH:45, gHiS:0, gHiL:0, gBlend:50, gBalance:0,
 };
@@ -17,7 +25,14 @@ const MAX_MASKS = 4;
 // sections that can be switched off without losing their settings (p.off = {grain:true, …})
 const SECTIONS = { film:['filmAmt','push'], wb:['temp','tint'], tone:['ev','contrast','highlights','shadows','whites','blacks'], presence:['vibrance','saturation'],
   curve:['curve'], hsl:['hslH','hslS','hslL'], grade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'], detail:['sharpen','nr','nrColor'],
-  grain:['grain'], halation:['halation','glow'], lens:['falloff'], frame:['border'], masks:['masks'] };
+  grain:['grain'], halation:['halation','glow'], lens:['falloff'], frame:['border'], masks:['masks'],
+  silver:['silver','sFilterAmt','structure','sBurn'], dbl:['dblId'], leak:['leakAmt'], dust:['dustAmt','scratchAmt','hairAmt'],
+  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe'], twotone:['ttOn'] };
+const TT_PALETTES = { 'red-cyan':['#ff1a24','#12e6e0'], 'magenta-green':['#ff2bd0','#2bff6a'], 'blue-orange':['#2a6bff','#ff8a1a'], 'pink-blue':['#ff5aa8','#3a8bff'], 'purple-yellow':['#9a3cff','#ffd21a'], 'red-blue':['#ff2020','#2a4dff'] };
+const TONERS = { none:null, selenium:['#36303a','#f1f0f0'], sepia:['#3d2614','#f5e7d0'], gold:['#1d2a3c','#eef2f6'], platinum:['#2c2420','#f3ece1'],
+  cyanotype:['#0c2550','#e6f0fa'], split:['#1a2840','#f6e5c6'], copper:['#43201a','#f6e2d6'], tintype:['#2a2418','#cfc6a8'], ambrotype:['#1e1a14','#e2d6b8'] };
+const LEAK_COLORS = { warm:['#ff5a1a','#ffd27a'], red:['#ff1f10','#ff9a60'], yellow:['#ff9d00','#fff3a0'], magenta:['#ff2a8a','#ffb0d8'], blue:['#2a5cff','#bfe0ff'] };
+const LEAK_POS = [[0,.5],[1,.5],[.5,0],[.5,1],[0,0],[1,0],[0,1],[1,1]];
 function cloneParams(p){ return JSON.parse(JSON.stringify(p)); }
 function withDefaults(p){ return Object.assign(cloneParams(DEFAULTS), cloneParams(p||{})); }
 const FORMATS = { '35mm':{gauge:2.4,diag:43.3,label:'35mm'}, '645':{gauge:1.6,diag:69.8,label:'6×4.5'}, '6x7':{gauge:1.35,diag:89.6,label:'6×7'}, '4x5':{gauge:1.0,diag:162.6,label:'4×5'} };
@@ -35,6 +50,7 @@ const Engine = {
       blur: GLU.program(GLU.QUAD_VS, BLUR_FS),
       final: GLU.program(GLU.QUAD_VS, FINAL_FS),
       detail: GLU.program(GLU.QUAD_VS, DETAIL_FS),
+      fx: GLU.program(GLU.QUAD_VS, FX_FS),
     };
     this.borderTex = GLU.tex2D(1,1,'rgba8',new Uint8Array([0,0,0,0]));
     this.curveTex = GLU.tex2D(256,1,'rgba16f',null);
@@ -55,7 +71,7 @@ const Engine = {
     if(!buf || buf.byteLength!==N*N*N*6){
       const j=await (await fetch('data/luts/'+name+'.json')).json(); const bin=atob(j.b64);
       const u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); buf=u8.buffer; }
-    const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D,t);
+    const t=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_3D,t);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
     gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB16F,N,N,N,0,gl.RGB,gl.HALF_FLOAT,new Uint16Array(buf));
     for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_R,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_3D,k,v);
@@ -108,13 +124,47 @@ const Engine = {
     return {x:mx-c.w*lo/2,y:my-c.h*lo/2,w:c.w*lo,h:c.h*lo};
   },
 
+  // Silver colour filters: hue → per-channel transmission (like a Wratten filter, grey kept)
+  // → panchromatic B&W weights seen through the filter (neutral greys keep their exposure)
+  filterRGB(h,a){ const r=Math.max(0,Math.cos((h-0)*Math.PI/180)), g=Math.max(0,Math.cos((h-120)*Math.PI/180)), b=Math.max(0,Math.cos((h-240)*Math.PI/180));
+    const c=[.18+r,.18+g,.18+b], m=Math.max(...c), t=c.map(v=>1+(v/m-1)*Math.min(1,a)), L=[.24,.67,.09];
+    const w=L.map((l,i)=>l*Math.max(0.03,t[i])), sw=w[0]+w[1]+w[2]; return w.map(v=>v/sw); },
+  // output frame uv → second photo uv ("cover" fit, then offset / rotate / scale / flip)
+  dblMatrix(p,A,B){
+    const ovW = B>=A ? B : A, ovH = B>=A ? 1 : A/B, a=-(p.dblRot||0)*Math.PI/180, c=Math.cos(a), s=Math.sin(a), k=1/Math.max(0.05,p.dblScale||1);
+    const T1=[A,0,-A/2-(p.dblX||0)*A, 0,1,-.5-(p.dblY||0), 0,0,1];              // to centred frame units, minus offset
+    const R=[c*k,-s*k,0, s*k,c*k,0, 0,0,1];
+    const T2=[(p.dblFlip?-1:1)/ovW,0,.5, 0,1/ovH,.5, 0,0,1];
+    return CM.mul(T2,CM.mul(R,T1)); },
+  // photo used as the second exposure (desktop: a library item; phone: a picked file)
+  setDouble(src,id){ if(this.dblSrc&&this.dblSrc.own&&this.dblSrc.tex!==src?.tex) this.gl.deleteTexture(this.dblSrc.tex); this.dblSrc=src?Object.assign({},src,{id}):null; this.dirty=true; },
+  // dust / scratches / hair: drawn once per seed into a tiling texture
+  dustTex(p){
+    const key=[p.dustSeed,Math.round(p.dustAmt),Math.round(p.scratchAmt),Math.round(p.hairAmt)].join('|');
+    if(this._dust&&this._dust.key===key) return this._dust.tex;
+    const N=2048, c=document.createElement('canvas'); c.width=N; c.height=N; const x=c.getContext('2d');
+    let sd=(p.dustSeed|0)*7919+13; const r=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+    x.clearRect(0,0,N,N); x.fillStyle='#fff'; x.strokeStyle='#fff'; x.lineCap='round';
+    const nd=Math.round((p.dustAmt||0)*6);
+    for(let i=0;i<nd;i++){ const px=r()*N, py=r()*N, rad=Math.pow(r(),3)*5+0.6; x.globalAlpha=0.35+r()*0.65; x.beginPath();
+      if(r()<0.7) x.arc(px,py,rad,0,7); else { x.ellipse(px,py,rad*(1+r()*3),rad*(0.4+r()*0.6),r()*7,0,7); } x.fill(); }
+    const ns=Math.round((p.scratchAmt||0)/12);
+    for(let i=0;i<ns;i++){ let px=r()*N, py=r()*N*0.2; x.globalAlpha=0.25+r()*0.5; x.lineWidth=0.6+r()*1.4; x.beginPath(); x.moveTo(px,py);
+      const len=N*(0.25+r()*0.9); for(let t=0;t<len;t+=20){ px+=(r()-.5)*1.5; py+=20; x.lineTo(px,py); } x.stroke(); }
+    const nh=Math.round((p.hairAmt||0)/10);
+    for(let i=0;i<nh;i++){ let px=r()*N, py=r()*N, a=r()*7; x.globalAlpha=0.5+r()*0.5; x.lineWidth=0.8+r()*1.2; x.beginPath(); x.moveTo(px,py);
+      for(let k=0;k<40;k++){ a+=(r()-.5)*0.5; px+=Math.cos(a)*4; py+=Math.sin(a)*4; x.lineTo(px,py); } x.stroke(); }
+    const gl=this.gl, t=this._dust?this._dust.tex:gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+    for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.REPEAT],[gl.TEXTURE_WRAP_T,gl.REPEAT]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+    this._dust={key,tex:t}; return t; },
   // brush masks: painted at up to 1024px (source aspect), stored as a PNG data-URL in the edit
   maskTexCache:{},
   maskTex(m){
     const gl=this.gl, c=this.maskTexCache[m.id];
     if(c && c.ver===m.ver) return c.tex;
     const t=c?c.tex:gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
     const cv=m._canvas;
     if(cv){ gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cv); }
     else { gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
@@ -170,7 +220,7 @@ const Engine = {
     const data=new Uint16Array(256*4), cl=v=>Math.min(1,Math.max(0,v));
     for(let i=0;i<256;i++){ const mm=cl(M(i/255));
       data[i*4]=CM.toHalf(cl(R(mm))); data[i*4+1]=CM.toHalf(cl(G(mm))); data[i*4+2]=CM.toHalf(cl(B(mm))); data[i*4+3]=CM.toHalf(1); }
-    const gl=this.gl; gl.bindTexture(gl.TEXTURE_2D,this.curveTex); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,256,1,0,gl.RGBA,gl.HALF_FLOAT,data);
+    const gl=this.gl; gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,this.curveTex); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,256,1,0,gl.RGBA,gl.HALF_FLOAT,data);
     this.curveKey=key; return this.curveTex;
   },
   curveIsIdentity(p){ const id=c=>c.length===2&&c[0][0]===0&&c[0][1]===0&&c[1][0]===1&&c[1][1]===1; return id(p.curve.m)&&id(p.curve.r)&&id(p.curve.g)&&id(p.curve.b); },
@@ -243,6 +293,25 @@ const Engine = {
       if(m.type==='brush'){ const t=this.maskTex(m); gl.activeTexture(gl.TEXTURE1+i); gl.bindTexture(gl.TEXTURE_2D,t); } });
     gl.uniform1iv(u.uMType,mt); gl.uniform4fv(u.uMA,mA); gl.uniform4fv(u.uMB,mB); gl.uniform4fv(u.uMC,mC); gl.uniformMatrix3fv(u.uMWB,false,mW);
     gl.uniform1iv(u.uMTex,new Int32Array([1,2,3,4]));
+    // Silver colour filter (a real filter in front of the lens: scales each channel's exposure)
+    { const f = Engine.filterRGB(p.sFilterHue,p.silver?p.sFilterAmt/100:0); gl.uniform3f(u.uFilt,...f); gl.uniform1f(u.uSilverPre,p.silver?1:0); }
+    // double exposure: second photo added in exposure space, before the film
+    const s2 = p.dblId && this.dblSrc && this.dblSrc.id===p.dblId ? this.dblSrc : null;
+    gl.uniform1f(u.uDblOn, s2?1:0);
+    if(s2){ gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,s2.tex); gl.uniform1i(u.uDbl,5);
+      gl.uniformMatrix3fv(u.uDblM,true,new Float32Array(this.dblMatrix(p,ow/oh,s2.w/s2.h)));
+      gl.uniform1i(u.uDblMode,{add:0,screen:1,lighten:2,multiply:3,silhouette:4,darken:5}[p.dblMode]||0);
+      gl.uniform1f(u.uDblAmt,p.dblAmt/100); gl.uniform1f(u.uDblK,(s2.key?Math.min(16,Math.max(1/16,0.18*0.62/s2.key)):1)*Math.pow(2,p.dblEv||0)*Math.pow(2,p.ev));
+      gl.uniform1f(u.uDblEnc,s2.encoded?1:0); gl.uniform1f(u.uDblDisp,s2.dispRef?1:0); gl.uniform1f(u.uDblMask,(p.dblMask||0)/100); gl.uniform1f(u.uDblFlipY,s2.flipY?1:0); }
+    else { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,this.borderTex); gl.uniform1i(u.uDbl,5); }
+    gl.activeTexture(gl.TEXTURE0);
+    { const lc=LEAK_COLORS[p.leakColor]||LEAK_COLORS.warm, L2=c=>{ const h=c.slice(1); return [0,2,4].map(i=>{ const v=parseInt(h.substr(i,2),16)/255; return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4); }); };
+      { const T=TT_PALETTES[p.ttPalette]||TT_PALETTES['red-cyan'], L2=c=>{ const h=c.slice(1); return [0,2,4].map(i=>{ const v=parseInt(h.substr(i,2),16)/255; return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4); }); }, nz=c=>{ const y=.2126*c[0]+.7152*c[1]+.0722*c[2]; return c.map(v=>v/y*0.62); };
+        gl.uniform1f(u.uTT,p.ttOn?1:0); gl.uniform3f(u.uTTA,...nz(L2(T[0]))); gl.uniform3f(u.uTTB,...nz(L2(T[1])));
+        gl.uniform4f(u.uTTP,(p.ttDX||0)/100,(p.ttDY||0)/100,Math.max(0.2,(p.ttScale||100)/100),(p.ttGhost??80)/100);
+        gl.uniform3f(u.uTTM,(p.ttMono??85)/100,(p.ttBand||0)/100,(p.ttBandPos??45)/100); }
+      gl.uniform1f(u.uLeakAmt,(p.leakAmt||0)/100); gl.uniform3f(u.uLeakC1,...L2(lc[0])); gl.uniform3f(u.uLeakC2,...L2(lc[1]));
+      const lp=LEAK_POS[p.leakPos|0]||LEAK_POS[1]; gl.uniform2f(u.uLeakP,lp[0],lp[1]); gl.uniform1f(u.uLeakSize,(p.leakSize||45)/100); gl.uniform1f(u.uLeakSeed,p.leakSeed||0); }
     for(let i=ms.length;i<4;i++){ gl.activeTexture(gl.TEXTURE1+i); gl.bindTexture(gl.TEXTURE_2D,this.borderTex); }
     gl.activeTexture(gl.TEXTURE0);
     GLU.drawQuad();
@@ -255,6 +324,18 @@ const Engine = {
       gl.uniform2f(u.uPx,1/vw,1/vh);
       gl.uniform1f(u.uSharp,(p.sharpen||0)/100); gl.uniform1f(u.uSRad,Math.max(0.35,(p.sharpRadius||1)*L.scale));
       gl.uniform1f(u.uNR,(p.nr||0)/100); gl.uniform1f(u.uNRC,(p.nrColor||0)/100); gl.uniform1f(u.uNRad,Math.max(1,1.5*L.scale));
+      GLU.drawQuad();
+      const t=R.prep; R.prep=R.prep2; R.prep2=t;
+    }
+    // lens effects: zoom / motion blur, soft edges, tilt-shift, colour fringing (in image units)
+    if(p.zoomBlur>0.5||p.motionBlur>0.5||p.softEdges>0.5||p.tiltShift>0.5||p.fringe>0.5){
+      R.prep2=GLU.ensure(R.prep2,vw,vh,'rgba16f');
+      gl.useProgram(this.P.fx.p); u=this.P.fx.u;
+      gl.bindFramebuffer(gl.FRAMEBUFFER,R.prep2.f); gl.viewport(0,0,vw,vh);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,R.prep.t); gl.uniform1i(u.uTex,0);
+      gl.uniform4f(u.uWin,u0,v0,u1,v1); gl.uniform1f(u.uAspect,ow/oh);
+      gl.uniform1f(u.uZoom,p.zoomBlur/100*0.12); gl.uniform2f(u.uMotion,Math.cos(p.motionAngle*Math.PI/180)*p.motionBlur/100*0.06,-Math.sin(p.motionAngle*Math.PI/180)*p.motionBlur/100*0.06);
+      gl.uniform1f(u.uSoft,p.softEdges/100*0.025); gl.uniform3f(u.uTilt,p.tiltShift/100*0.025,p.tiltPos/100,p.tiltWidth/100); gl.uniform1f(u.uFringe,p.fringe/100*0.008);
       GLU.drawQuad();
       const t=R.prep; R.prep=R.prep2; R.prep2=t;
     }
@@ -274,6 +355,8 @@ const Engine = {
     const halAmt = ahAmt*p.halation*(1+0.15*Math.max(0,p.push||0));
     if(halAmt>0.001) blurChain(R.ha,R.hb,1.6,0.006);
     if(p.glow>0.001) blurChain(R.ga,R.gb,0.0,0.03);
+    const doStruct = p.silver && Math.abs(p.structure||0)>0.5;
+    if(doStruct){ R.sa=GLU.ensure(R.sa,qw,qh); R.sb=GLU.ensure(R.sb,qw,qh); blurChain(R.sa,R.sb,0.0,0.012); }
     gl.useProgram(this.P.final.p); u=this.P.final.u;
     if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target.f); gl.viewport(0,0,target.w,target.h); }
     else { gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,L.W,L.H); }
@@ -281,6 +364,13 @@ const Engine = {
     bind(0,gl.TEXTURE_2D,R.prep.t,'uPrep'); bind(1,gl.TEXTURE_2D,R.ha.t,'uHal'); bind(2,gl.TEXTURE_2D,R.ga.t,'uGlowTex');
     bind(3,gl.TEXTURE_3D,lut||null,'uLut'); bind(4,gl.TEXTURE_2D,s.tex,'uSrc'); bind(5,gl.TEXTURE_2D,opts.borderTex||this.borderTex,'uBorder');
     bind(6,gl.TEXTURE_2D,this.curveLUT(p),'uCurve');
+    bind(7,gl.TEXTURE_2D,doStruct?R.sa.t:R.prep.t,'uStructTex'); gl.uniform1f(u.uStruct,doStruct?p.structure/100:0);
+    const dustOn=(p.dustAmt||0)+(p.scratchAmt||0)+(p.hairAmt||0)>0.5;
+    bind(8,gl.TEXTURE_2D,dustOn?this.dustTex(p):this.borderTex,'uDust'); gl.uniform1f(u.uDustOn,dustOn?1:0); gl.uniform1f(u.uDustDark,p.dustKind==='print'?1:0);
+    gl.uniform1f(u.uSilver,p.silver?1:0); gl.uniform2f(u.uBurn,(p.sBurn||0)/100,(p.sBurnSize||40)/100);
+    { const T=TONERS[p.sTone]; const L2=c=>{ const h=c.slice(1); return [0,2,4].map(i=>{ const v=parseInt(h.substr(i,2),16)/255; return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4); }); };
+      const lo=T?L2(T[0]):[1,1,1], hi=T?L2(T[1]):[1,1,1], nz=c=>{ const y=.2126*c[0]+.7152*c[1]+.0722*c[2]; return c.map(v=>v/y); };
+      gl.uniform3f(u.uToneLo,...nz(lo)); gl.uniform3f(u.uToneHi,...nz(hi)); gl.uniform1f(u.uToneAmt,T?(p.sToneAmt??60)/100:0); }
     gl.uniform2f(u.uRes, target?target.w:L.W, target?target.h:L.H);
     gl.uniform4f(u.uFrame,L.fx,L.fy,L.fw,L.fh); gl.uniform4f(u.uImg,L.ix,L.iy,L.iw,L.ih); gl.uniform4f(u.uWin,u0,v0,u1,v1);
     gl.uniformMatrix3fv(u.uGeo,true,geo);
@@ -305,7 +395,7 @@ const Engine = {
     const cellOut = fullCell*L.scale;
     gl.uniform1f(u.uGrain, p.grain*baseAmt*pushG*Math.min(1,cellOut));
     gl.uniform1f(u.uGrainCell, Math.max(1.0,cellOut)); gl.uniform1f(u.uGrainSoft,p.grainRough);
-    gl.uniform1i(u.uMono, st.type==='bw'?1:0); gl.uniform1ui(u.uSeed,this.grainSeed);
+    gl.uniform1i(u.uMono, (st.type==='bw'||p.silver)?1:0); gl.uniform1ui(u.uSeed,this.grainSeed);
     gl.uniform1f(u.uClip,this.showClip&&!target?1:0); gl.uniform3f(u.uBg,.071,.071,.071);
     gl.uniform1f(u.uBorderOn, (p.border!=='none'&&!full)?1:0);
     const wantP3 = opts.p3!=null ? opts.p3 : (target ? false : this.outP3);
@@ -360,6 +450,9 @@ const PREP_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc; uniform vec4 uWin; uniform float uFlip,uEncoded,uDispRef,uHL,uK,uFalloff,uAspect,uTanHalfDiag;
 uniform mat3 uWB,uToAP1,uGeo; uniform float uPush,uSrcAspect;
+uniform vec3 uFilt; uniform float uSilverPre; uniform sampler2D uDbl; uniform mat3 uDblM; uniform int uDblMode; uniform float uDblOn,uDblAmt,uDblK,uDblEnc,uDblDisp,uDblMask,uDblFlipY;
+uniform float uTT; uniform vec3 uTTA,uTTB,uTTM; uniform vec4 uTTP;
+uniform float uLeakAmt,uLeakSize,uLeakSeed; uniform vec3 uLeakC1,uLeakC2; uniform vec2 uLeakP;
 uniform int uMType[4]; uniform vec4 uMA[4]; uniform vec4 uMB[4]; uniform vec4 uMC[4]; uniform mat3 uMWB[4]; uniform sampler2D uMTex[4];
 in vec2 vUv; out vec4 o;
 float maskW(int i, vec2 s){
@@ -374,10 +467,8 @@ float maskW(int i, vec2 s){
   return clamp(w*uMB[i].w,0.,1.);
 }
 vec3 dec(vec3 c){ return mix(c/12.92, pow((c+.055)/1.055,vec3(2.4)), step(.04045,c)); }
-void main(){
-  float u=mix(uWin.x,uWin.z,vUv.x), vt=mix(uWin.y,uWin.w,1.-vUv.y);
-  vec2 s=(uGeo*vec3(u,vt,1.)).xy;
-  if(s.x<0.||s.y<0.||s.x>1.||s.y>1.){ o=vec4(0.,0.,0.,1.); return; }
+vec3 srcAt(vec2 s){
+  if(s.x<0.||s.y<0.||s.x>1.||s.y>1.) return vec3(0.);
   vec3 c=texture(uSrc,vec2(s.x, uFlip>.5 ? 1.-s.y : s.y)).rgb;
   if(uEncoded>.5) c=dec(max(c,0.));
   if(uDispRef>.5){
@@ -385,7 +476,47 @@ void main(){
     float Ye = Y<=1. ? Y/(1.-uHL*yc*yc) : Y/(1.-uHL);
     c*= Ye/max(Y,1e-6);
   }
+  return c;
+}
+void main(){
+  float u=mix(uWin.x,uWin.z,vUv.x), vt=mix(uWin.y,uWin.w,1.-vUv.y);
+  vec2 s=(uGeo*vec3(u,vt,1.)).xy;
+  if(s.x<0.||s.y<0.||s.x>1.||s.y>1.){ o=vec4(0.,0.,0.,1.); return; }
+  vec3 c=srcAt(s);
+  // two-tone flash: the frame lit by gel A plus an offset "second flash" ghost lit by gel B
+  if(uTT>.5){
+    vec2 g=(vec2(u,vt)-.5-uTTP.xy)/uTTP.z+.5; vec3 c2=srcAt((uGeo*vec3(g,1.)).xy);
+    vec3 lum=vec3(.2126,.7152,.0722); float Y1=dot(c,lum), Y2=dot(c2,lum);
+    // flash light falls off fast: deepen the tones, then light each copy with its gel
+    float k1=.18*pow(max(Y1,1e-6)/.18,1.35)/max(Y1,1e-6), k2=.18*pow(max(Y2,1e-6)/.18,1.35)/max(Y2,1e-6);
+    vec3 a=mix(c,vec3(Y1),uTTM.x)*k1*uTTA*1.6, b=mix(c2,vec3(Y2),uTTM.x)*k2*uTTB*1.6;
+    float band = uTTM.y>0. ? 1.-smoothstep(uTTM.y*.5,uTTM.y*.5+.02,abs(vt-uTTM.z)) : 1.;
+    b*=uTTP.w*band;
+    c = max(a,b) + .3*min(a,b);
+  }
   c = uWB*c*uK;
+  if(uSilverPre>.5) c=vec3(dot(c,uFilt));
+  vec2 fuv=vec2(u,vt);
+  if(uDblOn>.5){
+    vec2 d=(uDblM*vec3(fuv,1.)).xy; vec3 c2=vec3(0.);
+    if(d.x>=0.&&d.y>=0.&&d.x<=1.&&d.y<=1.){ c2=texture(uDbl,vec2(d.x,uDblFlipY>.5?1.-d.y:d.y)).rgb; if(uDblEnc>.5) c2=dec(max(c2,0.));
+      if(uDblDisp>.5){ float Y2=dot(c2,vec3(.2126,.7152,.0722)), y2=min(Y2,1.); c2*= (Y2<=1.? Y2/(1.-uHL*y2*y2) : Y2/(1.-uHL))/max(Y2,1e-6); }
+      c2=uWB*c2*uDblK; if(uSilverPre>.5) c2=vec3(dot(c2,uFilt)); }
+    float a=uDblAmt; vec3 n1=c/(1.+c), n2=c2/(1.+c2);
+    if(uDblMode==0) c=(c+c2*a)/(1.+.45*a);
+    else if(uDblMode==1){ vec3 r=n1+n2*a-n1*n2*a; c=r/max(1.-r,vec3(1e-3)); }
+    else if(uDblMode==2) c=mix(c,max(c,c2),a);
+    else if(uDblMode==3) c=c*mix(vec3(1.),c2/.18,a);
+    else if(uDblMode==5) c=mix(c,min(c,c2),a);
+    else { float Y=dot(n1,vec3(.2126,.7152,.0722)); float w=smoothstep(.25+uDblMask*.4,.6+uDblMask*.4,Y)*a; c=mix(c,c2*1.15,w); }
+  }
+  if(uLeakAmt>0.){
+    vec2 q=(fuv-uLeakP)*vec2(uAspect,1.); float sz=max(uLeakSize,.05);
+    float n=sin(q.x*7.+uLeakSeed*1.7)*sin(q.y*5.3-uLeakSeed)*.5+sin((q.x+q.y)*13.+uLeakSeed*3.1)*.25;
+    float d=length(q)/sz*(1.+.35*n); float w=exp(-d*d*1.6);
+    vec3 lc=mix(uLeakC1,uLeakC2,exp(-d*d*5.));
+    c+=lc*w*uLeakAmt*6.;
+  }
   // push / pull: steeper (or flatter) characteristic, pushed shadows lose density
   if(uPush!=0.){ vec3 l=log2(max(c,vec3(1e-7))/.18); c=.18*exp2(l*(1.+.09*uPush)); if(uPush>0.) c=max(c-.0012*uPush*.18,0.)*(1.+.0012*uPush); }
   // local adjustments (gradient / radial / brush)
@@ -425,6 +556,27 @@ void main(){
   }
   o=vec4(chroma*exp2(lY),1.);
 }`;
+const FX_FS = `#version 300 es
+precision highp float; uniform sampler2D uTex; uniform vec4 uWin; uniform float uAspect,uZoom,uSoft,uFringe; uniform vec2 uMotion; uniform vec3 uTilt;
+in vec2 vUv; out vec4 o;
+void main(){
+  vec2 span=vec2(uWin.z-uWin.x, uWin.w-uWin.y);
+  vec2 iuv=vec2(mix(uWin.x,uWin.z,vUv.x), mix(uWin.y,uWin.w,1.-vUv.y));            // image uv, v from top
+  vec2 toP=vec2(1./span.x,-1./span.y);                                                // image-uv delta → prep-uv delta
+  vec2 q=(iuv-.5)*vec2(uAspect,1.); float r=length(q)/length(vec2(uAspect,1.)*.5);
+  float rad=uSoft*smoothstep(.35,1.,r) + uTilt.x*smoothstep(uTilt.z*.5,uTilt.z*.5+.2,abs(iuv.y-uTilt.y));
+  vec3 acc=vec3(0.); float w=0.;
+  for(int i=0;i<24;i++){
+    float t=(float(i)+.5)/24.; float ang=float(i)*2.39996; vec2 disc=vec2(cos(ang),sin(ang))*sqrt(t)*rad*vec2(1./uAspect,1.);
+    vec2 off=(iuv-.5)*uZoom*(t-.5)*2. + uMotion*(t-.5)*vec2(1./uAspect,1.) + disc;
+    vec2 p=vUv+off*toP;
+    vec3 s;
+    if(uFringe>0.){ vec2 f=(iuv-.5)*uFringe*toP; s=vec3(texture(uTex,p+f).r, texture(uTex,p).g, texture(uTex,p-f).b); }
+    else s=texture(uTex,p).rgb;
+    acc+=s; w+=1.;
+  }
+  o=vec4(acc/w,1.);
+}`;
 const BRIGHT_FS = `#version 300 es
 precision highp float; uniform sampler2D uTex; uniform float uThr; in vec2 vUv; out vec4 o;
 void main(){ vec3 c=max(texture(uTex,vUv).rgb,0.); float Y=dot(c,vec3(.27,.67,.06));
@@ -437,6 +589,7 @@ precision highp float; precision highp sampler3D;
 uniform sampler2D uPrep,uHal,uGlowTex,uSrc,uBorder,uCurve; uniform sampler3D uLut;
 uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; uniform mat3 uGeo;
 uniform float uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
+uniform sampler2D uStructTex,uDust; uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
 uniform float uHslH[8]; uniform float uHslS[8]; uniform float uHslL[8];
 uniform vec4 uGSh,uGMid,uGHi; uniform vec2 uGBlend;
@@ -492,6 +645,8 @@ void main(){
     } else {
       vec2 puv=vec2((u-uWin.x)/(uWin.z-uWin.x), 1.-(vt-uWin.y)/(uWin.w-uWin.y));
       vec3 E=texture(uPrep,puv).rgb;
+      if(uStruct!=0.){ vec3 B=texture(uStructTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6);
+        E*=pow(Y/Yb, clamp(uStruct,-1.,1.)*.9); }
       if(uHalAmt>0.){ vec3 h=texture(uHal,puv).rgb; float hy=dot(h,vec3(.3,.6,.1)); E += hy*vec3(1.,.12,.02)*uHalAmt; }
       if(uGlow>0.){ vec3 g=texture(uGlowTex,puv).rgb; E = mix(E, E*.75+g*.5, uGlow*.6); }
       vec3 c;
@@ -537,6 +692,13 @@ void main(){
           c=clamp(enc(max(fromLab(L),0.)),0.,1.);
         }
       }
+      if(uSilver>.5){
+        vec3 l=dec(c); float L=dot(l,vec3(.2290,.6917,.0793));
+        vec2 e=abs(vec2(u,vt)-.5)*2.; float ed=pow(pow(e.x,4.)+pow(e.y,4.),.25);
+        L*=1.-uBurn.x*.85*smoothstep(1.-uBurn.y,1.15,ed);
+        float t=smoothstep(0.,1.,pow(L,1./2.2)); vec3 tint=mix(uToneLo,uToneHi,t);
+        c=clamp(enc(L*mix(vec3(1.),tint,uToneAmt)),0.,1.);
+      }
       if(uGrain>0.){
         vec2 ip=vec2(u,vt)*uImg.zw/uGrainCell;
         float k=uGrain*1.7; float yy=luma(c);
@@ -545,6 +707,7 @@ void main(){
         else { vec3 ch=vec3(emulsion(ip*.8,1.-c.r,.44,11u),emulsion(ip*.8+5.1,1.-c.g,.44,12u),emulsion(ip*.8+9.7,1.-c.b,.44,13u));
                c-=(lum*.8+ch*.3)*k; }
       }
+      if(uDustOn>.5){ float a=texture(uDust,vec2(u*uImg.z/uImg.w,vt)*1.0).a; c=mix(c, uDustDark>.5?vec3(.04):vec3(.97), a*.9); }
       col=clamp(c,0.,1.);
       if(uToSRGB>.5) col=clamp(enc(P3_TO_709*dec(col)),0.,1.);
       if(uClip>.5){ if(max(col.r,max(col.g,col.b))>.996) col=vec3(1.,.15,.1); else if(min(col.r,min(col.g,col.b))<.004) col=vec3(.15,.45,1.); }

@@ -14,6 +14,7 @@
     <nav id="modules">
       <button data-m="library">Library</button><span>|</span>
       <button data-m="develop" class="on">Develop</button><span>|</span>
+      <button data-m="studio">Studio</button><span>|</span>
       <button data-m="scan">3D Scan</button>
     </nav>
     <div class="topright">
@@ -28,6 +29,11 @@
       <section class="panel open mod-develop mod-library" id="pNavigator">
         <h3><i></i>Navigator<span class="hdrval" id="navZoom">FIT</span></h3>
         <div class="body"><canvas id="navCanvas"></canvas></div>
+      </section>
+      <!-- studio: one-click recipes -->
+      <section class="panel open mod-studio" id="pRecipes">
+        <h3><i></i>Recipes<span class="hbtns"><button class="hbtn" id="studioReset" title="Clear all Studio effects">⟲</button></span></h3>
+        <div class="body"><div id="recipeList"></div></div>
       </section>
       <!-- develop: versions of this photo -->
       <section class="panel open mod-develop" id="pVersions">
@@ -116,6 +122,7 @@
         </div>
       </section>
       <div id="devPanels"></div>
+      <div id="fxPanels"></div>
       <div class="credits" id="credits"></div>
     </aside>
   </div>
@@ -149,6 +156,7 @@
 <script src="js/borders.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/tools.js"></script>
+<script src="js/studio.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

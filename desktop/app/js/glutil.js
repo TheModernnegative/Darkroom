@@ -22,7 +22,7 @@ const GLU = {
   QUAD_VS: `#version 300 es
 layout(location=0) in vec2 aP; out vec2 vUv; void main(){ vUv=aP*.5+.5; gl_Position=vec4(aP,0.,1.); }`,
   tex2D(w,h,fmt='rgba16f',data=null,filter='linear'){
-    const gl=GLU.gl, t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
+    const gl=GLU.gl, t=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
     const F={ rgba16f:[gl.RGBA16F,gl.RGBA,gl.HALF_FLOAT], rgba8:[gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE], srgba8:[gl.SRGB8_ALPHA8,gl.RGBA,gl.UNSIGNED_BYTE], rgba32f:[gl.RGBA32F,gl.RGBA,gl.FLOAT] }[fmt];
     let f=F; if(fmt==='rgba16f' && !GLU.floatRT && !data) f=[gl.RGBA8,gl.RGBA,gl.UNSIGNED_BYTE];
     gl.texImage2D(gl.TEXTURE_2D,0,f[0],w,h,0,f[1],f[2],data);

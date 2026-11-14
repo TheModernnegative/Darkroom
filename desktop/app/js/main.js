@@ -11,7 +11,7 @@ const App = {
     this.editMax=Math.min(6144, Engine.gl.getParameter(Engine.gl.MAX_TEXTURE_SIZE));
     await Engine.loadManifest();
     $('#credits').innerHTML = 'Colour film models: <a href="https://github.com/andreavolpato/spektrafilm">spektrafilm</a> by Andrea Volpato — profiles &amp; LUTs CC BY-SA 4.0. Black-and-white film and paper models, grain and halation: Splat Darkroom.';
-    this.buildDevelopPanels(); this.addToggles(); this.buildScanPanels(); this.buildPresets();
+    this.buildDevelopPanels(); this.addToggles(); Studio.init(this); Studio.build($('#fxPanels')); Studio.buildRecipes($('#recipeList'),p=>this.hover(p)); this.addStudioToggles(); this.buildScanPanels(); this.buildPresets();
     this.bindEvents();
     await Engine.ensureLuts(Engine.p);
     await this.restore();
@@ -179,6 +179,16 @@ const App = {
     if(Native.available){ const p=await Native.call('open',{exts:['json'],multiple:false}); if(p&&p[0]) take(await (await fetch(Native.fileURL(p[0]))).text()); }
     else { const i=document.createElement('input'); i.type='file'; i.accept='.json,application/json'; i.onchange=async()=>{ if(i.files[0]) take(await i.files[0].text()); }; i.click(); }
   },
+  // ---- Studio: second photo for double exposure (any other photo in the library)
+  doubleChooser(b){ this._dblEl=document.createElement('div'); this._dblEl.className='dblPick'; b.appendChild(this._dblEl); this.renderDoubleChooser(); },
+  renderDoubleChooser(){ const el=this._dblEl; if(!el) return; el.innerHTML='';
+    const others=this.items.filter(i=>i!==this.cur); if(!others.length){ el.innerHTML='<div class="note" style="grid-column:1/-1">Import a second photo to blend it in.</div>'; return; }
+    others.forEach(it=>{ const im=document.createElement('img'); if(it.thumb) im.src=it.thumb; im.title=it.name; if(Engine.p.dblId===it.id) im.className='on';
+      im.onclick=async()=>{ if(Engine.p.dblId===it.id){ Engine.p.dblId=''; Engine.setDouble(null); } else { Engine.p.dblId=it.id; await this.loadDouble(); } this.changed(); this.commit(); this.renderDoubleChooser(); };
+      el.appendChild(im); }); },
+  async loadDouble(){ const id=Engine.p.dblId; if(!id){ Engine.setDouble(null); return; } if(Engine.dblSrc&&Engine.dblSrc.id===id) return;
+    const it=this.items.find(i=>i.id===id); if(!it){ Engine.setDouble(null); return; }
+    try{ const src=it.src&&it!==this.cur ? Object.assign({},it.src) : await this.decode(it,3072); if(!it.src) src.own=true; Engine.setDouble(src,id); }catch(e){ this.toast('Could not open the second photo'); } },
   // ---- versions: named snapshots of this photo's edit, comparable side by side
   saveVersion(){
     const it=this.cur; if(!it){ this.toast('Open a photo first'); return; }
@@ -261,6 +271,8 @@ const App = {
 
   // ================================================================ edits / history
   // on/off switch in each panel header: hides that section's effect without losing its settings
+  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak'],sDust:['dust'],sLens:['lensfx']},
+  addStudioToggles(){ Object.assign(this.PANEL_SECTIONS,this.STUDIO_SECTIONS); this.addToggles(); $('#studioReset').onclick=e=>{ e.stopPropagation(); Studio.resetAll(); this.toast('Studio effects cleared'); }; },
   PANEL_SECTIONS:{pFilm:['film'],pBasic:['wb','tone','presence'],pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pDetail:['detail'],pGrain:['grain'],pHal:['halation'],pLens:['lens'],pFrame:['frame'],pMasks:['masks']},
   addToggles(){
     for(const id in this.PANEL_SECTIONS){ const el=document.getElementById(id); if(!el||el.querySelector('.ptog')) continue; const secs=this.PANEL_SECTIONS[id];
@@ -316,7 +328,7 @@ const App = {
       if(!it.src){ this.busy('Opening '+it.name+'…'); try{ it.src=await this.decode(it,this.editMax); } catch(e){ this.busy(); this.toast('Could not open '+it.name+': '+e.message); return; } this.busy(); }
       Engine.setSource(it.src);
     }
-    this.setCompare(null); this.renderVersions();
+    this.setCompare(null); this.renderVersions(); this.loadDouble(); this.renderDoubleChooser&&this.renderDoubleChooser();
     Engine.view={mode:'fit',cx:.5,cy:.5}; $('#tbZoom').textContent='1:1';
     $('#empty').classList.add('off'); this.thumbSoon(80); this.renderGrid();
   },
@@ -340,7 +352,7 @@ const App = {
     let bmp=await createImageBitmap(file,{colorSpaceConversion:'default',imageOrientation:'from-image'});
     let w=bmp.width,h=bmp.height;
     if(max && Math.max(w,h)>max){ const s=max/Math.max(w,h); const b2=await createImageBitmap(bmp,{resizeWidth:Math.round(w*s),resizeHeight:Math.round(h*s),resizeQuality:'high'}); bmp.close&&bmp.close(); bmp=b2; w=bmp.width; h=bmp.height; }
-    const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+    const tex=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,tex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.SRGB8_ALPHA8,gl.RGBA,gl.UNSIGNED_BYTE,bmp);
     for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
@@ -749,15 +761,16 @@ const App = {
   // ================================================================ module / view
   setModule(m){
     if(Engine.cropMode && m!=='develop') Tools.setCropMode(false);
+    if(m==='studio') this.renderDoubleChooser&&this.renderDoubleChooser();
     if(m!=='develop' && this.compare) this.setCompare(null);
-    this.module=m; document.body.classList.toggle('m-scan',m==='scan'); this.renderStrip();
+    this.module=m; document.body.classList.toggle('m-scan',m==='scan'); document.body.classList.toggle('m-studio',m==='studio'); this.renderStrip();
     $('#scanEmpty').classList.toggle('on',m==='scan'&&!Splat.scene);
     document.querySelectorAll('#modules button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
     $('#grid').classList.toggle('on',m==='library'); if(m==='library') this.renderGrid();
     const v=$('#view'); v.className = m==='scan' ? 'cross' : 'grab';
     if(m==='scan'){ $('#empty').classList.add('off'); this.refreshScans(); }
     else if(this.module!=='scan') $('#scanEmpty').classList.remove('on');
-    else if(m==='develop'){ if(this.cur && this.cur.src) Engine.setSource(this.cur.src); else if(this.cur) this.select(this.cur.id); else { Engine.setSource(null); $('#empty').classList.remove('off'); } }
+    else if(m==='develop'||m==='studio'){ if(this.cur && this.cur.src) Engine.setSource(this.cur.src); else if(this.cur) this.select(this.cur.id); else { Engine.setSource(null); $('#empty').classList.remove('off'); } }
     Engine.dirty=true;
   },
   toggleZoom(at){
@@ -862,6 +875,7 @@ const App = {
     else if(k==='j'||k==='J'){ Engine.showClip=!Engine.showClip; Engine.dirty=true; }
     else if(k==='g'||k==='G'){ this.setModule('library'); }
     else if(k==='d'||k==='D'){ this.setModule('develop'); }
+    else if(k==='t'||k==='T'){ this.setModule('studio'); }
     else if(k==='s'||k==='S'){ this.setModule('scan'); }
     else if(k===' '&&this.module==='scan'){ e.preventDefault(); this.exposeFrame(); }
     else if(k==='ArrowRight'||k==='ArrowLeft'){ const i=this.items.indexOf(this.cur)+(k==='ArrowRight'?1:-1); if(this.items[i]){ e.preventDefault(); this.select(this.items[i].id); } }

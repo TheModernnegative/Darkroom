@@ -1,7 +1,7 @@
 // Film borders: 35mm rebate with sprockets + edge print, 120 frame, 4x5 holder, gallery white.
 const Borders = {
   styles:[['none','None'],['35mm','35mm scan'],['120','120 scan'],['4x5','4×5 holder'],['print','Print border'],
-    ['polaroid','Polaroid 600 / SX-70'],['polaroidGo','Polaroid Go'],['instaxMini','Instax Mini'],['instaxSquare','Instax Square'],['instaxWide','Instax Wide'],['peel','Peel-apart']],
+    ['polaroid','Polaroid 600 / SX-70'],['polaroidGo','Polaroid Go'],['instaxMini','Instax Mini'],['instaxSquare','Instax Square'],['instaxWide','Instax Wide'],['peel','Peel-apart'],['wetplate','Wet plate']],
   // instant frames from published sizes (mm): picture w × h, side / top / bottom borders
   INSTANT:{ polaroid:{w:79,h:77,side:4.75,top:6.2,bot:24.3,r:0.4}, polaroidGo:{w:47,h:46,side:3.45,top:4.2,bot:16.4,r:0.3},
     instaxMini:{w:46,h:62,side:4,top:6.6,bot:17.4,r:1.6}, instaxSquare:{w:62,h:62,side:5,top:6.6,bot:17.4,r:1.6}, instaxWide:{w:99,h:62,side:4.5,top:6.6,bot:17.4,r:1.6} },
@@ -15,6 +15,7 @@ const Borders = {
       case '4x5':  return f({l:.06,r:.06,t:.06,b:.06});
       case 'print':return f({l:.07,r:.07,t:.07,b:.07});
       case 'peel': return f({l:.075,r:.075,t:.075,b:.12});
+      case 'wetplate': return f({l:.06,r:.06,t:.06,b:.06});
       default: { const I=this.INSTANT[style]; if(I) return {l:I.side/I.w,r:I.side/I.w,t:I.top/I.h,b:I.bot/I.h}; return {l:0,r:0,t:0,b:0}; }
     }
   },
@@ -37,7 +38,23 @@ const Borders = {
     const ix=b.l/(1+b.l+b.r)*W, iw=W/(1+b.l+b.r), iy=b.t/(1+b.t+b.b)*H, ih=H/(1+b.t+b.b);
     let seed=7; const r=()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; };
     const film = stock.type==='positive' ? '#0b0b0d' : stock.type==='bw' ? '#0e0e0e' : '#120d0a';
-    if(this.isInstant(style)){
+    if(style==='wetplate'){
+      // collodion plate: dark japanned edge, poured emulsion with an irregular, silvery boundary
+      let sd=29; const rr=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+      x.fillStyle='#16130f'; x.fillRect(0,0,W,H);
+      const walk=(n,amp)=>{ const a=[]; let v=0, dv=0; for(let k=0;k<=n;k++){ dv=dv*0.9+(rr()-.5)*0.18; v=Math.max(-1,Math.min(1,v+dv)); a.push(v*amp); } return a; };
+      const m=Math.min(iw,ih)*0.03, T=walk(240,m), R=walk(160,m), B=walk(240,m*1.6), L=walk(160,m), rad=Math.min(iw,ih)*0.05;
+      x.save(); x.beginPath();
+      T.forEach((v,k)=>x.lineTo(ix+rad+(iw-2*rad)*k/240, iy+v)); R.forEach((v,k)=>x.lineTo(ix+iw+v, iy+rad+(ih-2*rad)*k/160));
+      B.forEach((v,k)=>x.lineTo(ix+iw-rad-(iw-2*rad)*k/240, iy+ih+v)); L.forEach((v,k)=>x.lineTo(ix+v, iy+ih-rad-(ih-2*rad)*k/160)); x.closePath();
+      x.globalCompositeOperation='destination-out'; x.fill(); x.restore();
+      // silvery pour marks and a dark rim just inside the plate
+      x.save(); x.globalCompositeOperation='source-over';
+      for(let k=0;k<26;k++){ const side=rr(), t=rr(); const px= side<.25? ix+t*iw : side<.5? ix+iw-m*rr() : side<.75? ix+t*iw : ix+m*rr();
+        const py= side<.25? iy+m*rr() : side<.5? iy+t*ih : side<.75? iy+ih-m*rr() : iy+t*ih;
+        const R0=m*(0.6+rr()*1.4); const g=x.createRadialGradient(px,py,0,px,py,R0); g.addColorStop(0,'rgba(205,195,170,.22)'); g.addColorStop(1,'rgba(205,195,170,0)'); x.fillStyle=g; x.beginPath(); x.arc(px,py,R0,0,7); x.fill(); }
+      x.restore();
+    } else if(this.isInstant(style)){
       const I=this.INSTANT[style]||{w:95,h:73,r:0.2}, mm=iw/I.w;
       const base={white:'#f3f1ec',cream:'#efe6d3',black:'#151515'}[tone]||'#f3f1ec';
       x.fillStyle=base; x.fillRect(0,0,W,H);
@@ -124,7 +141,7 @@ const Borders = {
       }
     }
     if(this.cache.tex) gl.deleteTexture(this.cache.tex);
-    const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
+    const t=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
