@@ -8,7 +8,7 @@ const DEFAULTS = {
   crop:{x:0,y:0,w:1,h:1}, angle:0, rot:0, flip:false, aspect:'free',
   curve:{m:[[0,0],[1,1]], r:[[0,0],[1,1]], g:[[0,0],[1,1]], b:[[0,0],[1,1]]},
   hslH:[0,0,0,0,0,0,0,0], hslS:[0,0,0,0,0,0,0,0], hslL:[0,0,0,0,0,0,0,0],
-  edgeText:'stock', edgeCustom:'', frameNo:0,
+  edgeText:'stock', edgeCustom:'', frameNo:0, frameTone:'auto',
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
   gShH:220, gShS:0, gShL:0, gMidH:40, gMidS:0, gMidL:0, gHiH:45, gHiS:0, gHiL:0, gBlend:50, gBalance:0,
 };

@@ -89,6 +89,7 @@ const App = {
     // Frame
     b=UI.panel(root,'pFrame','Frame',false);
     UI.select(b,'border','Border',()=>Borders.styles,()=>P().border,v=>{ P().border=v; this.changed(); this.commit(); });
+    UI.select(b,'frameTone','Frame color',()=>[['auto','Auto (film’s own)'],['white','White'],['cream','Cream'],['black','Black']],()=>P().frameTone||'auto',v=>{ P().frameTone=v; this.changed(); this.commit(); });
     UI.select(b,'edgeText','Edge print',()=>[['stock','Film stock'],['custom','Custom text'],['none','None']],()=>P().edgeText,v=>{ P().edgeText=v; ct.style.display=v==='custom'?'':'none'; this.changed(); this.commit(); });
     const ct=document.createElement('div'); ct.className='row'; ct.innerHTML='<label>Text</label><input class="askIn" spellcheck="false" maxlength="40" placeholder="e.g. DANIEL S. WORKMAN 400">'; b.appendChild(ct);
     const ci=ct.querySelector('input'); ci.value=P().edgeCustom||''; ct.style.display=P().edgeText==='custom'?'':'none';
@@ -129,7 +130,7 @@ const App = {
 
   buildPresets(){
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
-      this.hover(id?Object.assign({},Engine.p,{stock:id,paper:null}):null); });
+      this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
     $('#presetSearch').addEventListener('input',e=>UI.filterPresets(e.target.value));
     $('#presetSearch').addEventListener('click',e=>e.stopPropagation());
     $('#presetSearch').addEventListener('keydown',e=>e.stopPropagation());
@@ -252,8 +253,9 @@ const App = {
   },
 
   async setStock(id){
-    const p=Engine.p; p.stock=id; p.paper=null; this.lastStock=id;
-    await Engine.ensureLuts(p); this.changed(); UI.refresh(); UI.markPreset(id); this.updateStockNote();
+    const o=Tools.stockParams(Engine.p,id,true), newAspect=o.aspect!==Engine.p.aspect; Object.assign(Engine.p,o); const p=Engine.p; this.lastStock=id;
+    if(newAspect && Engine.src) Tools.applyAspect(false);
+    await Engine.ensureLuts(p); this.commit&&this.commit(); this.changed(); UI.refresh(); UI.markPreset(id); this.updateStockNote();
   },
   updateStockNote(){ const s=Engine.stock(), el=$('#stockNote'); if(el) el.innerHTML=`<b style="color:#ddd">${s.maker} ${s.name}</b> · ISO ${s.iso}<br>${s.desc}`; },
 

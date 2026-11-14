@@ -788,6 +788,493 @@
      "lut": "bw_delta3200"
     }
    ]
+  },
+  {
+   "id": "polaroid_600",
+   "name": "Color 600 / i-Type",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid",
+   "type": "instant",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "The classic. Narrow 3\u00bd\u20134 stop range, high contrast, pink highlights and green-leaning shadows, soft and dreamy.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "falloff": 0.55,
+    "glow": 0.22,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_600"
+    }
+   ]
+  },
+  {
+   "id": "polaroid_sx70",
+   "name": "SX-70 Color",
+   "maker": "Polaroid",
+   "iso": 160,
+   "group": "Polaroid",
+   "type": "instant",
+   "instant": true,
+   "pgi": 10,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Slower SX-70 emulsion: lavender highlights, navy shadows, a touch more contrast, pastel.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "falloff": 0.5,
+    "glow": 0.2,
+    "grain": 0.5
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_sx70"
+    }
+   ]
+  },
+  {
+   "id": "polaroid_bw",
+   "name": "B&W 600 / i-Type",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Contrasty Polaroid monochrome with a faint warm, sepia-leaning tone.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "falloff": 0.5,
+    "glow": 0.15,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_bw"
+    }
+   ]
+  },
+  {
+   "id": "polaroid_sx70_bw",
+   "name": "B&W SX-70",
+   "maker": "Polaroid",
+   "iso": 160,
+   "group": "Polaroid",
+   "type": "bw",
+   "instant": true,
+   "pgi": 10,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Smoother, slower monochrome that turns noticeably sepia.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "falloff": 0.5,
+    "glow": 0.15,
+    "grain": 0.5
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_sx70_bw"
+    }
+   ]
+  },
+  {
+   "id": "duo_yellow",
+   "name": "Duochrome Black & Yellow",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid Duochrome",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "B&W chemistry with yellow dye: black shadows into saturated yellow, in a black frame.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "frameTone": "black",
+    "falloff": 0.5,
+    "glow": 0.12,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_duo_yellow"
+    }
+   ]
+  },
+  {
+   "id": "duo_blue",
+   "name": "Duochrome Black & Blue",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid Duochrome",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Black into deep cobalt blue.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "frameTone": "black",
+    "falloff": 0.5,
+    "glow": 0.12,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_duo_blue"
+    }
+   ]
+  },
+  {
+   "id": "duo_green",
+   "name": "Duochrome Black & Green",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid Duochrome",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Black into electric green (yellow + cyan dye).",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "frameTone": "black",
+    "falloff": 0.5,
+    "glow": 0.12,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_duo_green"
+    }
+   ]
+  },
+  {
+   "id": "duo_pink",
+   "name": "Duochrome Black & Pink",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid Duochrome",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Black into magenta-pink.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "frameTone": "black",
+    "falloff": 0.5,
+    "glow": 0.12,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_duo_pink"
+    }
+   ]
+  },
+  {
+   "id": "duo_red",
+   "name": "Duochrome Black & Red",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid Duochrome",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Black into brick red.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "frameTone": "black",
+    "falloff": 0.5,
+    "glow": 0.12,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_duo_red"
+    }
+   ]
+  },
+  {
+   "id": "reclaimed_blue",
+   "name": "Reclaimed Blue",
+   "maker": "Polaroid",
+   "iso": 640,
+   "group": "Polaroid Duochrome",
+   "type": "bw",
+   "instant": true,
+   "pgi": 12,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Recycled-dye film: nearly opaque blue shadows rising to white highlights.",
+   "defaults": {
+    "border": "polaroid",
+    "aspect": "1:1",
+    "falloff": 0.5,
+    "glow": 0.15,
+    "grain": 0.6
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_reclaimed_blue"
+    }
+   ]
+  },
+  {
+   "id": "instax_color",
+   "name": "Instax Color",
+   "maker": "Fujifilm",
+   "iso": 800,
+   "group": "Instax",
+   "type": "instant",
+   "instant": true,
+   "pgi": 18,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Punchy and saturated with deep blacks and clean whites; blues go very dark, warm overall tone.",
+   "defaults": {
+    "border": "instaxMini",
+    "aspect": "46:62",
+    "falloff": 0.35,
+    "glow": 0.08,
+    "grain": 0.7
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_instax_color"
+    }
+   ]
+  },
+  {
+   "id": "instax_mono",
+   "name": "Instax Monochrome",
+   "maker": "Fujifilm",
+   "iso": 800,
+   "group": "Instax",
+   "type": "bw",
+   "instant": true,
+   "pgi": 18,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Neutral-cool monochrome with a little more range than Instax Color.",
+   "defaults": {
+    "border": "instaxMini",
+    "aspect": "46:62",
+    "falloff": 0.35,
+    "glow": 0.06,
+    "grain": 0.7
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_instax_mono"
+    }
+   ]
+  },
+  {
+   "id": "instax_sepia",
+   "name": "Instax Sepia",
+   "maker": "Fujifilm",
+   "iso": 800,
+   "group": "Instax",
+   "type": "bw",
+   "instant": true,
+   "pgi": 18,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Warm brown-toned monochrome.",
+   "defaults": {
+    "border": "instaxMini",
+    "aspect": "46:62",
+    "falloff": 0.35,
+    "glow": 0.08,
+    "grain": 0.7
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_instax_sepia"
+    }
+   ]
+  },
+  {
+   "id": "fuji_fp100c",
+   "name": "FP-100C",
+   "maker": "Fujifilm",
+   "iso": 100,
+   "group": "Peel-apart",
+   "type": "instant",
+   "instant": true,
+   "pgi": 20,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Fuji peel-apart colour: truer, softer colours than Polaroid, cool cyan skies, generous latitude.",
+   "defaults": {
+    "border": "peel",
+    "falloff": 0.4,
+    "glow": 0.06,
+    "grain": 0.8
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_fuji_fp100c"
+    }
+   ]
+  },
+  {
+   "id": "polaroid_669",
+   "name": "Polacolor 669",
+   "maker": "Polaroid",
+   "iso": 80,
+   "group": "Peel-apart",
+   "type": "instant",
+   "instant": true,
+   "pgi": 22,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Classic peel-apart colour: medium contrast, extended range, cool blue cast, slightly muted.",
+   "defaults": {
+    "border": "peel",
+    "falloff": 0.45,
+    "glow": 0.12,
+    "grain": 0.8
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_669"
+    }
+   ]
+  },
+  {
+   "id": "fuji_fp3000b",
+   "name": "FP-3000B",
+   "maker": "Fujifilm",
+   "iso": 3000,
+   "group": "Peel-apart",
+   "type": "bw",
+   "instant": true,
+   "pgi": 46,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "ISO 3000 peel-apart B&W: contrasty, cool-neutral, visible grain.",
+   "defaults": {
+    "border": "peel",
+    "falloff": 0.45,
+    "glow": 0.05,
+    "grain": 1.0
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_fuji_fp3000b"
+    }
+   ]
+  },
+  {
+   "id": "polaroid_665",
+   "name": "Type 665 P/N",
+   "maker": "Polaroid",
+   "iso": 80,
+   "group": "Peel-apart",
+   "type": "bw",
+   "instant": true,
+   "pgi": 14,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Fine-grain positive/negative B&W: medium contrast and a long, smooth scale.",
+   "defaults": {
+    "border": "peel",
+    "falloff": 0.4,
+    "glow": 0.04,
+    "grain": 0.8
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_665"
+    }
+   ]
+  },
+  {
+   "id": "polaroid_55",
+   "name": "Type 55 P/N",
+   "maker": "Polaroid",
+   "iso": 50,
+   "group": "Peel-apart",
+   "type": "bw",
+   "instant": true,
+   "pgi": 10,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "The legendary 4\u00d75 positive/negative: very fine grain, gentle contrast, superb tonality.",
+   "defaults": {
+    "border": "4x5",
+    "format": "4x5",
+    "falloff": 0.35,
+    "glow": 0.03,
+    "grain": 0.8
+   },
+   "papers": [
+    {
+     "id": "print",
+     "name": "Instant print",
+     "lut": "instant_polaroid_55"
+    }
+   ]
   }
  ],
  "credits": "Colour film models: spektrafilm by Andrea Volpato (github.com/andreavolpato/spektrafilm), profiles & LUTs CC BY-SA 4.0. Black & white models: Splat Darkroom.",

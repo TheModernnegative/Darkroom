@@ -80,7 +80,7 @@ const M = {
   changed(){ Engine.dirty=true; this.title(); clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),100); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
   commit(){ const s=JSON.stringify(Engine.p); if(this.hist[this.hist.length-1]!==s){ this.hist.push(s); this.fut=[]; if(this.hist.length>100) this.hist.shift(); } },
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
-  async setStock(id){ Engine.p.stock=id; Engine.p.paper=null; await Engine.ensureLuts(Engine.p); this.changed(); this.commit(); this.showTab('film',true); },
+  async setStock(id){ const o=Tools.stockParams(Engine.p,id,true), na=o.aspect!==Engine.p.aspect; Object.assign(Engine.p,o); if(na&&Engine.src) Tools.applyAspect(false); await Engine.ensureLuts(Engine.p); this.changed(); this.commit(); this.showTab('film',true); },
   title(){ const s=Engine.stock(); $('#title').innerHTML=`<b>${s.maker==='CineStill'?'CineStill ':''}${s.name}</b> · ${Engine.paperFor(Engine.p).name}`; },
   // on/off switch for a section (keeps its settings) — e.g. compare with and without grain
   secSwitch(h,secs){ const off=()=>secs.every(k=>(Engine.p.off||{})[k]); const b=document.createElement('button'); b.className='secTog';
@@ -177,7 +177,8 @@ const M = {
       S('halation','Halation',{min:0,max:4,step:0.01,fmt:x=>Math.round(x*100)}); S('glow','Diffusion',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)}); S('falloff','Lens falloff',{min:0,max:1.5,step:0.01,fmt:x=>Math.round(x*100)});
       this.head(pane,'Frame',null,['frame']);
       this.seg(pane,'',Borders.styles.map(([k,t])=>[k,t.replace(' scan','').replace(' holder','').replace('Print border','Print')]),()=>p.border,v=>{ p.border=v; this.changed(); this.commit(); this.showTab('effects',true); });
-      if(p.border!=='none'){ this.seg(pane,'Edge print',[['stock','Film stock'],['custom','Custom'],['none','None']],()=>p.edgeText,v=>{ p.edgeText=v; this.changed(); this.commit(); this.showTab('effects',true); });
+      if(p.border!=='none'){ this.seg(pane,'Frame color',[['auto','Auto'],['white','White'],['cream','Cream'],['black','Black']],()=>p.frameTone||'auto',v=>{ p.frameTone=v; this.changed(); this.commit(); });
+        this.seg(pane,'Edge print',[['stock','Film stock'],['custom','Custom'],['none','None']],()=>p.edgeText,v=>{ p.edgeText=v; this.changed(); this.commit(); this.showTab('effects',true); });
         if(p.edgeText==='custom'){ const r=document.createElement('div'); r.className='pnew'; r.innerHTML='<input placeholder="Your edge text" maxlength="40">'; const i=r.querySelector('input'); i.value=p.edgeCustom||''; i.oninput=()=>{ p.edgeCustom=i.value; this.changed(); }; i.onchange=()=>this.commit(); pane.appendChild(r); } }
     } else if(t==='presets'){
       const vh=document.createElement('div'); vh.className='paneHead'; vh.innerHTML='<span>Versions of this photo</span><button>+ Save version</button>'; vh.querySelector('button').onclick=()=>this.addVersion(); pane.appendChild(vh);

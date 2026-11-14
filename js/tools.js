@@ -351,6 +351,19 @@ const Tools = {
     for(const g in this.GROUPS) out[g]=this.GROUPS[g].some(k=>{ const v=p[k], d=DEFAULTS[k]; if(typeof v==='number'&&typeof d==='number') return Math.abs(v-d)>1e-6; return k==='paper'?false:!same(v,d); });
     out.film = out.film || (p.paper!=null && p.paper!==Engine.stock(p.stock).papers[0].id);
     return out; },
+  // ------------------------------------------------------------------ stock defaults (instant films bring their frame, softness, aspect)
+  // returns a copy of p switched to stock id, with the new stock's defaults applied where the user hasn't changed things
+  stockParams(p,id,applyAspect){
+    const prev=Engine.stock(p.stock), next=Engine.stock(id), o=cloneParams(p); o.stock=id; o.paper=null;
+    const pd=prev.defaults||{}, nd=next.defaults||{}, same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    for(const k in pd){ if(k==='aspect'||k==='frameTone') continue; if(!(k in nd) && same(o[k],pd[k])) o[k]=cloneParams(DEFAULTS[k]); }
+    if(Borders.isInstant(o.border) && !Borders.isInstant(nd.border||'none') && !('border' in nd)) o.border='none';
+    for(const k in nd){ if(k==='aspect'){ continue; } if(k==='frameTone'){ continue; }
+      if(same(o[k],DEFAULTS[k]) || same(o[k],pd[k]) || k==='border') o[k]=cloneParams(nd[k]); }
+    const untouched = o.aspect==='free' ? same(o.crop,DEFAULTS.crop) : o.aspect===pd.aspect;
+    if(applyAspect && untouched && !o.angle){ if(nd.aspect) o.aspect=nd.aspect; else if(pd.aspect){ o.aspect='free'; o.crop=cloneParams(DEFAULTS.crop); } }
+    return o;
+  },
   // ------------------------------------------------------------------ preset amount
   // a = 0 → neutral (defaults, film at 0 strength), 1 → the preset exactly, >1 → exaggerated.
   // Only keys the preset contains are touched; exposure / WB / crop stay with the photo.

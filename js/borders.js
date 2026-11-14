@@ -1,6 +1,11 @@
 // Film borders: 35mm rebate with sprockets + edge print, 120 frame, 4x5 holder, gallery white.
 const Borders = {
-  styles:[['none','None'],['35mm','35mm scan'],['120','120 scan'],['4x5','4×5 holder'],['print','Print border']],
+  styles:[['none','None'],['35mm','35mm scan'],['120','120 scan'],['4x5','4×5 holder'],['print','Print border'],
+    ['polaroid','Polaroid 600 / SX-70'],['polaroidGo','Polaroid Go'],['instaxMini','Instax Mini'],['instaxSquare','Instax Square'],['instaxWide','Instax Wide'],['peel','Peel-apart']],
+  // instant frames from published sizes (mm): picture w × h, side / top / bottom borders
+  INSTANT:{ polaroid:{w:79,h:77,side:4.75,top:6.2,bot:24.3,r:0.4}, polaroidGo:{w:47,h:46,side:3.45,top:4.2,bot:16.4,r:0.3},
+    instaxMini:{w:46,h:62,side:4,top:6.6,bot:17.4,r:1.6}, instaxSquare:{w:62,h:62,side:5,top:6.6,bot:17.4,r:1.6}, instaxWide:{w:99,h:62,side:4.5,top:6.6,bot:17.4,r:1.6} },
+  isInstant(style){ return !!(this.INSTANT[style]||style==='peel'); },
   margins(style,w,h){
     const land=w>=h, s=Math.min(w,h);
     const f=(px)=>({l:px.l*s/w,r:px.r*s/w,t:px.t*s/h,b:px.b*s/h});   // margins given in units of short side
@@ -9,7 +14,8 @@ const Borders = {
       case '120':  return f({l:.075,r:.075,t:.075,b:.075});
       case '4x5':  return f({l:.06,r:.06,t:.06,b:.06});
       case 'print':return f({l:.07,r:.07,t:.07,b:.07});
-      default: return {l:0,r:0,t:0,b:0};
+      case 'peel': return f({l:.075,r:.075,t:.075,b:.12});
+      default: { const I=this.INSTANT[style]; if(I) return {l:I.side/I.w,r:I.side/I.w,t:I.top/I.h,b:I.bot/I.h}; return {l:0,r:0,t:0,b:0}; }
     }
   },
   cache:{key:'',tex:null},
@@ -24,13 +30,41 @@ const Borders = {
     p=p||{}; const edgeMode=p.edgeText||'stock', fno=Math.max(1,Math.min(38,p.frameNo||12));
     const edge = edgeMode==='none' ? '' : edgeMode==='custom' ? String(p.edgeCustom||'').toUpperCase().slice(0,40) : this.edgeText(stock);
     const gl=GLU.gl; const W=Math.min(4096,Math.round(fw)), H=Math.round(fh*W/fw);
-    const key=[style,W,H,stock.id,edgeMode,p.edgeCustom||'',fno].join('|');
+    const tone=p.frameTone&&p.frameTone!=='auto'?p.frameTone:((stock.defaults&&stock.defaults.frameTone)||'white');
+    const key=[style,W,H,stock.id,edgeMode,p.edgeCustom||'',fno,tone].join('|');
     if(this.cache.key===key) return this.cache.tex;
     const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d');
     const ix=b.l/(1+b.l+b.r)*W, iw=W/(1+b.l+b.r), iy=b.t/(1+b.t+b.b)*H, ih=H/(1+b.t+b.b);
     let seed=7; const r=()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; };
     const film = stock.type==='positive' ? '#0b0b0d' : stock.type==='bw' ? '#0e0e0e' : '#120d0a';
-    if(style==='print'){
+    if(this.isInstant(style)){
+      const I=this.INSTANT[style]||{w:95,h:73,r:0.2}, mm=iw/I.w;
+      const base={white:'#f3f1ec',cream:'#efe6d3',black:'#151515'}[tone]||'#f3f1ec';
+      x.fillStyle=base; x.fillRect(0,0,W,H);
+      // paper / plastic texture
+      const img=x.getImageData(0,0,W,H), d=img.data; let sd=11; const rr=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
+      const amp=tone==='black'?5:7; for(let i=0;i<d.length;i+=4){ const n=(rr()-.5)*amp; d[i]+=n; d[i+1]+=n; d[i+2]+=n; } x.putImageData(img,0,0);
+      // picture window (slightly rounded on Instax), with the faint shadow of the frame's edge
+      const rad=I.r*mm;
+      x.save(); x.shadowColor='rgba(0,0,0,.35)'; x.shadowBlur=mm*0.8; x.fillStyle='#000';
+      x.beginPath(); if(x.roundRect) x.roundRect(ix,iy,iw,ih,rad); else x.rect(ix,iy,iw,ih); x.fill(); x.restore();
+      x.save(); x.globalCompositeOperation='destination-out'; x.beginPath(); if(x.roundRect) x.roundRect(ix,iy,iw,ih,rad); else x.rect(ix,iy,iw,ih); x.fill(); x.restore();
+      if(style==='peel'){
+        // peel-apart: dark, uneven chemical edge around the picture and a goo-streaked trailing end
+        x.save(); x.beginPath(); x.rect(0,0,W,H); x.rect(ix,iy,iw,ih); x.clip('evenodd');
+        const band=Math.min(iw,ih)*0.028;
+        // organic edge: a smoothed random walk of the chemistry's reach past each side
+        const walk=(n,lo,hi)=>{ const a=[]; let v=(lo+hi)/2, dv=0; for(let k=0;k<=n;k++){ dv=dv*0.86+(rr()-.5)*0.22; v=Math.min(hi,Math.max(lo,v+dv)); if(rr()<0.015) v=hi*(1+rr()*0.8); a.push(v); } return a; };
+        const T=walk(260,0.25,0.9), Rt=walk(180,0.2,0.7), B=walk(260,0.6,1.8), Lf=walk(180,0.2,0.7);
+        x.fillStyle='rgba(28,22,19,.94)'; x.beginPath();
+        T.forEach((v,k)=>x.lineTo(ix+k/260*iw, iy-band*v)); Rt.forEach((v,k)=>x.lineTo(ix+iw+band*v, iy+k/180*ih));
+        B.forEach((v,k)=>x.lineTo(ix+iw-k/260*iw, iy+ih+band*v)); Lf.forEach((v,k)=>x.lineTo(ix-band*v, iy+ih-k/180*ih)); x.closePath(); x.fill();
+        // faint reagent streaks on the trailing border
+        for(let k=0;k<7;k++){ const gx=ix+rr()*iw, gw=iw*(0.05+rr()*0.18), gy=iy+ih+band*2, gh=band*(1+rr()*2.5);
+          const g=x.createLinearGradient(0,gy,0,gy+gh); g.addColorStop(0,'rgba(150,120,80,.22)'); g.addColorStop(1,'rgba(150,120,80,0)'); x.fillStyle=g; x.fillRect(gx,gy,gw,gh); }
+        x.restore();
+      }
+    } else if(style==='print'){
       x.fillStyle='#f2efe8'; x.fillRect(0,0,W,H);
       x.clearRect(ix,iy,iw,ih);
     } else {
