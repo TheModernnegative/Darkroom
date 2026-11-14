@@ -322,7 +322,7 @@ const App = {
   STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sAnalog:[['anOn']],sFlare:[['flare']],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
   studioEdited(id){ const [ks,...cats]=this.STUDIO_OWN[id], p=Engine.p, fx=p.fx||{};
     if(id==='sSilver'&&!p.silver) return false; if(id==='sTwoTone'&&!p.ttOn) return false;
-    return ks.some(k=>JSON.stringify(p[k])!==JSON.stringify(DEFAULTS[k]))||cats.some(c=>fx[c]&&fx[c].id&&fx[c].amt>0); },
+    return ks.some(k=>JSON.stringify(p[k])!==JSON.stringify(DEFAULTS[k]))||cats.some(c=>Object.keys(fx).some(k=>k.replace(/\d+$/,'')===c&&fx[k]&&fx[k].id&&fx[k].amt>0)); },
   // after a look: open the panels it used, fold the rest, so you can fine-tune it
   openEdited(){ this.dots(); for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('open',this.studioEdited(id)); }
     const first=Object.keys(this.STUDIO_OWN).map(id=>document.getElementById(id)).find(el=>el&&el.classList.contains('open')); if(first) first.scrollIntoView({block:'start',behavior:'smooth'}); },
@@ -694,7 +694,7 @@ const App = {
     const rt=GLU.target(w,h,'rgba16f'); Splat.render(rt);
     const src={tex:rt.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1};
     const n=this.items.filter(i=>i.kind==='scanframe').length+1;
-    const it=this.newItem({name:(this.scanName||'Scan').replace(/\.(ply|splat)$/,'')+' — frame '+n,kind:'scanframe',src,settings:Object.assign(cloneParams(Engine.p),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'})});
+    const it=this.newItem({name:(this.scanName||'Scan').replace(/\.(ply|splat)$/,'')+' — frame '+n,kind:'scanframe',src,settings:Object.assign(this.scanParams(cloneParams(Engine.p)),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'})});
     it.hist=[JSON.stringify(it.settings)];
     // keep a copy on disk so the frame survives a restart
     if(Native.available && this.info){
@@ -977,7 +977,7 @@ const App = {
     document.querySelectorAll('#modules button').forEach(b=>b.onclick=()=>this.setModule(b.dataset.m));
     document.querySelectorAll('#left .panel>h3, #right>.panel>h3').forEach(h=>h.addEventListener('click',e=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON') return; h.parentElement.classList.toggle('open'); }));
     $('#btnImport').onclick=()=>this.importDialog(); $('#emptyImport').onclick=()=>this.importDialog(); $('#seOpen').onclick=()=>this.openScan(); $('#seHow').onclick=()=>Tutorial.open(); $('#seNew').onclick=()=>this.newScan(); $('#seDemo').onclick=()=>this.loadDemo();
-    $('#btnExport').onclick=()=>this.exportDialog();
+    $('#btnExport').onclick=()=>this.exportDialog(); { const sb=$('#tbSaveScan'); if(sb) sb.onclick=()=>this.exportDialog(); }
     $('#presetAdd').onclick=e=>{ e.stopPropagation(); $('#pUserPresets').classList.add('open'); $('#presetNew').classList.toggle('on'); if($('#presetNew').classList.contains('on')){ const n=$('#presetName'); n.value=Engine.stock().name+' — '; n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };
     $('#presetSave').onclick=()=>{ this.savePreset($('#presetName').value,$('#presetWB').checked); $('#presetNew').classList.remove('on'); };
     $('#presetName').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') $('#presetSave').click(); if(e.key==='Escape') $('#presetNew').classList.remove('on'); });
@@ -1055,7 +1055,7 @@ const App = {
     const cl=$('#placeClip'); Object.assign(cl.style,{left:r.left+L.ix/dpr+'px',top:r.top+(L.H-L.iy-L.ih)/dpr+'px',width:L.iw/dpr+'px',height:L.ih/dpr+'px'});
     const cx=(.5+o.x)*L.iw/dpr, cy=(.5+o.y)*L.ih/dpr;
     Object.assign(el.style,{left:cx+'px',top:cy+'px',width:ovW*o.scale*L.ih/dpr+'px',height:ovH*o.scale*L.ih/dpr+'px',transform:`translate(-50%,-50%) rotate(${o.rot}deg)`});
-    el.dataset.label={dbl:'Second exposure',leak:'Light leak',burn:'Film burn',flare:'Flare',dust:'Dust'}[T.kind]; el.classList.add('on'); },
+    el.dataset.label={dbl:'Second exposure',leak:'Light leak',burn:'Film burn',flare:'Flare',dust:'Dust'}[T.kind.replace(/\d+$/,'')]; el.classList.add('on'); },
   bindPlace(v){ let drag=null; const T=()=>this.placeTarget();
     const toImg=(L)=>({sx:L.dpr/L.iw, sy:L.dpr/L.ih});
     v.addEventListener('pointerdown',e=>{ const t=T(); if(!t||Engine.view.mode!=='fit'||e.button!==0) return; const L=this._lastL; if(!L) return;

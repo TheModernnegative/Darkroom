@@ -333,3 +333,9 @@ button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;w
 .stkBtn b{font:10px var(--sans);color:#bbb}
 .stkBtn:hover{background:#3d5a90}
 .thumb .pin,.cell .pin{position:absolute;right:24px;top:3px;font-size:10px;font-style:normal;z-index:2}
+.lhead{display:flex;align-items:center;gap:4px}
+.lhead span{flex:1}
+.ltab{min-width:20px;height:18px;padding:0 5px;border-radius:9px;background:#2a2a2a;color:#aaa;font:11px var(--sans);border:1px solid #3a3a3a;cursor:pointer}
+.ltab.on{background:#3d5a90;color:#fff;border-color:#5a7cc0}
+.ltab.add{background:none}
+.ltab:hover{color:#fff}

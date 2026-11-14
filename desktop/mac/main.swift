@@ -556,6 +556,28 @@ final class VideoJob {
     }
 }
 
+// MARK: - First run of a packaged copy: the bundle carries the whole app; seed ~/Documents/Splat from it
+
+func seedFromBundle() {
+    let fm = FileManager.default
+    guard let res = Bundle.main.resourceURL?.appendingPathComponent("Splat"), fm.fileExists(atPath: res.path) else { return }
+    func read(_ u: URL) -> String { ((try? String(contentsOf: u, encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    let bundled = read(res.appendingPathComponent("VERSION")), local = read(splatDir.appendingPathComponent("VERSION"))
+    let haveApp = fm.fileExists(atPath: appDir.appendingPathComponent("index.html").path)
+    if haveApp && !local.isEmpty && local >= bundled { return }
+    try? fm.createDirectory(at: splatDir, withIntermediateDirectories: true)
+    for name in ["app", "mac", "splat.sh", "update.sh", "install.sh", "VERSION"] {
+        let src = res.appendingPathComponent(name), dst = splatDir.appendingPathComponent(name)
+        guard fm.fileExists(atPath: src.path) else { continue }
+        try? fm.removeItem(at: dst)
+        try? fm.copyItem(at: src, to: dst)
+    }
+    for d in ["scans", "captures", "frames", "exports", "bin"] {
+        try? fm.createDirectory(at: splatDir.appendingPathComponent(d), withIntermediateDirectories: true)
+    }
+}
+seedFromBundle()
+
 // MARK: - Launch ---------------------------------------------------------------------------
 
 let app = NSApplication.shared

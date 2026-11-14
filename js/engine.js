@@ -16,7 +16,7 @@ const DEFAULTS = {
   lookUndo:null, sSens:[0,0,0,0,0,0], sFilmType:'', sVig:0, sVigSize:50, sVigX:0, sVigY:0, sBurnT:0, sBurnB:0, sBurnL:0, sBurnR:0, sToneBal:0,
   // Studio — Analog
   dblId:'', dblMode:'add', dblAmt:60, dblEv:0, dblScale:1, dblX:0, dblY:0, dblRot:0, dblFlip:false, dblMask:0,
-  leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
+  dustOpacity:85, dustSize:100, dustSpread:'even', scratchDir:'vertical', leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
   dustAmt:0, scratchAmt:0, hairAmt:0, dustSeed:7, dustKind:'scan',
   ttOn:false, ttPalette:'red-cyan', ttGhost:80, ttMono:85, ttDX:6, ttDY:-4, ttScale:100, ttBand:0, ttBandPos:45,
   // Analog media (tape, broadcast, CRT, small-gauge cine) — a post pass on the finished picture
@@ -47,7 +47,7 @@ const FX_MODE={leak:0,burn:0,flare:0,texture:2,dust:1,frame:1};
 const TT_PALETTES = { 'red-cyan':['#ff1a24','#12e6e0'], 'magenta-green':['#ff2bd0','#2bff6a'], 'blue-orange':['#2a6bff','#ff8a1a'], 'pink-blue':['#ff5aa8','#3a8bff'], 'purple-yellow':['#9a3cff','#ffd21a'], 'red-blue':['#ff2020','#2a4dff'] };
 const TONERS = { none:null, selenium:['#36303a','#f1f0f0'], sepia:['#3d2614','#f5e7d0'], gold:['#1d2a3c','#eef2f6'], platinum:['#2c2420','#f3ece1'],
   cyanotype:['#0c2550','#e6f0fa'], split:['#1a2840','#f6e5c6'], copper:['#43201a','#f6e2d6'], tintype:['#2a2418','#cfc6a8'], ambrotype:['#1e1a14','#e2d6b8'] };
-const LEAK_COLORS = { warm:['#ff5a1a','#ffd27a'], red:['#ff1f10','#ff9a60'], yellow:['#ff9d00','#fff3a0'], magenta:['#ff2a8a','#ffb0d8'], blue:['#2a5cff','#bfe0ff'] };
+const LEAK_COLORS = { warm:['#ff5a1a','#ffd27a'], red:['#ff1f10','#ff9a60'], yellow:['#ff9d00','#fff3a0'], magenta:['#ff2a8a','#ffb0d8'], blue:['#2a5cff','#bfe0ff'], white:['#e8e4dc','#ffffff'] };
 const LEAK_POS = [[0,.5],[1,.5],[.5,0],[.5,1],[0,0],[1,0],[0,1],[1,1]];
 function cloneParams(p){ return JSON.parse(JSON.stringify(p)); }
 function withDefaults(p){ return Object.assign(cloneParams(DEFAULTS), cloneParams(p||{})); }
@@ -109,7 +109,7 @@ const Engine = {
   // parameters actually rendered: switched-off sections fall back to neutral
   eff(p){ if(p&&typeof Borders!=='undefined'&&Borders.isFilm(p.border)){ const fs=Borders.forFormat(p.format); if(p.border!==fs) p=Object.assign({},p,{border:fs}); }
     if(!p||!p.off) return p; const o=Object.assign({},p); let any=false;
-    for(const k in p.off){ if(p.off[k]&&k.startsWith('fx_')){ o.fx=Object.assign({},o.fx); delete o.fx[k.slice(3)]; any=true; continue; } if(!p.off[k]||!SECTIONS[k]) continue; any=true; SECTIONS[k].forEach(key=>o[key]= key==='filmAmt'?0 : cloneParams(DEFAULTS[key])); if(k==='film') o.filmOff=true; }
+    for(const k in p.off){ if(p.off[k]&&k.startsWith('fx_')){ o.fx=Object.assign({},o.fx); const c=k.slice(3); Object.keys(o.fx).forEach(q=>{ if(q.replace(/\d+$/,'')===c) delete o.fx[q]; }); any=true; continue; } if(!p.off[k]||!SECTIONS[k]) continue; any=true; SECTIONS[k].forEach(key=>o[key]= key==='filmAmt'?0 : cloneParams(DEFAULTS[key])); if(k==='film') o.filmOff=true; }
     if(!any) return p; delete o.off; return o; },
   oriented(p,src){ src=src||this.src; return (p.rot&1)?[src.h,src.w]:[src.w,src.h]; },
   // output (cropped) size in source pixels. In crop mode the whole rotated canvas is shown.
@@ -158,20 +158,33 @@ const Engine = {
   setDouble(src,id){ if(this.dblSrc&&this.dblSrc.own&&this.dblSrc.tex!==src?.tex) this.gl.deleteTexture(this.dblSrc.tex); this.dblSrc=src?Object.assign({},src,{id}):null; this.dirty=true; },
   // dust / scratches / hair: drawn once per seed into a tiling texture
   dustTex(p){
-    const key=[p.dustSeed,Math.round(p.dustAmt),Math.round(p.scratchAmt),Math.round(p.hairAmt)].join('|');
+    const key=[p.dustSeed,Math.round(p.dustAmt),Math.round(p.scratchAmt),Math.round(p.hairAmt),p.dustSize??100,p.dustSpread||'even',p.scratchDir||'vertical'].join('|');
     if(this._dust&&this._dust.key===key) return this._dust.tex;
     const N=2048, c=document.createElement('canvas'); c.width=N; c.height=N; const x=c.getContext('2d');
     let sd=(p.dustSeed|0)*7919+13; const r=()=>{ sd=(sd*16807)%2147483647; return sd/2147483647; };
-    x.clearRect(0,0,N,N); x.fillStyle='#fff'; x.strokeStyle='#fff'; x.lineCap='round';
-    const nd=Math.round((p.dustAmt||0)*6);
-    for(let i=0;i<nd;i++){ const px=r()*N, py=r()*N, rad=Math.pow(r(),3)*5+0.6; x.globalAlpha=0.35+r()*0.65; x.beginPath();
-      if(r()<0.7) x.arc(px,py,rad,0,7); else { x.ellipse(px,py,rad*(1+r()*3),rad*(0.4+r()*0.6),r()*7,0,7); } x.fill(); }
-    const ns=Math.round((p.scratchAmt||0)/12);
-    for(let i=0;i<ns;i++){ let px=r()*N, py=r()*N*0.2; x.globalAlpha=0.25+r()*0.5; x.lineWidth=0.6+r()*1.4; x.beginPath(); x.moveTo(px,py);
-      const len=N*(0.25+r()*0.9); for(let t=0;t<len;t+=20){ px+=(r()-.5)*1.5; py+=20; x.lineTo(px,py); } x.stroke(); }
-    const nh=Math.round((p.hairAmt||0)/10);
-    for(let i=0;i<nh;i++){ let px=r()*N, py=r()*N, a=r()*7; x.globalAlpha=0.5+r()*0.5; x.lineWidth=0.8+r()*1.2; x.beginPath(); x.moveTo(px,py);
-      for(let k=0;k<40;k++){ a+=(r()-.5)*0.5; px+=Math.cos(a)*4; py+=Math.sin(a)*4; x.lineTo(px,py); } x.stroke(); }
+    const sz=(p.dustSize??100)/100, spread=p.dustSpread||'even';
+    // where specks land: evenly, in clumps, or gathered toward the edges (like dust in a carrier)
+    const clumps=[...Array(7)].map(()=>[r()*N,r()*N,N*(0.04+r()*0.1)]);
+    const place=()=>{ if(spread==='clumps'&&r()<0.8){ const C=clumps[Math.floor(r()*clumps.length)], a=r()*7, d=Math.abs((r()+r()+r()-1.5))*C[2]; return [C[0]+Math.cos(a)*d,C[1]+Math.sin(a)*d]; }
+      if(spread==='edges'){ const e=Math.pow(r(),2.2)*0.22, side=Math.floor(r()*4), t=r()*N; return side===0?[e*N,t]:side===1?[N-e*N,t]:side===2?[t,e*N]:[t,N-e*N]; }
+      return [r()*N,r()*N]; };
+    x.clearRect(0,0,N,N); x.lineCap='round'; x.lineJoin='round';
+    // specks: irregular blobs with a soft rim; sizes follow a power law (lots of tiny, a few big)
+    const nd=Math.round((p.dustAmt||0)*7);
+    for(let i=0;i<nd;i++){ const [px,py]=place(), big=r()<0.04, rad=(big?3+r()*7:Math.pow(r(),2.4)*3.2+0.5)*sz; const a0=0.35+r()*0.65;
+      x.save(); x.translate(px,py); x.rotate(r()*7); const sx=1+r()*(big?1.4:0.8); x.scale(sx,1/Math.sqrt(sx));
+      x.beginPath(); const k=big?14:8; for(let j=0;j<=k;j++){ const an=j/k*Math.PI*2, rr=rad*(0.65+r()*0.55); j?x.lineTo(Math.cos(an)*rr,Math.sin(an)*rr):x.moveTo(Math.cos(an)*rr,Math.sin(an)*rr); } x.closePath();
+      x.shadowColor=`rgba(255,255,255,${a0*0.6})`; x.shadowBlur=rad*0.7; x.fillStyle=`rgba(255,255,255,${a0})`; x.fill(); x.restore(); }
+    // scratches: long, thin, slightly wandering; cinema-style vertical runs or random sleeve scratches
+    const ns=Math.round((p.scratchAmt||0)/6), vertical=(p.scratchDir||'vertical')==='vertical';
+    for(let i=0;i<ns;i++){ let px=r()*N, py=vertical?-50:r()*N, a=vertical?Math.PI/2+(r()-.5)*0.05:r()*7; const len=N*(vertical?0.4+r()*0.8:0.05+r()*0.25), w=(0.5+r()*1.3)*sz;
+      x.strokeStyle=`rgba(255,255,255,${0.25+r()*0.55})`; x.lineWidth=w; x.beginPath(); x.moveTo(px,py); let bend=(r()-.5)*0.004;
+      for(let t=0;t<len;t+=8){ a+=bend+(r()-.5)*(vertical?0.01:0.03); px+=Math.cos(a)*8; py+=Math.sin(a)*8; if(r()<0.02){ x.stroke(); x.beginPath(); x.moveTo(px,py); x.lineWidth=w*(0.5+r()); } else x.lineTo(px,py); } x.stroke(); }
+    // hairs & fibres: smooth curling strands that taper
+    const nh=Math.round((p.hairAmt||0)/8);
+    for(let i=0;i<nh;i++){ let [px,py]=place(), a=r()*7, cv=(r()-.5)*0.12; const L=(40+r()*160)*sz, w=(0.8+r()*1.4)*sz, op=0.55+r()*0.45;
+      for(let t=0;t<L;t+=3){ const f=t/L, ww=w*(1-Math.abs(f-.5)*1.2); a+=cv+(r()-.5)*0.12; cv*=0.995; const nx=px+Math.cos(a)*3, ny=py+Math.sin(a)*3;
+        x.strokeStyle=`rgba(255,255,255,${op})`; x.lineWidth=Math.max(0.4,ww); x.beginPath(); x.moveTo(px,py); x.lineTo(nx,ny); x.stroke(); px=nx; py=ny; } }
     const gl=this.gl, t=this._dust?this._dust.tex:gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
     for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.REPEAT],[gl.TEXTURE_WRAP_T,gl.REPEAT]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
@@ -441,15 +454,20 @@ const Engine = {
     gl.uniform4f(u.uBurnS,(p.sBurnT||0)/100,(p.sBurnB||0)/100,(p.sBurnL||0)/100,(p.sBurnR||0)/100); gl.uniform1f(u.uToneBal,(p.sToneBal||0)/100);
     gl.uniform2f(u.uZones,this.view.zones?1:0,this.view.zoneHi??-1);
     const dustOn=(p.dustAmt||0)+(p.scratchAmt||0)+(p.hairAmt||0)>0.5;
-    bind(8,gl.TEXTURE_2D,dustOn?this.dustTex(p):this.borderTex,'uDust'); gl.uniform1f(u.uDustOn,dustOn?1:0); gl.uniform1f(u.uDustDark,p.dustKind==='print'?1:0);
+    bind(8,gl.TEXTURE_2D,dustOn?this.dustTex(p):this.borderTex,'uDust'); gl.uniform1f(u.uDustOn,dustOn?(p.dustOpacity??85)/100:0); gl.uniform1f(u.uDustDark,p.dustKind==='print'?1:0);
     // unit 15 is the scratch unit for texture uploads, so bind it after every texture that may be created this frame
     bind(15,gl.TEXTURE_2D,doFine?R.fa.t:R.prep.t,'uFineTex'); gl.uniform1f(u.uFine,doFine?p.sFine/100:0);
     { const fx=p.fx||{}; let slot=0; const on=new Float32Array(6), mode=new Int32Array(6), amt=new Float32Array(6), inv=new Float32Array(6), mats=new Float32Array(54), hue=new Float32Array(18);
-      FX_SLOTS.forEach((cat,i)=>{ const Ly=fx[cat]; if(!Ly||!Ly.id||!(Ly.amt>0)) return; const t=this.assetTex(Ly.id); if(!t) return;
-        const M=this.layerMatrix(Ly,this.dims(p,s)[0]/this.dims(p,s)[1],t.w/t.h,cat);
+      // layers: keys are a category plus an optional number (leak, leak2, …), composited in category order, up to 6
+      const post=new Float32Array(6), mono=new Float32Array(6), keys=Object.keys(fx).filter(k=>FX_MODE[k.replace(/\d+$/,'')]!==undefined)
+        .sort((a,b)=>FX_SLOTS.indexOf(a.replace(/\d+$/,''))-FX_SLOTS.indexOf(b.replace(/\d+$/,''))||a.localeCompare(b,undefined,{numeric:true}));
+      const [dw,dh]=this.dims(p,s);
+      keys.forEach(key=>{ const cat=key.replace(/\d+$/,''), Ly=fx[key]; if(slot>=6||!Ly||!Ly.id||!(Ly.amt>0)) return; const t=this.assetTex(Ly.id); if(!t) return; const i=slot++;
+        const M=this.layerMatrix(Ly,dw/dh,t.w/t.h,cat); post[i]=(cat==='dust'||cat==='frame')?1:0; mono[i]=Ly.mono?1:0;
         for(let r=0;r<3;r++) for(let q=0;q<3;q++) mats[i*9+q*3+r]=M[r*3+q];
         on[i]=1; mode[i]=FX_MODE[cat]; amt[i]=Ly.amt/100; inv[i]=Ly.invert?1:0; hue.set(this.hueTint(Ly.hue,0),i*3);
         gl.activeTexture(gl.TEXTURE9+i); gl.bindTexture(gl.TEXTURE_2D,t.tex); });
+      gl.uniform1fv(u.uAPost,post); gl.uniform1fv(u.uAMono,mono);
       for(let i=0;i<6;i++) if(!on[i]){ gl.activeTexture(gl.TEXTURE9+i); gl.bindTexture(gl.TEXTURE_2D,this.borderTex); }
       gl.uniform1iv(u.uA,new Int32Array([9,10,11,12,13,14])); gl.uniform1fv(u.uAOn,on); gl.uniform1iv(u.uAMode,mode); gl.uniform1fv(u.uAAmt,amt); gl.uniform1fv(u.uAInv,inv);
       gl.uniformMatrix3fv(u.uAM,false,mats); gl.uniform3fv(u.uAHue,hue); }
@@ -836,7 +854,7 @@ uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; unif
 uniform vec3 uFlare; uniform vec3 uFlareC[4];
 uniform vec4 uPaperG; uniform vec3 uPaperT;
 uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
-uniform sampler2D uA[6]; uniform float uAOn[6],uAAmt[6],uAInv[6]; uniform int uAMode[6]; uniform mat3 uAM[6]; uniform vec3 uAHue[6];
+uniform sampler2D uA[6]; uniform float uAPost[6],uAMono[6],uAOn[6],uAAmt[6],uAInv[6]; uniform int uAMode[6]; uniform mat3 uAM[6]; uniform vec3 uAHue[6];
 uniform sampler2D uStructTex,uDust; uniform sampler2D uFineTex; uniform float uFine,uToneBal; uniform vec4 uStructB,uSB,uSVig,uBurnS; uniform vec3 uSAmp; uniform vec2 uZones;
 uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
@@ -873,9 +891,10 @@ float emulsion(vec2 p,float silver,float rMean,uint layer){
 float grainField(vec2 p,float silver,uint seed){
   return emulsion(p,silver,.42,seed)*.62 + emulsion(p*.57+vec2(17.3,4.1),silver,.45,seed+1u)*.34 + emulsion(p*.31+vec2(-8.7,31.2),silver,.48,seed+2u)*.2;
 }
+float lumaA(vec3 c){ return dot(c,vec3(.2290,.6917,.0793)); }
 vec3 layer(vec3 c, vec4 a, int i){
   int m=uAMode[i]; float k=uAAmt[i];
-  if(m==0){ vec3 s=clamp(dec(a.rgb)*uAHue[i],0.,1.); s=enc(s); return 1.-(1.-c)*(1.-s*k); }
+  if(m==0){ vec3 s=clamp(dec(a.rgb)*uAHue[i],0.,1.); if(uAMono[i]>.5) s=vec3(max(s.r,max(s.g,s.b))*.92+lumaA(s)*.08); s=enc(s); return 1.-(1.-c)*(1.-s*k); }
   if(m==2){ float g=a.r; vec3 o=mix(2.*c*g, 1.-2.*(1.-c)*(1.-g), step(.5,c)); return mix(c,o,k); }
   vec3 col = uAInv[i]>.5 ? vec3(1.)-a.rgb : a.rgb;
   return mix(c, col, clamp(a.a*k,0.,1.));
@@ -984,10 +1003,12 @@ void main(){
         c=clamp(enc(L*mix(vec3(1.),tint,uToneAmt)),0.,1.);
       }
       // Studio asset layers before the grain: leaks / burns / flares (screen), paper texture (overlay)
-      if(uAOn[0]>.5) c=layer(c,texture(uA[0],(uAM[0]*vec3(u,vt,1.)).xy),0);
-      if(uAOn[1]>.5) c=layer(c,texture(uA[1],(uAM[1]*vec3(u,vt,1.)).xy),1);
-      if(uAOn[2]>.5) c=layer(c,texture(uA[2],(uAM[2]*vec3(u,vt,1.)).xy),2);
-      if(uAOn[3]>.5) c=layer(c,texture(uA[3],(uAM[3]*vec3(u,vt,1.)).xy),3);
+      if(uAOn[0]>.5&&uAPost[0]<.5) c=layer(c,texture(uA[0],(uAM[0]*vec3(u,vt,1.)).xy),0);
+      if(uAOn[1]>.5&&uAPost[1]<.5) c=layer(c,texture(uA[1],(uAM[1]*vec3(u,vt,1.)).xy),1);
+      if(uAOn[2]>.5&&uAPost[2]<.5) c=layer(c,texture(uA[2],(uAM[2]*vec3(u,vt,1.)).xy),2);
+      if(uAOn[3]>.5&&uAPost[3]<.5) c=layer(c,texture(uA[3],(uAM[3]*vec3(u,vt,1.)).xy),3);
+      if(uAOn[4]>.5&&uAPost[4]<.5) c=layer(c,texture(uA[4],(uAM[4]*vec3(u,vt,1.)).xy),4);
+      if(uAOn[5]>.5&&uAPost[5]<.5) c=layer(c,texture(uA[5],(uAM[5]*vec3(u,vt,1.)).xy),5);
       if(uGrain>0.){
         vec2 ip=vec2(u,vt)*uImg.zw/uGrainCell;
         float k=uGrain*1.7; float yy=luma(c);
@@ -997,9 +1018,13 @@ void main(){
                c-=(lum*.8+ch*.3)*k; }
       }
       // dust and frames sit on top of everything, like the scan of a real print/negative
-      if(uAOn[4]>.5) c=layer(c,texture(uA[4],(uAM[4]*vec3(u,vt,1.)).xy),4);
-      if(uAOn[5]>.5) c=layer(c,texture(uA[5],(uAM[5]*vec3(u,vt,1.)).xy),5);
-      if(uDustOn>.5){ float a=texture(uDust,vec2(u*uImg.z/uImg.w,vt)*1.0).a; c=mix(c, uDustDark>.5?vec3(.04):vec3(.97), a*.9); }
+      if(uAOn[0]>.5&&uAPost[0]>.5) c=layer(c,texture(uA[0],(uAM[0]*vec3(u,vt,1.)).xy),0);
+      if(uAOn[1]>.5&&uAPost[1]>.5) c=layer(c,texture(uA[1],(uAM[1]*vec3(u,vt,1.)).xy),1);
+      if(uAOn[2]>.5&&uAPost[2]>.5) c=layer(c,texture(uA[2],(uAM[2]*vec3(u,vt,1.)).xy),2);
+      if(uAOn[3]>.5&&uAPost[3]>.5) c=layer(c,texture(uA[3],(uAM[3]*vec3(u,vt,1.)).xy),3);
+      if(uAOn[4]>.5&&uAPost[4]>.5) c=layer(c,texture(uA[4],(uAM[4]*vec3(u,vt,1.)).xy),4);
+      if(uAOn[5]>.5&&uAPost[5]>.5) c=layer(c,texture(uA[5],(uAM[5]*vec3(u,vt,1.)).xy),5);
+      if(uDustOn>.5){ float a=texture(uDust,vec2(u*uImg.z/uImg.w,vt)*1.0).a; c=mix(c, uDustDark>.5?vec3(.04):vec3(.97), clamp(a*uDustOn*1.05,0.,1.)); }
       col=clamp(c,0.,1.);
       if(uToSRGB>.5) col=clamp(enc(P3_TO_709*dec(col)),0.,1.);
       if(uZones.x>.5){ float z=floor(clamp(pow(luma(dec(col)),1./2.2)*1.0001,0.,1.)*10.+.5); vec3 g=vec3(z/10.); col = abs(z-uZones.y)<.5 ? mix(g,vec3(1.,.55,.1),.75) : g; }

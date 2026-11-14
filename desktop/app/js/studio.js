@@ -137,7 +137,7 @@ const Studio = {
   reset(keys){ keys.forEach(k=>this.P()[k]=cloneParams(DEFAULTS[k])); this.host.changed(); this.host.commit(); UI.refresh(); },
   // ---- asset layers
   assets(cat){ return (Engine.assetList||[]).filter(a=>a.cat===cat); },
-  resolveFx(fx){ const out={}; for(const cat in fx||{}){ const L=Object.assign({},fx[cat]); if(L.id&&!this.assets(cat).some(a=>a.id===L.id)){ delete L.id; if(L.pick===undefined) L.pick=0; } if(L.pick!==undefined){ const list=this.assets(cat); if(!list.length) continue; L.id=list[L.pick%list.length].id; delete L.pick; } out[cat]=L; } return out; },
+  resolveFx(fx){ const out={}; for(const key in fx||{}){ const cat=key.replace(/\d+$/,''), L=Object.assign({},fx[key]); if(L.id&&!this.assets(cat).some(a=>a.id===L.id)){ delete L.id; if(L.pick===undefined) L.pick=0; } if(L.pick!==undefined){ const list=this.assets(cat); if(!list.length) continue; L.id=list[L.pick%list.length].id; delete L.pick; } out[key]=L; } return out; },
   layer(cat){ const p=this.P(); if(!p.fx||p.fx===DEFAULTS.fx) p.fx={}; return p.fx[cat]||(p.fx[cat]={id:'',amt:0}); },
   // a look replaces the previous look: Studio starts clean, and Develop values the last look changed go back first
   recipeParams(r){ const o=cloneParams(this.P()); r=cloneParams(r);
@@ -224,10 +224,11 @@ const Studio = {
     this.assetLayer(b,'leak','Scanned leaks');
     UI.note(b,'Or paint a simple procedural leak:');
     this.S(b,'leakAmt','Amount',{min:0,max:150,step:1});
-    this.sel(b,'leakColor','Color',[['warm','Warm orange'],['red','Red'],['yellow','Golden'],['magenta','Magenta'],['blue','Blue']]);
+    this.sel(b,'leakColor','Color',[['warm','Warm orange'],['red','Red'],['yellow','Golden'],['magenta','Magenta'],['blue','Blue'],['white','Mono (white light)']]);
     this.sel(b,'leakPos','From',[['0','Left edge'],['1','Right edge'],['2','Top'],['3','Bottom'],['4','Top-left'],['5','Top-right'],['6','Bottom-left'],['7','Bottom-right']]);
     this.S(b,'leakSize','Size',{min:5,max:120,step:1});
-    { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r); UI.button(r,'Shuffle shape',()=>{ P().leakSeed=Math.round(Math.random()*999); H.changed(); H.commit(); }); }
+    { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r); UI.button(r,'🎲 New shape',()=>{ P().leakSeed=Math.round(Math.random()*99999); if(!P().leakAmt) P().leakAmt=60; H.changed(); H.commit(); UI.refresh(); });
+      UI.button(r,'🎲 Random leak',()=>{ const p=P(); p.leakSeed=Math.round(Math.random()*99999); p.leakPos=Math.floor(Math.random()*8); p.leakSize=20+Math.round(Math.random()*80); p.leakAmt=40+Math.round(Math.random()*80); if(p.leakColor!=='white') p.leakColor=['warm','red','yellow','magenta','blue'][Math.floor(Math.random()*5)]; H.changed(); H.commit(); UI.refresh(); }); }
     }
     // ---------------------------------------------------------------- Burns & flares
     if(want('sBurn')){
@@ -236,12 +237,17 @@ const Studio = {
     }
     // ---------------------------------------------------------------- Dust & scratches
     if(want('sDust')){
-    b=UI.panel(root,'sDust','Dust & Scratches',false,()=>{ this.reset(['dustAmt','scratchAmt','hairAmt','dustSeed','dustKind']); this.clearLayer('dust'); });
+    b=UI.panel(root,'sDust','Dust & Scratches',false,()=>{ this.reset(['dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','dustOpacity','dustSize','dustSpread','scratchDir']); this.clearLayer('dust'); });
     this.assetLayer(b,'dust','Scanned dust & scratches');
-    UI.note(b,'Or generate fresh specks:');
-    this.S(b,'dustAmt','Dust',{min:0,max:100,step:1}); this.S(b,'scratchAmt','Scratches',{min:0,max:100,step:1}); this.S(b,'hairAmt','Hair & fibres',{min:0,max:100,step:1});
+    { const h=document.createElement('div'); h.className='ahead'; h.textContent='Generated dust — new every time you scatter'; b.appendChild(h); }
+    { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r);
+      UI.button(r,'🎲 Scatter again',()=>{ P().dustSeed=Math.round(Math.random()*99999); if(!(P().dustAmt||P().scratchAmt||P().hairAmt)) P().dustAmt=35; H.changed(); H.commit(); UI.refresh(); }); }
+    this.S(b,'dustOpacity','Amount',{min:0,max:100,step:1});
+    this.S(b,'dustAmt','Specks',{min:0,max:100,step:1}); this.S(b,'dustSize','Speck size',{min:40,max:250,step:1,fmt:x=>Math.round(x)+'%'});
+    this.S(b,'scratchAmt','Scratches',{min:0,max:100,step:1}); this.sel(b,'scratchDir','Scratch type',[['vertical','Cinema (vertical runs)'],['random','Sleeve scuffs (any direction)']]);
+    this.S(b,'hairAmt','Hairs & fibres',{min:0,max:100,step:1});
+    this.sel(b,'dustSpread','Distribution',[['even','Even'],['clumps','Clumps'],['edges','Toward the edges']]);
     this.sel(b,'dustKind','Looks like',[['scan','Scanned negative (white specks)'],['print','Darkroom print (dark specks)']]);
-    { const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r); UI.button(r,'Shuffle',()=>{ P().dustSeed=Math.round(Math.random()*999); H.changed(); H.commit(); }); }
     }
     // ---------------------------------------------------------------- Texture + frames
     if(want('sTexture')){
@@ -309,41 +315,74 @@ const Studio = {
   },
   // what a drag on the photo moves: the double exposure, or a leak / burn / flare / dust layer
   placeTarget(){ const p=this.P(), off=p.off||{}; let t=this.dragTarget;
-    if(t&&t!=='dbl'){ const Ly=(p.fx||{})[t]; if(!Ly||!Ly.id||!(Ly.amt>0)||off['fx_'+t]||!['leak','burn','flare','dust'].includes(t)) t=null; }
+    if(t&&t!=='dbl'){ const Ly=(p.fx||{})[t], c=t.replace(/\d+$/,''); if(!Ly||!Ly.id||!(Ly.amt>0)||off['fx_'+c]||!['leak','burn','flare','dust'].includes(c)) t=null; }
     if(t==='dbl'&&!(p.dblId&&Engine.dblSrc&&!off.dbl)) t=null;
     if(!t){ if(p.dblId&&Engine.dblSrc&&!off.dbl) t='dbl'; else return null; }
     if(t==='dbl') return {kind:t,get:()=>({x:p.dblX||0,y:p.dblY||0,scale:p.dblScale||1,rot:p.dblRot||0}),set:o=>{ p.dblX=o.x; p.dblY=o.y; p.dblScale=o.scale; p.dblRot=o.rot; },B:Engine.dblSrc.w/Engine.dblSrc.h};
     const Ly=p.fx[t], tx=Engine.assetTex(Ly.id); if(!tx) return null;
     return {kind:t,get:()=>({x:Ly.x||0,y:Ly.y||0,scale:Ly.scale||1,rot:Ly.rot||0}),set:o=>{ Object.assign(Ly,{x:o.x,y:o.y,scale:o.scale,rot:o.rot}); },B:tx.w/tx.h}; },
-  clearLayer(cat){ const p=this.P(); if(p.fx&&p.fx[cat]){ p.fx=Object.assign({},p.fx); delete p.fx[cat]; } if(this.dragTarget===cat) this.dragTarget=null; this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); },
+  clearLayer(cat){ const p=this.P(); if(p.fx){ p.fx=Object.assign({},p.fx); Object.keys(p.fx).forEach(k=>{ if(k.replace(/\d+$/,'')===cat) delete p.fx[k]; }); } if(this.dragTarget&&this.dragTarget.replace(/\d+$/,'')===cat) this.dragTarget=null; this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); },
   // a thumbnail grid of library assets + the controls for the chosen one
-  assetLayer(b,cat,label){ const H=this.host, P=()=>this.P(), L=()=>this.layer(cat), movable=['leak','burn','flare','dust'].includes(cat);
+  // ---- layered overlays: each category can stack several layers (leak, leak2, …); 6 layers in total
+  layersOf(cat){ const fx=this.P().fx||{}; return Object.keys(fx).filter(k=>k.replace(/\d+$/,'')===cat).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})); },
+  totalLayers(){ const fx=this.P().fx||{}; return Object.keys(fx).filter(k=>fx[k]&&fx[k].id&&fx[k].amt>0).length; },
+  selKey(cat){ this._sel=this._sel||{}; const ks=this.layersOf(cat); if(!this._sel[cat]||(!ks.includes(this._sel[cat])&&this._sel[cat]!==cat)) this._sel[cat]=ks[0]||cat; return this._sel[cat]; },
+  keyLayer(key){ const p=this.P(); if(!p.fx||p.fx===DEFAULTS.fx) p.fx={}; return p.fx[key]||(p.fx[key]={id:'',amt:0}); },
+  clearKey(key){ const p=this.P(); if(p.fx&&p.fx[key]){ p.fx=Object.assign({},p.fx); delete p.fx[key]; } if(this.dragTarget===key) this.dragTarget=null; this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); },
+  // a fresh arrangement of the same asset: quarter turns, flips, zoom into a different part of it
+  shuffleLayer(key,newAsset){ const cat=key.replace(/\d+$/,''), Ly=this.keyLayer(key), R=(a,b)=>a+Math.random()*(b-a);
+    if(newAsset||!Ly.id){ const l=this.assets(cat).filter(a=>a.id!==Ly.id); if(l.length) Ly.id=l[Math.floor(Math.random()*l.length)].id; if(!(Ly.amt>0)) Ly.amt=cat==='frame'?100:cat==='texture'?40:70; }
+    if(cat==='frame'){ Ly.rot=Math.random()<.5?0:180; Ly.flip=Math.random()<.5; }
+    else if(cat==='texture'){ Ly.scale=R(.8,1.6); Ly.rot=[0,90,180,270][Math.floor(Math.random()*4)]; Ly.flip=Math.random()<.5; }
+    else { const sc=cat==='dust'?R(1,1.7):R(1,2.2); Ly.scale=sc; Ly.rot=[0,90,180,270][Math.floor(Math.random()*4)]+R(-12,12); Ly.flip=Math.random()<.5;
+      const m=(sc-1)/2+0.15; Ly.x=R(-m,m); Ly.y=R(-m,m); if((cat==='leak'||cat==='flare')&&!Ly.mono) Ly.hue=Math.random()<.4?R(-40,40):0; }
+    this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets(); },
+  assetLayer(b,cat,label){ const H=this.host, P=()=>this.P(), K=()=>this.selKey(cat), L=()=>this.keyLayer(K()), movable=['leak','burn','flare','dust'].includes(cat);
     const wrap=document.createElement('div'); wrap.className='alayer'; b.appendChild(wrap);
-    const hd=document.createElement('div'); hd.className='ahead'; hd.textContent=label; wrap.appendChild(hd);
+    const hd=document.createElement('div'); hd.className='ahead lhead'; wrap.appendChild(hd);
     const grid=document.createElement('div'); grid.className='agrid'; wrap.appendChild(grid);
     const ctl=document.createElement('div'); ctl.className='actl'; wrap.appendChild(ctl);
+    const cur=()=>(P().fx||{})[K()]||{};
     const set=(k,v)=>{ L()[k]=v; H.changed(); };
-    const sl=(k,lab,o,def)=>UI.slider(ctl,'fx_'+cat+'_'+k,lab,Object.assign({def,get:()=>{ const x=(P().fx||{})[cat]; return x&&x[k]!==undefined?x[k]:def; },set:v=>set(k,v),commit:()=>H.commit()},o));
+    const sl=(k,lab,o,def)=>UI.slider(ctl,'fx_'+cat+'_'+k,lab,Object.assign({def,get:()=>{ const x=cur(); return x[k]!==undefined?x[k]:def; },set:v=>set(k,v),commit:()=>H.commit()},o));
+    { const r=document.createElement('div'); r.className='btnrow'; ctl.appendChild(r);
+      UI.button(r,'🎲 New pattern',()=>this.shuffleLayer(K(),false)); UI.button(r,'🎲 Different '+({leak:'leak',burn:'burn',flare:'flare',dust:'dust',texture:'texture',frame:'frame'}[cat]),()=>this.shuffleLayer(K(),true)); }
     sl('amt','Amount',{min:0,max:100,step:1},0);
     if(cat!=='frame'){ sl('scale','Scale',{min:0.3,max:4,step:0.01,fmt:x=>Math.round(x*100)+'%'},1); }
-    sl('rot','Rotate',{min:-180,max:180,step:0.5,fmt:x=>x.toFixed(0)+'°'},0);
+    sl('rot','Rotate',{min:-180,max:270,step:0.5,fmt:x=>x.toFixed(0)+'°'},0);
     if(['leak','burn','flare'].includes(cat)) sl('hue','Color shift',{min:-180,max:180,step:1,fmt:x=>Math.round(x)+'°',track:'linear-gradient(90deg,#3cf,#93f,#f36,#f93,#fc3,#3f9,#3cf)'},0);
     const row=document.createElement('div'); row.className='btnrow'; ctl.appendChild(row);
     UI.button(row,'Flip',()=>{ L().flip=!L().flip; H.changed(); H.commit(); });
+    if(['leak','burn','flare'].includes(cat)) UI.button(row,'Mono',()=>{ L().mono=!L().mono; H.changed(); H.commit(); H.toast&&H.toast(L().mono?'Mono: white light, no colour':'Colour restored'); });
     if(cat==='dust'||cat==='frame') UI.button(row,'Invert',()=>{ L().invert=!L().invert; H.changed(); H.commit(); });
-    if(movable) UI.button(row,'Place with mouse',()=>{ this.dragTarget=cat; H.changed(); H.toast&&H.toast('Drag on the photo to move it · scroll to scale · ⇧-drag to rotate'); });
-    const render=()=>{ grid.innerHTML=''; const list=this.assets(cat), cur=((P().fx||{})[cat]||{}).id||'';
-      const none=document.createElement('div'); none.className='atile none'+(cur?'':' on'); none.innerHTML='<span>None</span>'; none.onclick=()=>this.clearLayer(cat); grid.appendChild(none);
+    if(movable) UI.button(row,'Place with mouse',()=>{ this.dragTarget=K(); H.changed(); H.toast&&H.toast('Drag on the photo to move it · scroll to scale · ⇧-drag to rotate'); });
+    const render=()=>{ // layer tabs
+      hd.innerHTML=''; const t0=document.createElement('span'); t0.textContent=label; hd.appendChild(t0);
+      const ks=this.layersOf(cat); const tabs=ks.length?ks:[cat]; const sel=K();
+      tabs.forEach((k,i)=>{ const t=document.createElement('button'); t.className='ltab'+(k===sel?' on':''); t.textContent=String(i+1); t.title='Layer '+(i+1); t.onclick=()=>{ this._sel[cat]=k; if(movable&&(P().fx||{})[k]) this.dragTarget=k; render(); UI.refresh(); }; hd.appendChild(t); });
+      const add=document.createElement('button'); add.className='ltab add'; add.textContent='+'; add.title='Add a layer on top';
+      add.onclick=()=>{ if(this.totalLayers()>=6){ H.toast&&H.toast('Up to 6 overlay layers in total'); return; } let n=1; const has=k=>(P().fx||{})[k]; let k=cat; while(has(k)) k=cat+(++n);
+        this.keyLayer(k); this._sel[cat]=k; this.shuffleLayer(k,true); };
+      hd.appendChild(add);
+      if(ks.length>1){ const del=document.createElement('button'); del.className='ltab add'; del.textContent='×'; del.title='Remove this layer'; del.onclick=()=>this.clearKey(K()); hd.appendChild(del); }
+      grid.innerHTML=''; const list=this.assets(cat), id=cur().id||'';
+      const none=document.createElement('div'); none.className='atile none'+(id?'':' on'); none.innerHTML='<span>None</span>'; none.onclick=()=>this.clearKey(K()); grid.appendChild(none);
       if(!list.length){ const n=document.createElement('div'); n.className='note'; n.style.gridColumn='2/-1'; n.textContent=Engine.assetList?'No assets installed yet.':'Loading the asset library…'; grid.appendChild(n); }
-      list.forEach(a=>{ const t=document.createElement('div'); t.className='atile'+(a.id===cur?' on':''); t.title=a.name;
+      list.forEach(a=>{ const t=document.createElement('div'); t.className='atile'+(a.id===id?' on':''); t.title=a.name;
         t.innerHTML=`<img loading="lazy" src="data/assets/${a.thumb}"><span></span>`; t.querySelector('span').textContent=a.name;
-        t.onclick=()=>{ const Ly=L(); if(Ly.id===a.id){ this.clearLayer(cat); return; } Object.assign(Ly,{id:a.id,amt:Ly.amt>0?Ly.amt:(cat==='frame'?100:cat==='texture'?40:70)}); if(movable) this.dragTarget=cat; H.changed(); H.commit(); UI.refresh(); this.refreshAssets(); };
-        if(H.hover) { t.onmouseenter=()=>{ const o=cloneParams(P()); o.fx=Object.assign({},o.fx,{[cat]:Object.assign({},(o.fx||{})[cat]||{},{id:a.id,amt:((o.fx||{})[cat]||{}).amt||(cat==='frame'?100:70)})}); H.hover(o); }; t.onmouseleave=()=>H.hover(null); }
+        t.onclick=()=>{ const Ly=L(); if(Ly.id===a.id){ this.clearKey(K()); return; } if(!Ly.id&&this.totalLayers()>=6){ H.toast&&H.toast('Up to 6 overlay layers in total'); return; }
+          Object.assign(Ly,{id:a.id,amt:Ly.amt>0?Ly.amt:(cat==='frame'?100:cat==='texture'?40:70)}); if(movable) this.dragTarget=K(); H.changed(); H.commit(); UI.refresh(); this.refreshAssets(); };
+        if(H.hover){ t.onmouseenter=()=>{ const o=cloneParams(P()), k=K(); o.fx=Object.assign({},o.fx,{[k]:Object.assign({},(o.fx||{})[k]||{},{id:a.id,amt:((o.fx||{})[k]||{}).amt||(cat==='frame'?100:70)})}); H.hover(o); }; t.onmouseleave=()=>H.hover(null); }
         grid.appendChild(t); });
-      ctl.style.display=cur?'':'none'; };
+      ctl.style.display=id?'':'none'; };
     render(); (this._agrids=this._agrids||[]).push([grid,render]); },
   // Develop → Frame → Wet plate uses the best tintype plate from the library
-  loadPlate(){ const a=(Engine.assetList||[]).find(a=>a.id==='frame_tintype_1')||(Engine.assetList||[]).find(a=>a.cat==='frame'&&/tintype|plate/i.test(a.id)); if(!a||typeof Borders==='undefined') return;
+  loadPlate(){ this.loadPlate0();
+    // peel-apart frames for Develop → Frame → Peel-apart
+    const map={peel_color:'frame_peel_fp100c',peel_bw:'frame_peel_fp3000b',peel_neg:'frame_peel_665neg'};
+    for(const k in map){ const a=(Engine.assetList||[]).find(x=>x.id===map[k]); if(!a||typeof Borders==='undefined') continue;
+      const im=new Image(); im.onload=()=>{ Borders.imgs[k]=im; Borders.cache.key=''; Engine.dirty=true; this.host.changed&&this.host.changed(); }; im.src='data/assets/'+a.file; } },
+  loadPlate0(){ const a=(Engine.assetList||[]).find(a=>a.id==='frame_tintype_1')||(Engine.assetList||[]).find(a=>a.cat==='frame'&&/tintype|plate/i.test(a.id)); if(!a||typeof Borders==='undefined') return;
     const im=new Image(); im.onload=()=>{ Borders.plateImg=im; Borders.cache.key=''; Engine.dirty=true; this.host.changed&&this.host.changed(); }; im.src='data/assets/'+a.file; },
   refreshAssets(){ this._agrids=(this._agrids||[]).filter(([g])=>g.isConnected||!this._agridsSeen); this._agridsSeen=true; this._agrids.forEach(([g,f])=>f()); },
   // ---- 🎲 random looks: a coherent theme, then random choices inside it

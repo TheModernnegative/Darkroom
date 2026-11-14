@@ -12,6 +12,12 @@ const Borders = {
     'sheet:4x5':{sheet:1,short:96,reb:3.0,flap:7.5}, 'sheet:8x10':{sheet:1,short:194,reb:4.0,flap:10} },
   isFilm(style){ return style==='film'||style==='35mm'||style==='120'||style==='4x5'||!!this.FILMS[style]; },
   forFormat(fmt){ return {'35mm':'35mm','645':'120:645','6x6':'120:66','6x7':'120:67','4x5':'sheet:4x5','8x10':'sheet:8x10'}[fmt]||'35mm'; },
+  // library frames used by Develop borders
+  imgs:{},
+  frameImg(style,stock){ if(style==='wetplate') return this.plateImg&&this.plateImg.complete&&this.plateImg.naturalWidth?this.plateImg:null;
+    if(style!=='peel') return null; const id=stock&&stock.id||'';
+    const want = /665|polaroid_55/.test(id) ? 'peel_neg' : /fp3000b/.test(id) ? 'peel_bw' : 'peel_color';
+    const im=this.imgs[want]||this.imgs.peel_color; return im&&im.complete&&im.naturalWidth?im:null; },
   isInstant(style){ return !!(this.INSTANT[style]||style==='peel'); },
   margins(style,w,h){
     const land=w>=h, s=Math.min(w,h);
@@ -24,7 +30,7 @@ const Borders = {
       case 'sheet:4x5': case 'sheet:8x10': { const F=this.FILMS[style], m=s/F.short;
         return land ? {l:F.flap*m/w,r:F.reb*m/w,t:F.reb*m/h,b:F.reb*m/h} : {t:F.flap*m/h,b:F.reb*m/h,l:F.reb*m/w,r:F.reb*m/w}; }
       case 'print':return f({l:.07,r:.07,t:.07,b:.07});
-      case 'peel': return f({l:.075,r:.075,t:.075,b:.12});
+      case 'peel': return this.imgs&&Object.keys(this.imgs).some(k=>k.startsWith('peel')) ? f({l:.04,r:.04,t:.04,b:.04}) : f({l:.075,r:.075,t:.075,b:.12});
       case 'wetplate': return this.plateImg ? f({l:.015,r:.015,t:.015,b:.015}) : f({l:.06,r:.06,t:.06,b:.06});
       default: { const I=this.INSTANT[style]; if(I) return {l:I.side/I.w,r:I.side/I.w,t:I.top/I.h,b:I.bot/I.h}; return {l:0,r:0,t:0,b:0}; }
     }
@@ -122,9 +128,10 @@ const Borders = {
     const ix=b.l/(1+b.l+b.r)*W, iw=W/(1+b.l+b.r), iy=b.t/(1+b.t+b.b)*H, ih=H/(1+b.t+b.b);
     let seed=7; const r=()=>{ seed=(seed*16807)%2147483647; return (seed-1)/2147483646; };
     const film = stock.type==='positive' ? '#0b0b0d' : stock.type==='bw' ? '#0e0e0e' : '#120d0a';
-    if(style==='wetplate'&&this.plateImg&&this.plateImg.complete&&this.plateImg.naturalWidth){
-      // scanned-quality plate edge from the asset library, rotated for portrait photos
-      const im=this.plateImg, port=H>W; x.save();
+    const im0=this.frameImg(style,stock);
+    if(im0){
+      // scanned-quality edge from the asset library (wet plate, peel-apart), rotated for portrait photos
+      const im=im0, port=H>W; x.save();
       if(port){ x.translate(W,0); x.rotate(Math.PI/2); x.drawImage(im,0,0,H,W); } else x.drawImage(im,0,0,W,H);
       x.restore();
     } else if(style==='wetplate'){
@@ -160,14 +167,13 @@ const Borders = {
         x.save(); x.beginPath(); x.rect(0,0,W,H); x.rect(ix,iy,iw,ih); x.clip('evenodd');
         const band=Math.min(iw,ih)*0.028;
         // organic edge: a smoothed random walk of the chemistry's reach past each side
-        const walk=(n,lo,hi)=>{ const a=[]; let v=(lo+hi)/2, dv=0; for(let k=0;k<=n;k++){ dv=dv*0.86+(rr()-.5)*0.22; v=Math.min(hi,Math.max(lo,v+dv)); if(rr()<0.015) v=hi*(1+rr()*0.8); a.push(v); } return a; };
+        const walk=(n,lo,hi)=>{ const a=[]; let v=(lo+hi)/2, dv=0; for(let k=0;k<=n;k++){ dv=dv*0.9+(rr()-.5)*0.08; v=Math.min(hi,Math.max(lo,v+dv)); a.push(v); } for(let k=1;k<a.length-1;k++) a[k]=(a[k-1]+a[k]*2+a[k+1])/4; return a; };
         const T=walk(260,0.25,0.9), Rt=walk(180,0.2,0.7), B=walk(260,0.6,1.8), Lf=walk(180,0.2,0.7);
         x.fillStyle='rgba(28,22,19,.94)'; x.beginPath();
         T.forEach((v,k)=>x.lineTo(ix+k/260*iw, iy-band*v)); Rt.forEach((v,k)=>x.lineTo(ix+iw+band*v, iy+k/180*ih));
         B.forEach((v,k)=>x.lineTo(ix+iw-k/260*iw, iy+ih+band*v)); Lf.forEach((v,k)=>x.lineTo(ix-band*v, iy+ih-k/180*ih)); x.closePath(); x.fill();
         // faint reagent streaks on the trailing border
-        for(let k=0;k<7;k++){ const gx=ix+rr()*iw, gw=iw*(0.05+rr()*0.18), gy=iy+ih+band*2, gh=band*(1+rr()*2.5);
-          const g=x.createLinearGradient(0,gy,0,gy+gh); g.addColorStop(0,'rgba(150,120,80,.22)'); g.addColorStop(1,'rgba(150,120,80,0)'); x.fillStyle=g; x.fillRect(gx,gy,gw,gh); }
+
         x.restore();
       }
     } else if(style==='print'){
