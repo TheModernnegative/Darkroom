@@ -212,6 +212,28 @@ const Tools = {
     return [e(r),e(g),e(bb)];
   },
 
+  // ------------------------------------------------------------------ which areas have edits (tab / panel dots)
+  GROUPS:{ film:['paper','format','filmAmt','autoExp'], light:['ev','contrast','highlights','shadows','whites','blacks','hlExpand','curve'],
+    color:['temp','tint','vibrance','saturation','hslH','hslS','hslL','gShS','gShL','gMidS','gMidL','gHiS','gHiL'],
+    crop:['crop','angle','rot','flip'], effects:['grain','grainSize','grainRough','halation','glow','falloff','border'] },
+  edited(p){ const out={}; const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    for(const g in this.GROUPS) out[g]=this.GROUPS[g].some(k=>{ const v=p[k], d=DEFAULTS[k]; if(typeof v==='number'&&typeof d==='number') return Math.abs(v-d)>1e-6; return k==='paper'?false:!same(v,d); });
+    out.film = out.film || (p.paper!=null && p.paper!==Engine.stock(p.stock).papers[0].id);
+    return out; },
+  // ------------------------------------------------------------------ preset amount
+  // a = 0 → neutral (defaults, film at 0 strength), 1 → the preset exactly, >1 → exaggerated.
+  // Only keys the preset contains are touched; exposure / WB / crop stay with the photo.
+  blendPreset(cur,preset,a){
+    const out=cloneParams(cur), lerp=(x,y)=>x+(y-x)*a;
+    for(const k in preset){ const pv=preset[k], dv=DEFAULTS[k];
+      if(k==='filmAmt') continue;
+      if(typeof pv==='number' && typeof dv==='number') out[k]= k.endsWith('H')&&k.startsWith('g') ? pv : lerp(dv,pv);
+      else if(Array.isArray(pv) && Array.isArray(dv) && typeof pv[0]==='number') out[k]=pv.map((v,i)=>lerp(dv[i]||0,v));
+      else if(k==='curve'){ out.curve={}; for(const ch in pv) out.curve[ch]=pv[ch].map(([x,y])=>[x,Math.min(1,Math.max(0,x+(y-x)*a))]); }
+      else out[k]=cloneParams(pv); }
+    out.filmAmt=Math.max(0,Math.min(100,(preset.filmAmt??100)*a));
+    return out;
+  },
   // ------------------------------------------------------------------ preset files (.darkroom.json) — portable between Mac and phone
   presetFile(presets){ return JSON.stringify({type:'splat-darkroom-presets',v:1,author:'Daniel S. Workman',presets},null,1); },
   parsePresetFile(text){ const d=JSON.parse(text); const a=Array.isArray(d)?d:(d.presets||(d.settings?[d]:[]));

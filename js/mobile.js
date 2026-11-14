@@ -10,7 +10,10 @@ const M = {
     await Engine.ensureLuts(Engine.p);
     this.kit(); Tools.init(this); this.bind(); this.showTab('film'); this.title();
     if('serviceWorker' in navigator && location.protocol==='https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
-    const loop=()=>{ if(Engine.dirty&&Engine.src){ Engine.dirty=false; const p=Engine.hoverParams||Engine.p; this._lastL=Engine.layout(p); Engine.render({params:p,layout:this._lastL,borderTex:this.borderTex()}); Tools.overlay(); this.histo(); } requestAnimationFrame(loop); };
+    const loop=()=>{ if(Engine.dirty&&Engine.src){ Engine.dirty=false; const p=Engine.hoverParams||Engine.p; this._lastL=Engine.layout(p);
+        if(this.compare&&!Engine.cropMode){ Engine.renderSplit(this.compare.settings,p,(L,pp)=>pp.border==='none'?null:Borders.texture(pp.border,L.fw,L.fh,L.b,Engine.stock(pp.stock))); }
+        else Engine.render({params:p,layout:this._lastL,borderTex:this.borderTex()});
+        Tools.overlay(); this.histo(); this.zoomLabel(); } requestAnimationFrame(loop); };
     requestAnimationFrame(loop);
   },
   // ----------------------------------------------------------------- photo
@@ -22,7 +25,9 @@ const M = {
       if(Engine.src) Engine.gl.deleteTexture(Engine.src.tex);
       PER_PHOTO_KEYS.filter(k=>!['ev','temp','tint'].includes(k)).forEach(k=>Engine.p[k]=cloneParams(DEFAULTS[k])); delete Engine.p.cropPortrait;
       Engine.setSource(src); $('#empty').classList.add('off'); $('#btnSave').disabled=false;
-      this.hist=[JSON.stringify(Engine.p)]; this.fut=[];
+      this.activePreset=null; this.dots();
+      this.hist=[JSON.stringify(Engine.p)]; this.fut=[]; this.hires=null; this.hiresLoading=null; Engine.view={mode:'fit',cx:.5,cy:.5}; this.setCompare(null);
+      this.photoKey=(f.name||'')+'|'+(f.size||0)+'|'+(f.lastModified||0); this.loadVersions();
       this.thumbs={}; this.busy(); this.showTab(this.tab);
       setTimeout(()=>this.makeThumbs(),60);
     }catch(e){ this.busy(); this.toast('Could not open: '+e.message); }
@@ -70,7 +75,8 @@ const M = {
   },
   // ----------------------------------------------------------------- edits
   thumbSoon(){},
-  changed(){ Engine.dirty=true; this.title(); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
+  dots(){ const e=Tools.edited(Engine.p); document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
+  changed(){ Engine.dirty=true; this.title(); clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),100); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
   commit(){ const s=JSON.stringify(Engine.p); if(this.hist[this.hist.length-1]!==s){ this.hist.push(s); this.fut=[]; if(this.hist.length>100) this.hist.shift(); } },
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
   async setStock(id){ Engine.p.stock=id; Engine.p.paper=null; await Engine.ensureLuts(Engine.p); this.changed(); this.commit(); this.showTab('film',true); },
@@ -109,7 +115,7 @@ const M = {
     if(resetKeys) h.querySelector('button').onclick=()=>{ resetKeys.forEach(k=>Engine.p[k]=DEFAULTS[k]); this.changed(); this.commit(); this.showTab(this.tab); }; parent.appendChild(h); },
   showTab(t,keepScroll){
     if(this.tab==='crop' && t!=='crop' && Engine.cropMode) Tools.setCropMode(false);
-    this.tab=t; document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+    this.tab=t; document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); this.dots();
     UI.sliders={};
     const pane=$('#pane'), sx=(pane.querySelector('.stocks')||{}).scrollLeft, sy=pane.scrollTop; pane.innerHTML='';
     const p=Engine.p, S=(k,l,o)=>this.slider(pane,k,l,o);
@@ -126,6 +132,7 @@ const M = {
       pane.appendChild(row); if(keepScroll&&sx!=null) row.scrollLeft=sx; else { const on=row.querySelector('.card.on'); if(on) row.scrollLeft=on.offsetLeft-40; }
       this.seg(pane,'Print',s.papers.map(x=>[x.id,x.name.replace('Kodak Professional ','').replace('Fujifilm ','Fuji ').replace('Kodak ','')]),()=>Engine.paperFor(p).id,async v=>{ p.paper=v; await Engine.ensureLuts(p); this.changed(); this.commit(); });
       this.seg(pane,'Format',Object.entries(FORMATS).map(([k,f])=>[k,f.label]),()=>p.format,v=>{ p.format=v; this.changed(); this.commit(); });
+      S('filmAmt','Film strength',{min:0,max:100,step:1,fmt:x=>Math.round(x)+'%'});
       this.toggle(pane,'Auto exposure (lab metering)',()=>p.autoExp,v=>{ p.autoExp=v; this.changed(); this.commit(); });
     } else if(t==='light'){
       this.head(pane,'Light',['ev','contrast','highlights','shadows','whites','blacks']);
@@ -135,14 +142,16 @@ const M = {
       this.head(pane,'Source',['hlExpand']);
       S('hlExpand','Highlight room',{min:0,max:1,step:0.01,fmt:x=>Math.round(x*100)});
       const n=document.createElement('div'); n.className='note'; n.textContent='Re-opens highlights the iPhone compressed, so the film shoulder can roll them off.'; pane.appendChild(n);
-      Tools.buildCurvePanel(pane,true);
+      this.toolRow(pane,'Tone Curve',Engine.curveIsIdentity(p)?'Tap to shape RGB or single channels':'Edited',()=>this.openTool('Tone Curve',b=>Tools.buildCurvePanel(b,true)),!Engine.curveIsIdentity(p));
     } else if(t==='color'){
       this.head(pane,'White balance',['temp','tint']);
       S('temp','Temp',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3c6bd6,#777 50%,#e4c03a)'});
       S('tint','Tint',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3fae4a,#777 50%,#c446c0)'});
       this.head(pane,'Presence',['vibrance','saturation']);
       S('vibrance','Vibrance',{min:-100,max:100,step:1}); S('saturation','Saturation',{min:-100,max:100,step:1});
-      Tools.buildHSLPanel(pane,true); Tools.buildGradingPanel(pane,true);
+      Tools.buildHSLPanel(pane,true);
+      const gOn=!!(p.gShS||p.gMidS||p.gHiS||p.gShL||p.gMidL||p.gHiL);
+      this.toolRow(pane,'Color Grading',gOn?'Edited':'Tint shadows, midtones and highlights',()=>this.openTool('Color Grading',b=>Tools.buildGradingPanel(b,true)),gOn);
     } else if(t==='crop'){
       if(Engine.src && !Engine.cropMode) Tools.setCropMode(true);
       Tools.buildCropPanel(pane,true);
@@ -155,6 +164,17 @@ const M = {
       this.head(pane,'Frame');
       this.seg(pane,'',Borders.styles.map(([k,t])=>[k,t.replace(' scan','').replace(' holder','').replace('Print border','Print')]),()=>p.border,v=>{ p.border=v; this.changed(); this.commit(); });
     } else if(t==='presets'){
+      const vh=document.createElement('div'); vh.className='paneHead'; vh.innerHTML='<span>Versions of this photo</span><button>+ Save version</button>'; vh.querySelector('button').onclick=()=>this.addVersion(); pane.appendChild(vh);
+      if(!(this.versions||[]).length){ const n=document.createElement('div'); n.className='note'; n.textContent='Save a version, try another film or edit, then tap A|B at the top to see them side by side.'; pane.appendChild(n); }
+      else { const vl=document.createElement('div'); vl.className='plist'+(this.editing?' editing':'');
+        this.versions.forEach(v=>{ const c=document.createElement('div'); c.className='pc'+(this.compare&&this.compare.id===v.id?' cmp':'');
+          c.innerHTML=`<div class="th" style="${Engine.src?`background-image:url(${this.thumb(withDefaults(v.settings),192,220)})`:''}"></div><div class="nm"></div><button class="del">×</button><button class="ab">A|B</button>`;
+          c.querySelector('.nm').textContent=v.name;
+          c.querySelector('.del').onclick=e=>{ e.stopPropagation(); this.versions=this.versions.filter(x=>x!==v); if(this.compare===v) this.setCompare(null); this.saveVersions(); this.showTab('presets',true); };
+          c.querySelector('.ab').onclick=e=>{ e.stopPropagation(); this.setCompare(this.compare===v?null:v); this.showTab('presets',true); };
+          c.onclick=async()=>{ if(this.editing) return; Engine.p=withDefaults(cloneParams(v.settings)); await Engine.ensureLuts(Engine.p); this.changed(); this.commit(); this.toast('Applied '+v.name); };
+          vl.appendChild(c); });
+        pane.appendChild(vl); }
       const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>Your presets</span><button>${this.editing?'Done':'Edit'}</button>`;
       h.querySelector('button').onclick=()=>{ this.editing=!this.editing; this.showTab('presets'); }; pane.appendChild(h);
       const nw=document.createElement('div'); nw.className='pnew'; nw.innerHTML=`<input placeholder="Name this look" value=""><button>Save</button>`;
@@ -163,6 +183,8 @@ const M = {
         const ex=this.presets.find(x=>x.name.toLowerCase()===n.toLowerCase()); if(ex) ex.settings=settings; else this.presets.unshift({id:'p'+Date.now(),name:n,settings});
         this.savePresets(); inp.blur(); this.toast('Saved “'+n+'”'); this.showTab('presets'); };
       pane.appendChild(nw);
+      if(this.activePreset){ const a=this.activePreset; this.slider(pane,'presetAmt','Amount · '+a.ps.name,{min:0,max:150,step:1,def:100,fmt:x=>Math.round(x)+'%',get:()=>a.amt,
+        set:v=>{ a.amt=v; Engine.p=Tools.blendPreset(Engine.p,a.ps.settings,v/100); Engine.curveKey=''; this.changed(); }}); }
       const io=document.createElement('div'); io.className='btnrow'; pane.appendChild(io);
       UI.button(io,'Import presets…',()=>this.importPresets()); UI.button(io,'Share presets…',()=>this.exportPresets());
       const list=document.createElement('div'); list.className='plist'+(this.editing?' editing':'');
@@ -172,7 +194,7 @@ const M = {
         const tp=Object.assign(cloneParams(Engine.p),cloneParams(ps.settings));
         c.innerHTML=`<div class="th" style="${Engine.src?`background-image:url(${this.thumb(tp,192,220)})`:''}"></div><div class="nm">${ps.name.replace(/</g,'&lt;')}</div><button class="del">×</button>`;
         c.querySelector('.del').onclick=e=>{ e.stopPropagation(); this.presets=this.presets.filter(x=>x!==ps); this.savePresets(); this.showTab('presets'); };
-        c.onclick=async()=>{ if(this.editing) return; Engine.p=Object.assign(cloneParams(Engine.p),cloneParams(ps.settings)); await Engine.ensureLuts(Engine.p); this.changed(); this.commit(); this.toast('Applied “'+ps.name+'”'); };
+        c.onclick=async()=>{ if(this.editing) return; Engine.p=Object.assign(cloneParams(Engine.p),cloneParams(ps.settings)); await Engine.ensureLuts(Engine.p); this.activePreset={ps,amt:100}; this.changed(); this.commit(); this.toast('Applied “'+ps.name+'”'); this.showTab('presets',true); };
         list.appendChild(c);
       });
       pane.appendChild(list);
@@ -227,6 +249,73 @@ const M = {
     st.addEventListener('pointermove',e=>{ if(!Engine.cropMode) return; Tools.cropPointer('move',e,v); },true);
     ['pointerup','pointercancel'].forEach(t=>st.addEventListener(t,e=>{ if(!Engine.cropMode) return; e.stopImmediatePropagation(); Tools.cropPointer('up',e,v); },true));
   },
+  // ----------------------------------------------------------------- zoom: pinch, pan, double-tap, 1×/2×/4× (of the full-res photo)
+  async ensureHires(){
+    if(this.hires||!this.file) return; if(this.hiresLoading) return this.hiresLoading;
+    this.hiresLoading=(async()=>{ this.busy('Loading full resolution…'); try{
+        const lo=Engine.src, hi=await this.decode(this.file,8192); hi.key=lo.key;
+        if(hi.w<=lo.w*1.05){ Engine.gl.deleteTexture(hi.tex); this.hires=lo; return; }
+        const r=lo.w/hi.w; if(Engine.view.mode!=='fit') Engine.view.zoom*=r; if(this._pinch) this._pinch.z*=r;
+        Engine.setSource(hi); Engine.gl.deleteTexture(lo.tex); this.hires=hi; this._lastL=Engine.layout();
+      }catch(e){ this.toast('Could not load full resolution'); } finally{ this.busy(); } })();
+    return this.hiresLoading;
+  },
+  fitScale(){ const keep=Engine.view; Engine.view={mode:'fit'}; const L=Engine.layout(); Engine.view=keep; return L.scale; },
+  async zoomTo(z){
+    if(!Engine.src) return;
+    if(z==='fit'){ Engine.view={mode:'fit',cx:.5,cy:.5}; Engine.dirty=true; return; }
+    await this.ensureHires(); const dpr=window.devicePixelRatio||1;
+    const zz=Math.max(this.fitScale(),(+z)/1);     // N device pixels per photo pixel
+    const v=Engine.view; Engine.view={mode:'zoom',zoom:zz,cx:v.cx??.5,cy:v.cy??.5}; Engine.dirty=true;
+  },
+  zoomLabel(){ const el=$('#zoomPct'); if(!el||!Engine.src) return; const L=this._lastL; if(!L) return;
+    const full=this.hires?1:(this.file?Math.max(1,Math.sqrt(16e6/(Engine.src.w*Engine.src.h))):1);
+    el.textContent = Engine.view.mode==='fit' ? 'Fit' : Math.round(L.scale/full*100)+'%';
+    document.querySelectorAll('#zoomBar button').forEach(b=>b.classList.toggle('on', b.dataset.z==='fit'?Engine.view.mode==='fit':Engine.view.mode!=='fit'&&Math.abs(L.scale-(+b.dataset.z))<0.02)); },
+  gestures(){
+    const st=$('#stage'), ptr=new Map(), M=this; let pan=null, holdT=null, lastTap=0, moved=false;
+    const L=()=>this._lastL; const dpr=()=>window.devicePixelRatio||1;
+    const anchor=(x,y)=>{ const l=L(), r=st.getBoundingClientRect(); const px=(x-r.left)*dpr(), py=l.H-(y-r.top)*dpr(); return {px,py,u:(px-l.fx)/l.fw,v:(py-l.fy)/l.fh}; };
+    const place=(a,zoom)=>{ const l=L(); const fw0=l.fw/l.scale, fh0=l.fh/l.scale, fw=fw0*zoom, fh=fh0*zoom;
+      Engine.view={mode:'zoom',zoom,cx:(l.W/2-a.px)/fw+a.u,cy:1-((l.H/2-a.py)/fh+a.v)}; };
+    const before=on=>{ if(Engine.before===on) return; Engine.before=on; $('#tag').classList.toggle('on',on); Engine.dirty=true; };
+    st.addEventListener('pointerdown',e=>{ if(!Engine.src||Engine.cropMode) return; st.setPointerCapture(e.pointerId); ptr.set(e.pointerId,{x:e.clientX,y:e.clientY}); moved=false;
+      clearTimeout(holdT);
+      if(ptr.size===1){ holdT=setTimeout(()=>{ if(!moved&&ptr.size===1) before(true); },380); pan={x:e.clientX,y:e.clientY}; }
+      if(ptr.size===2){ before(false); const [a,b]=[...ptr.values()]; const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        if(Engine.view.mode==='fit') Engine.view={mode:'zoom',zoom:L().scale,cx:.5,cy:.5};
+        M._pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:Engine.view.mode==='fit'?L().scale:Engine.view.zoom,a:anchor(mx,my)}; this.ensureHires(); } });
+    st.addEventListener('pointermove',e=>{ const p=ptr.get(e.pointerId); if(!p||Engine.cropMode) return; p.x=e.clientX; p.y=e.clientY;
+      if(pan&&Math.hypot(e.clientX-pan.x,e.clientY-pan.y)>8){ moved=true; clearTimeout(holdT); }
+      if(ptr.size===2&&M._pinch){ const [a,b]=[...ptr.values()], d=Math.hypot(a.x-b.x,a.y-b.y), mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        const fit=this.fitScale(); let z=Math.min(8,Math.max(fit*0.9,M._pinch.z*d/M._pinch.d));
+        const r=st.getBoundingClientRect(); place(Object.assign({},M._pinch.a,{px:(mx-r.left)*dpr(),py:L().H-(my-r.top)*dpr()}),z); Engine.dirty=true; }
+      else if(ptr.size===1&&moved&&Engine.view.mode!=='fit'&&!Engine.before){ const l=L(); Engine.view.cx-=(e.clientX-pan.x)*dpr()/l.fw; Engine.view.cy-=(e.clientY-pan.y)*dpr()/l.fh;
+        Engine.view.cx=Math.min(1,Math.max(0,Engine.view.cx)); Engine.view.cy=Math.min(1,Math.max(0,Engine.view.cy)); pan={x:e.clientX,y:e.clientY}; Engine.dirty=true; } });
+    const up=e=>{ if(!ptr.has(e.pointerId)) return; ptr.delete(e.pointerId); clearTimeout(holdT); before(false);
+      if(ptr.size<2&&M._pinch){ M._pinch=null; if(Engine.view.mode!=='fit'&&Engine.view.zoom<=this.fitScale()*1.03) Engine.view={mode:'fit',cx:.5,cy:.5}; Engine.dirty=true; }
+      if(ptr.size===1){ const [q]=[...ptr.values()]; pan={x:q.x,y:q.y}; }
+      if(!ptr.size&&!moved&&e.type==='pointerup'){ const now=Date.now(); if(now-lastTap<300){ lastTap=0;
+          if(Engine.view.mode!=='fit') this.zoomTo('fit'); else this.ensureHires().then(()=>{ this._lastL=Engine.layout(); place(anchor(e.clientX,e.clientY),Math.max(this.fitScale()*2.5,1)); Engine.dirty=true; }); }
+        else lastTap=now; } };
+    st.addEventListener('pointerup',up); st.addEventListener('pointercancel',up);
+  },
+  // ----------------------------------------------------------------- tool editors that take over the panel (no accidental drags while scrolling)
+  openTool(title,build){ this.toolOpen=true; $('#tsTitle').textContent=title; const b=$('#tsBody'); b.innerHTML=''; UI.sliders={}; build(b); $('#toolSheet').classList.add('on'); },
+  closeTool(){ $('#toolSheet').classList.remove('on'); this.toolOpen=false; this.commit(); this.showTab(this.tab,true); },
+  toolRow(parent,title,sub,fn,changed){ const d=document.createElement('button'); d.className='toolRow'+(changed?' changed':''); d.innerHTML=`<span><b></b><small></small></span><i>›</i>`;
+    d.querySelector('b').textContent=title; d.querySelector('small').textContent=sub; d.onclick=fn; parent.appendChild(d); },
+  // ----------------------------------------------------------------- versions of this photo + A|B compare
+  loadVersions(){ try{ const all=JSON.parse(localStorage.getItem('dr.versions')||'{}'); this.versions=all[this.photoKey]||[]; }catch(e){ this.versions=[]; } },
+  saveVersions(){ try{ const all=JSON.parse(localStorage.getItem('dr.versions')||'{}'); all[this.photoKey]=this.versions.map(v=>({id:v.id,name:v.name,settings:v.settings}));
+      const keys=Object.keys(all); while(keys.length>40) delete all[keys.shift()]; localStorage.setItem('dr.versions',JSON.stringify(all)); }catch(e){} },
+  addVersion(){ if(!Engine.src){ this.toast('Open a photo first'); return; } this.versions=this.versions||[];
+    const v={id:'v'+Date.now(),name:`Version ${this.versions.length+1} · ${Engine.stock().name}`,settings:cloneParams(Engine.p)}; this.versions.push(v); this.saveVersions(); this.toast('Saved '+v.name+' — tap A|B to compare'); this.showTab(this.tab,true); },
+  setCompare(v){ this.compare=v||null; const b=$('#btnAB'); if(b) b.classList.toggle('on',!!v);
+    $('#cmpTag').textContent = v ? (Engine.splitVertical===false?'◧ ':'⬒ ')+'A: '+v.name+'   ·   B: current' : ''; $('#cmpTag').classList.toggle('on',!!v); Engine.dirty=true; },
+  toggleCompare(){ if(this.compare){ this.setCompare(null); return; } if(!Engine.src) return;
+    if(!(this.versions||[]).length){ this.addVersion(); this.toast('Saved this edit as Version 1 — now change something to compare'); }
+    this.setCompare(this.versions[this.versions.length-1]); },
   // ----------------------------------------------------------------- events
   bind(){
     const fi=$('#fileIn'); const pick=()=>fi.click();
@@ -239,7 +328,10 @@ const M = {
     const hold=(el)=>{ const on=e=>{ if(!Engine.src||Engine.cropMode) return; e.preventDefault(); Engine.before=true; $('#tag').classList.add('on'); Engine.dirty=true; };
       const off=()=>{ if(!Engine.before) return; Engine.before=false; $('#tag').classList.remove('on'); Engine.dirty=true; };
       el.addEventListener('pointerdown',on); ['pointerup','pointercancel','pointerleave'].forEach(t=>el.addEventListener(t,off)); };
-    this.cropEvents(); hold($('#stage')); hold($('#btnCompare'));
+    this.cropEvents(); this.gestures(); hold($('#btnCompare'));
+    $('#btnAB').onclick=()=>this.toggleCompare();
+    document.querySelectorAll('#zoomBar button').forEach(b=>b.onclick=()=>this.zoomTo(b.dataset.z));
+    $('#tsDone').onclick=()=>this.closeTool();
     window.addEventListener('resize',()=>{ Engine.dirty=true; });
     document.addEventListener('gesturestart',e=>e.preventDefault());
   },

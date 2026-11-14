@@ -2,7 +2,7 @@
 // → tone (Basic, curve, HSL, colour grading) → grain → frame.  Output: Display P3 (or sRGB fallback).
 const HSL_BANDS = [['Red',0],['Orange',30],['Yellow',60],['Green',120],['Aqua',180],['Blue',225],['Purple',270],['Magenta',315]];
 const DEFAULTS = {
-  stock:'kodak_portra_400', paper:null, format:'35mm', autoExp:true, ev:0, temp:0, tint:0, hlExpand:0.55,
+  stock:'kodak_portra_400', paper:null, filmAmt:100, format:'35mm', autoExp:true, ev:0, temp:0, tint:0, hlExpand:0.55,
   contrast:0, highlights:0, shadows:0, whites:0, blacks:0, vibrance:0, saturation:0,
   grain:1, grainSize:1, grainRough:0.35, halation:1, glow:0, falloff:0.35, border:'none',
   crop:{x:0,y:0,w:1,h:1}, angle:0, rot:0, flip:false, aspect:'free',
@@ -120,11 +120,12 @@ const Engine = {
   curveIsIdentity(p){ const id=c=>c.length===2&&c[0][0]===0&&c[0][1]===0&&c[1][0]===1&&c[1][1]===1; return id(p.curve.m)&&id(p.curve.r)&&id(p.curve.g)&&id(p.curve.b); },
 
   // ---------------------------------------------------------------- layout
-  layout(p){
+  layout(p,box){
     p=p||this.p;
     const c=this.canvas, dpr=window.devicePixelRatio||1;
-    const W=Math.max(2,Math.round(c.clientWidth*dpr)), H=Math.max(2,Math.round(c.clientHeight*dpr));
+    let W=Math.max(2,Math.round(c.clientWidth*dpr)), H=Math.max(2,Math.round(c.clientHeight*dpr));
     if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
+    if(box){ W=box.W; H=box.H; }
     if(!this.src) return {W,H,dpr};
     const [sw,sh]=this.dims(p,this.src,this.cropMode);
     const b=this.cropMode?{l:0,r:0,t:0,b:0}:Borders.margins(p.border, sw, sh);
@@ -135,7 +136,7 @@ const Engine = {
     const fw=fw0*scale, fh=fh0*scale;
     let fx, fy;
     if(this.view.mode==='fit'||this.cropMode){ fx=(W-fw)/2; fy=(H-fh)/2; }
-    else { fx=W/2 - this.view.cx*fw; fy=H/2 - (1-this.view.cy)*fh; }
+    else { fx = fw<=W ? (W-fw)/2 : W/2 - this.view.cx*fw; fy = fh<=H ? (H-fh)/2 : H/2 - (1-this.view.cy)*fh; }
     const ix=fx+b.l*sw*scale, iy=fy+b.b*sh*scale, iw=sw*scale, ih=sh*scale;
     const u0=Math.max(0,(0-ix)/iw), u1=Math.min(1,(W-ix)/iw);
     const vt0=Math.max(0,(iy+ih-H)/ih), vt1=Math.min(1,(iy+ih-0)/ih);
@@ -200,7 +201,7 @@ const Engine = {
     gl.uniform2f(u.uRes, target?target.w:L.W, target?target.h:L.H);
     gl.uniform4f(u.uFrame,L.fx,L.fy,L.fw,L.fh); gl.uniform4f(u.uImg,L.ix,L.iy,L.iw,L.ih); gl.uniform4f(u.uWin,u0,v0,u1,v1);
     gl.uniformMatrix3fv(u.uGeo,true,geo);
-    gl.uniform1f(u.uHasLut,lut?1:0); gl.uniform1f(u.uN,this.manifest.lutSize); gl.uniform2f(u.uShaper,this.manifest.shaper.lo,this.manifest.shaper.hi);
+    gl.uniform1f(u.uFilmAmt,Math.max(0,Math.min(1,(p.filmAmt??100)/100))); gl.uniform1f(u.uHasLut,lut?1:0); gl.uniform1f(u.uN,this.manifest.lutSize); gl.uniform2f(u.uShaper,this.manifest.shaper.lo,this.manifest.shaper.hi);
     gl.uniform1f(u.uHalAmt, halAmt>0.001?halAmt:0); gl.uniform1f(u.uGlow,p.glow);
     gl.uniform1f(u.uBefore,(this.before&&!opts.forceAfter)?1:0); gl.uniform1f(u.uFlip,s.flipY?1:0); gl.uniform1f(u.uEncoded,s.encoded?1:0);
     gl.uniform1f(u.uContrast,p.contrast/100); gl.uniform1f(u.uHighlights,p.highlights/100); gl.uniform1f(u.uShadows,p.shadows/100);
@@ -230,6 +231,28 @@ const Engine = {
     return L;
   },
 
+  // side-by-side compare: A on the left, B on the right, each fitted (or zoomed in sync) in its half
+  renderSplit(pA,pB,borderFn){
+    const gl=this.gl, full=this.layout(pB), gap=Math.round(2*full.dpr), W=full.W, H=full.H;
+    // pick side-by-side or stacked, whichever shows the photos bigger
+    const hW=Math.floor((W-gap)/2), hH=Math.floor((H-gap)/2);
+    const keepView=this.view; this.view={mode:'fit'};
+    const sH=this.layout(pB,{W:hW,H}).scale, sV=this.layout(pB,{W,H:hH}).scale; this.view=keepView;
+    const vert = sV>sH*1.05; this.splitVertical=vert;
+    const boxes = vert ? [[0,H-hH,W,hH],[0,0,W,hH]] : [[0,0,hW,H],[hW+gap,0,hW,H]];
+    const out=[];
+    [pA,pB].forEach((p,i)=>{ const [x0,y0,bw,bh]=boxes[i];
+      const L=this.layout(p,{W:bw,H:bh}); const key='split'+i;
+      this.RT[key]=GLU.ensure(this.RT[key],bw,bh,'rgba8');
+      this.render({params:p,layout:L,target:this.RT[key],RT:this['splitRT'+i]||(this['splitRT'+i]={}),borderTex:borderFn?borderFn(L,p):null,p3:this.outP3});
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER,this.RT[key].f); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,null);
+      gl.blitFramebuffer(0,0,bw,bh,x0,y0,x0+bw,y0+bh,gl.COLOR_BUFFER_BIT,gl.NEAREST);
+      out.push(Object.assign({},L,{ox:x0,oy:y0}));
+    });
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,null);
+    gl.enable(gl.SCISSOR_TEST); if(vert) gl.scissor(0,hH,W,H-2*hH); else gl.scissor(hW,0,W-2*hW,H); gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.SCISSOR_TEST);
+    return out;
+  },
   histogram(params){
     if(!this.src) return null;
     const gl=this.gl, p=params||this.p, L=this.layout(p);
@@ -283,7 +306,7 @@ const FINAL_FS = `#version 300 es
 precision highp float; precision highp sampler3D;
 uniform sampler2D uPrep,uHal,uGlowTex,uSrc,uBorder,uCurve; uniform sampler3D uLut;
 uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; uniform mat3 uGeo;
-uniform float uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
+uniform float uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
 uniform float uHslH[8]; uniform float uHslS[8]; uniform float uHslL[8];
 uniform vec4 uGSh,uGMid,uGHi; uniform vec2 uGBlend;
@@ -345,7 +368,8 @@ void main(){
       if(uHasLut>.5){
         vec3 x=clamp((log2(max(E,vec3(1e-12))/.18)+uShaper.x)/(uShaper.x+uShaper.y),0.,1.);
         c=texture(uLut, x*(uN-1.)/uN + .5/uN).rgb;
-      } else c=enc(R709_TO_P3*(AP1_TO_709*E/(1.+AP1_TO_709*E)));
+        if(uFilmAmt<.999){ vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); vec3 nt=enc(l*1.2/(1.+l)); c=mix(nt,c,uFilmAmt); }
+      } else { vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); c=enc(l*1.2/(1.+l)); }
       float y=luma(c);
       float hm=smoothstep(.35,1.,y), sm=1.-smoothstep(0.,.6,y);
       float dy = uHighlights*.32*hm*(uHighlights>0.?(1.-y):y) + uShadows*.38*sm*(uShadows>0.?(1.-y)*.9:y);
