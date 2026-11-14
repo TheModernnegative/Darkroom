@@ -25,6 +25,43 @@ const SILVER_FILMS = [
 ];
 const SENS_BANDS=[['Red','#e33'],['Yellow','#ec3'],['Green','#3c4'],['Cyan','#3cd'],['Blue','#36e'],['Magenta','#d3c']];
 const SILVER_KEYS=['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','sBright','sBrightHi','sBrightSh','sContrast','sAmpW','sAmpB','sSoft','sStructHi','sStructMid','sStructSh','sFine','sSens','sFilmType','sVig','sVigSize','sVigX','sVigY','sBurnT','sBurnB','sBurnL','sBurnR','sToneBal'];
+// Analog media: each is a full signal / display / gate recipe; extras touch grain & co. for the cine gauges
+const AN_KEYS=['anOn','anMedium','anRes','anLines','anChroma','anShift','anBleed','anSharp','anGhost','anGhostOff','anNoise','anCNoise','anSnow','anTrack','anTrackPos','anHead','anDrop','anJitter','anInterlace','anSat','anHue','anTint',
+  'anScan','anScanN','anMask','anMaskAmt','anCurve','anBloom','anVig','anCorner','anGate','anOverscan','anGateSoft','anWeave','anFlicker','anOSD','anOSDText'];
+const ANALOG_MEDIA=[
+  ['vhs','VHS · SP','Consumer tape at standard play: soft luma, smeared colour that bleeds right, sharpening halos, head-switching noise at the bottom, the PLAY overlay.',
+    {anRes:45,anChroma:65,anShift:2,anBleed:40,anSharp:35,anNoise:15,anCNoise:30,anTrack:8,anTrackPos:80,anHead:55,anDrop:12,anJitter:12,anSat:-12,anOSD:'vhs'}],
+  ['vhsEP','VHS · EP worn tape','Six-hour mode, played a hundred times: heavy chroma smear, tracking band, dropouts, faded colour.',
+    {anRes:70,anChroma:85,anShift:4,anBleed:65,anSharp:40,anNoise:32,anCNoise:55,anTrack:45,anTrackPos:62,anHead:85,anDrop:45,anJitter:30,anSat:-28,anHue:6,anOSD:'pause'}],
+  ['beta','Betamax','Better luma than VHS, cleaner colour, still analog-soft.',{anRes:32,anChroma:50,anShift:1,anBleed:28,anSharp:25,anNoise:10,anCNoise:20,anHead:40,anJitter:8,anSat:-5}],
+  ['hi8','Hi8 camcorder','Late-90s home video: crisp-ish with strong edge enhancement, interlace, the REC overlay.',
+    {anRes:28,anChroma:45,anShift:1.5,anBleed:22,anSharp:50,anNoise:18,anCNoise:25,anHead:30,anJitter:6,anSat:8,anInterlace:20,anOSD:'rec'}],
+  ['minidv','MiniDV','Early digital tape: sharp, over-enhanced edges, 4:1:1 colour, interlaced.',{anRes:12,anChroma:30,anSharp:60,anNoise:8,anCNoise:10,anInterlace:35,anSat:12,anOSD:'rec'}],
+  ['crt','Broadcast CRT TV','An 80s living-room set: shadow mask, scanlines, curved glass, glowing phosphors, dark rounded corners.',
+    {anRes:30,anChroma:45,anShift:1,anBleed:20,anGhost:15,anGhostOff:40,anNoise:10,anScan:55,anScanN:480,anMask:'shadow',anMaskAmt:45,anCurve:45,anBloom:35,anVig:45,anCorner:55}],
+  ['trinitron','Trinitron monitor','90s flat-ish aperture-grille tube: sharp vertical RGB stripes, gentle scanlines.',
+    {anRes:10,anChroma:20,anScan:40,anScanN:480,anMask:'aperture',anMaskAmt:55,anCurve:12,anBloom:25,anVig:20,anCorner:20}],
+  ['arcade','Arcade CRT · 240p','Low-res arcade monitor: thick scanlines, slot mask, bloom.',{anRes:8,anLines:240,anScan:70,anScanN:240,anMask:'slot',anMaskAmt:50,anCurve:30,anBloom:40,anVig:30,anCorner:40,anSat:15}],
+  ['tv50s','1950s black & white TV','405-line tube: blue-white phosphor, ghosting, snow, deep vignette, round corners.',
+    {anRes:45,anLines:405,anGhost:25,anGhostOff:50,anNoise:25,anSnow:15,anJitter:15,anTint:'blue',anScan:60,anScanN:405,anCurve:70,anBloom:45,anVig:65,anCorner:75}],
+  ['offair','Off-air bad reception','Rabbit-ear antenna: multipath ghosts, snow, washed colour.',
+    {anRes:40,anGhost:45,anGhostOff:70,anNoise:45,anSnow:55,anCNoise:40,anJitter:25,anSat:-35,anScan:40,anScanN:480,anCurve:30,anVig:35,anCorner:40}],
+  ['cctv','CCTV security','Monochrome surveillance: interlaced, noisy, timestamp burned in.',{anRes:40,anTint:'mono',anNoise:28,anInterlace:45,anJitter:10,anSharp:30,anOSD:'cctv'}],
+  ['nightvision','Camcorder night vision','Infrared NightShot: green, grainy, blooming highlights.',{anTint:'green',anRes:35,anNoise:45,anBloom:35,anVig:60,anSharp:20,anOSD:'rec'}],
+  ['webcam','2008 webcam','Tiny sensor, heavy compression smear and colour noise.',{anRes:45,anChroma:55,anNoise:35,anCNoise:40,anSharp:30,anSat:-10}],
+  ['super8','Super 8','Home-movie gauge: rounded gate, gate weave, flicker, coarse grain and glow.',
+    {anGate:'super8',anGateSoft:45,anWeave:35,anFlicker:30},{grain:1.8,grainSize:1.6,halation:1.2,falloff:0.8,softEdges:20,saturation:12}],
+  ['super8scan','Super 8 · full-gate scan','Overscanned: the rounded gate, the film base and the sprocket hole beside the frame.',
+    {anGate:'super8',anOverscan:100,anGateSoft:40,anWeave:30,anFlicker:25},{grain:1.8,grainSize:1.6,halation:1.2,falloff:0.6,softEdges:20,saturation:12}],
+  ['8mm','Standard 8mm · full scan','Regular 8: tiny frame, perforations at the frame line, very grainy.',
+    {anGate:'8mm',anOverscan:100,anGateSoft:50,anWeave:40,anFlicker:35},{grain:2.2,grainSize:1.8,halation:1.3,falloff:0.9,softEdges:30,saturation:18}],
+  ['16mm','16mm','Documentary / news 16mm: finer grain, slight weave, soft gate edges.',{anGate:'16mm',anGateSoft:30,anWeave:20,anFlicker:15},{grain:1.2,grainSize:1.3,halation:0.9,falloff:0.5}],
+  ['16mmscan','16mm · double-perf scan','Overscanned 16mm with perforations on both sides at the frame lines.',{anGate:'16mm',anOverscan:100,anGateSoft:25,anWeave:18,anFlicker:12},{grain:1.2,grainSize:1.3,halation:0.9,falloff:0.4}],
+  ['super16','Super 16 · scan','Wider single-perf 16mm, the indie-film gauge.',{anGate:'super16',anOverscan:70,anGateSoft:25,anWeave:15,anFlicker:10},{grain:1.0,grainSize:1.2,halation:0.8,falloff:0.4}],
+  ['35cine','35mm cinema print','A projected release print: slight weave and flicker, perforations either side when overscanned.',{anGate:'35cine',anOverscan:60,anGateSoft:15,anWeave:10,anFlicker:10},{grain:0.6,halation:1.0,falloff:0.5}],
+  ['dateback','Date-back film camera','The orange LED date a point-and-shoot burned into the corner.',{anOSD:'filmdate'}],
+];
+const AM=id=>{ const m=ANALOG_MEDIA.find(x=>x[0]===id); return Object.assign({anOn:true,anMedium:id},JSON.parse(JSON.stringify(m[3])),m[4]||{}); };
 const SF=id=>{ const f=SILVER_FILMS.find(x=>x[0]===id); return Object.assign({silver:true,sFilmType:id},JSON.parse(JSON.stringify(f[2]))); };
 // Looks. "Group · Name" — the group heads the grid. Develop values a look sets are restored when you pick another look.
 const STUDIO_RECIPES = [
@@ -63,6 +100,12 @@ const STUDIO_RECIPES = [
   ['Analog · Darkroom print', {...SF('fp4'),sFilterHue:60,sFilterAmt:40,structure:20,sTone:'selenium',sToneAmt:40,fx:{texture:{pick:1,amt:35},dust:{pick:2,amt:45,invert:true},frame:{pick:1,amt:100}}}],
   ['Cinema · Teal & orange', {contrast:15,gShH:195,gShS:30,gHiH:35,gHiS:30,saturation:5}],
   ['Cinema · Moody night', {ev:-0.3,contrast:10,gShH:220,gShS:30,gMidH:210,gMidS:10,halation:1.5,glow:0.3,saturation:-10}],
+  ['Media · VHS', AM('vhs')], ['Media · Worn VHS tape', AM('vhsEP')], ['Media · Hi8 home video', AM('hi8')], ['Media · MiniDV', AM('minidv')],
+  ['Media · 80s CRT TV', AM('crt')], ['Media · Trinitron', AM('trinitron')], ['Media · Arcade 240p', AM('arcade')], ['Media · 1950s TV', {...AM('tv50s'),...SF('plusx')}],
+  ['Media · Bad reception', AM('offair')], ['Media · CCTV', AM('cctv')], ['Media · Night vision', AM('nightvision')], ['Media · 2008 webcam', AM('webcam')],
+  ['Media · Super 8', {...AM('super8'),gShH:30,gShS:15,gHiH:45,gHiS:20}], ['Media · Super 8 scan', {...AM('super8scan'),gHiH:45,gHiS:20}], ['Media · Standard 8mm', AM('8mm')],
+  ['Media · 16mm', AM('16mm')], ['Media · 16mm B&W scan', {...AM('16mmscan'),...SF('trix')}], ['Media · Super 16', AM('super16')], ['Media · 35mm print', AM('35cine')],
+  ['Media · Date-back point & shoot', {...AM('dateback'),contrast:10,saturation:10,falloff:0.5}],
   ['Cinema · Anamorphic night', {flare:70,flareColor:'blue',flareLen:75,flareGhost:40,flareSens:60,contrast:10,gShH:215,gShS:20,halation:1.2}],
   ['Cinema · Golden flare', {flare:60,flareColor:'amber',flareLen:55,flareGhost:55,flareSens:45,gHiH:40,gHiS:25,glow:0.2}],
   ['Cinema · Dreamy halation', {glow:0.6,halation:1.8,softEdges:30,highlights:-10,fx:{flare:{pick:0,amt:40}}}],
@@ -82,7 +125,7 @@ const STUDIO_RECIPES = [
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx',...AN_KEYS,'flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
 
 const Studio = {
   host:null,
@@ -209,6 +252,38 @@ const Studio = {
     b=UI.panel(root,'sFrameFx','Frames & Edges',false,()=>this.clearLayer('frame'));
     this.assetLayer(b,'frame','Frames');
     UI.note(b,'Scanned negative carriers, plate edges and print borders, laid over the edges of the photo. Instant-film frames are under Develop → Frame.');
+    }
+    // ---------------------------------------------------------------- Analog media
+    if(want('sAnalog')){
+    b=UI.panel(root,'sAnalog','Analog Media',false,()=>this.reset(AN_KEYS));
+    const sub=t=>{ const h=document.createElement('div'); h.className='ahead'; h.textContent=t; b.appendChild(h); };
+    const A=(k,l,o)=>this.S(b,k,l,Object.assign({min:0,max:100,step:1,set:v=>{ P()[k]=v; if(!P().anOn){ P().anOn=true; UI.refresh(); } H.changed(); }},o));
+    const AS=(k,l,opts)=>UI.select(b,'st_'+k,l,()=>opts,()=>String(P()[k]),v=>{ P()[k]=v; P().anOn=true; H.changed(); H.commit(); UI.refresh(); });
+    UI.check(b,'st_anOn','Analog effect on',()=>P().anOn,v=>{ P().anOn=v; H.changed(); H.commit(); });
+    UI.select(b,'st_anMedium','Medium',()=>[['','Choose a medium…']].concat(ANALOG_MEDIA.map(m=>[m[0],m[1]])),()=>P().anMedium||'',v=>{ if(!v) return;
+      AN_KEYS.forEach(k=>P()[k]=cloneParams(DEFAULTS[k])); Object.assign(P(),AM(v)); H.changed(); H.commit(); UI.refresh(); const m=ANALOG_MEDIA.find(x=>x[0]===v); const n=document.getElementById('anNote'); if(n) n.textContent=m[2]; });
+    UI.note(b,'Pick a medium to load its full recipe, then tune any part of it.','anNote');
+    sub('Signal & tape');
+    A('anRes','Luma softness'); A('anLines','Line count',{max:720,step:1,fmt:x=>x?Math.round(x)+' lines':'Full'}); A('anChroma','Colour softness'); A('anShift','Colour shift',{min:-10,max:10,step:0.1,fmt:x=>x.toFixed(1)});
+    A('anBleed','Colour bleed'); A('anSharp','Edge halos'); A('anGhost','Ghost / echo'); A('anGhostOff','Ghost distance',{min:0,max:100});
+    A('anNoise','Luma noise'); A('anCNoise','Colour noise'); A('anSnow','Snow / static'); A('anDrop','Dropouts');
+    A('anTrack','Tracking error'); A('anTrackPos','Tracking position'); A('anHead','Head-switching noise'); A('anJitter','Line jitter'); A('anInterlace','Interlace combing');
+    A('anSat','Saturation',{min:-100,max:100}); A('anHue','Hue drift',{min:-30,max:30,fmt:x=>Math.round(x)+'°'});
+    AS('anTint','Monochrome',[['none','Colour'],['mono','Black & white'],['blue','Blue-white phosphor'],['green','Green (night vision / P1)'],['amber','Amber monitor']]);
+    sub('Screen');
+    A('anScan','Scanlines'); A('anScanN','Scanline count',{min:120,max:1080,step:1,fmt:x=>Math.round(x)});
+    AS('anMask','Phosphor mask',[['none','None'],['aperture','Aperture grille (Trinitron)'],['shadow','Shadow mask (dot triad)'],['slot','Slot mask (arcade / TV)']]);
+    A('anMaskAmt','Mask strength'); A('anCurve','Tube curvature'); A('anBloom','Phosphor glow'); A('anVig','Tube vignette'); A('anCorner','Rounded corners');
+    sub('Cine gate');
+    AS('anGate','Gauge',[['none','None'],['super8','Super 8'],['8mm','Standard 8mm'],['16mm','16mm'],['super16','Super 16'],['35cine','35mm cinema']]);
+    A('anOverscan','Overscan (show perforations)'); A('anGateSoft','Gate softness'); A('anWeave','Gate weave'); A('anFlicker','Exposure flicker');
+    sub('On-screen display');
+    AS('anOSD','Overlay',[['none','None'],['vhs','VCR · PLAY + date'],['pause','VCR · PAUSE'],['rec','Camcorder · REC + battery + date'],['cctv','CCTV · camera + timestamp'],['filmdate','Film date-back (orange LED)']]);
+    { const d=document.createElement('div'); d.className='sl'; d.innerHTML='<label>Custom text</label><input class="txt" placeholder="date / camera name" spellcheck="false">'; b.appendChild(d);
+      const i=d.querySelector('input'); i.style.cssText='grid-column:2/4;background:#1c1c1c;border:1px solid #333;color:#ddd;border-radius:3px;padding:3px 6px;font:12px var(--sans)';
+      i.value=P().anOSDText||''; i.addEventListener('keydown',e=>e.stopPropagation()); i.addEventListener('input',()=>{ P().anOSDText=i.value; P().anOn=true; H.changed(); }); i.addEventListener('change',()=>H.commit());
+      UI.sliders['st_anOSDText']=()=>{ if(document.activeElement!==i) i.value=P().anOSDText||''; }; }
+    UI.note(b,'Cine gauges also set grain, halation and vignette in Develop to match the film. Overlays use today\'s date unless you type your own.');
     }
     // ---------------------------------------------------------------- Lens flare
     if(want('sFlare')){

@@ -19,6 +19,11 @@ const DEFAULTS = {
   leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
   dustAmt:0, scratchAmt:0, hairAmt:0, dustSeed:7, dustKind:'scan',
   ttOn:false, ttPalette:'red-cyan', ttGhost:80, ttMono:85, ttDX:6, ttDY:-4, ttScale:100, ttBand:0, ttBandPos:45,
+  // Analog media (tape, broadcast, CRT, small-gauge cine) — a post pass on the finished picture
+  anOn:false, anMedium:'', anRes:0, anLines:0, anChroma:0, anShift:0, anBleed:0, anSharp:0, anGhost:0, anGhostOff:30, anNoise:0, anCNoise:0, anSnow:0,
+  anTrack:0, anTrackPos:72, anHead:0, anDrop:0, anJitter:0, anInterlace:0, anSat:0, anHue:0, anTint:'none',
+  anScan:0, anScanN:480, anMask:'none', anMaskAmt:50, anCurve:0, anBloom:0, anVig:0, anCorner:0,
+  anGate:'none', anOverscan:0, anGateSoft:30, anWeave:0, anFlicker:0, anOSD:'none', anOSDText:'',
   flare:0, flareLen:60, flareGhost:35, flareColor:'blue', flareSens:50,
   fx:{}, softness:0, distort:0, zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
@@ -31,7 +36,7 @@ const SECTIONS = { film:['filmAmt','push'], wb:['temp','tint'], tone:['ev','cont
   curve:['curve'], hsl:['hslH','hslS','hslL'], grade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'], detail:['sharpen','nr','nrColor'],
   grain:['grain'], halation:['halation','glow'], lens:['falloff','softness'], frame:['border'], masks:['masks'],
   silver:['silver','sFilterAmt','structure','sBurn'], dbl:['dblId'], leak:['leakAmt'], dust:['dustAmt','scratchAmt','hairAmt'],
-  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'], flare:['flare'], assets:['fx'] };
+  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'], flare:['flare'], analog:['anOn'], assets:['fx'] };
 // Studio asset layers (scanned-look textures). Order = compositing order.
 // lens flare colours: anamorphic streak tint, then the ghost tints
 const FLARE_COLORS={ blue:[[.25,.55,1.7],[.35,.6,1.4],[.9,.5,1.3],[.4,1.,.7]], amber:[[1.7,.75,.22],[1.3,.7,.3],[.6,.9,.4],[1.2,.5,.6]], violet:[[1.,.35,1.7],[.7,.4,1.4],[.4,.8,1.2],[1.3,.6,.4]],
@@ -46,7 +51,7 @@ const LEAK_COLORS = { warm:['#ff5a1a','#ffd27a'], red:['#ff1f10','#ff9a60'], yel
 const LEAK_POS = [[0,.5],[1,.5],[.5,0],[.5,1],[0,0],[1,0],[0,1],[1,1]];
 function cloneParams(p){ return JSON.parse(JSON.stringify(p)); }
 function withDefaults(p){ return Object.assign(cloneParams(DEFAULTS), cloneParams(p||{})); }
-const FORMATS = { '35mm':{gauge:2.4,diag:43.3,label:'35mm'}, '645':{gauge:1.6,diag:69.8,label:'6×4.5'}, '6x7':{gauge:1.35,diag:89.6,label:'6×7'}, '4x5':{gauge:1.0,diag:162.6,label:'4×5'} };
+const FORMATS = { '35mm':{gauge:2.4,diag:43.3,label:'35mm'}, '645':{gauge:1.6,diag:69.8,label:'6×4.5'}, '6x6':{gauge:1.45,diag:79.2,label:'6×6'}, '6x7':{gauge:1.35,diag:89.6,label:'6×7'}, '4x5':{gauge:1.0,diag:162.6,label:'4×5'}, '8x10':{gauge:0.7,diag:325,label:'8×10'} };
 
 const Engine = {
   manifest:null, luts:{}, src:null, p:withDefaults(), before:false, showClip:false, cropMode:false,
@@ -57,7 +62,7 @@ const Engine = {
     try{ if('drawingBufferColorSpace' in gl){ gl.drawingBufferColorSpace='display-p3'; this.outP3 = gl.drawingBufferColorSpace==='display-p3'; } }catch(e){}
     this.P = {
       prep: GLU.program(GLU.QUAD_VS, PREP_FS),
-      bright: GLU.program(GLU.QUAD_VS, BRIGHT_FS), pack: GLU.program(GLU.QUAD_VS, PACK_FS),
+      bright: GLU.program(GLU.QUAD_VS, BRIGHT_FS), pack: GLU.program(GLU.QUAD_VS, PACK_FS), analog: GLU.program(GLU.QUAD_VS, ANALOG_FS),
       blur: GLU.program(GLU.QUAD_VS, BLUR_FS),
       final: GLU.program(GLU.QUAD_VS, FINAL_FS),
       detail: GLU.program(GLU.QUAD_VS, DETAIL_FS),
@@ -102,7 +107,8 @@ const Engine = {
 
   // ---------------------------------------------------------------- geometry
   // parameters actually rendered: switched-off sections fall back to neutral
-  eff(p){ if(!p||!p.off) return p; const o=Object.assign({},p); let any=false;
+  eff(p){ if(p&&typeof Borders!=='undefined'&&Borders.isFilm(p.border)){ const fs=Borders.forFormat(p.format); if(p.border!==fs) p=Object.assign({},p,{border:fs}); }
+    if(!p||!p.off) return p; const o=Object.assign({},p); let any=false;
     for(const k in p.off){ if(p.off[k]&&k.startsWith('fx_')){ o.fx=Object.assign({},o.fx); delete o.fx[k.slice(3)]; any=true; continue; } if(!p.off[k]||!SECTIONS[k]) continue; any=true; SECTIONS[k].forEach(key=>o[key]= key==='filmAmt'?0 : cloneParams(DEFAULTS[key])); if(k==='film') o.filmOff=true; }
     if(!any) return p; delete o.off; return o; },
   oriented(p,src){ src=src||this.src; return (p.rot&1)?[src.h,src.w]:[src.w,src.h]; },
@@ -419,7 +425,9 @@ const Engine = {
     { const g=paper.grade, on=g!==undefined&&(g!==2||paper.tone||paper.lift); 
       gl.uniform4f(this.P.final.u.uPaperG,on?1:0,Math.pow(1.32,(g??2)-2),paper.lift||0,0);
       gl.uniform3f(this.P.final.u.uPaperT,...(paper.tone==='warm'?[1.04,1.0,.9]:paper.tone==='cool'?[.97,.99,1.04]:[1,1,1])); }
-    if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target.f); gl.viewport(0,0,target.w,target.h); }
+    const anOn=!!p.anOn&&!full&&!(this.before&&!opts.forceAfter);
+    if(anOn){ const ow=target?target.w:L.W, oh=target?target.h:L.H; R.an=GLU.ensure(R.an,ow,oh,'rgba16f'); gl.bindFramebuffer(gl.FRAMEBUFFER,R.an.f); gl.viewport(0,0,ow,oh); }
+    else if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target.f); gl.viewport(0,0,target.w,target.h); }
     else { gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,L.W,L.H); }
     const bind=(unit,type,tex,name)=>{ gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(type,tex); gl.uniform1i(u[name],unit); };
     bind(0,gl.TEXTURE_2D,R.prep.t,'uPrep'); bind(1,gl.TEXTURE_2D,flOn?R.pk.t:R.ha.t,'uHal'); bind(2,gl.TEXTURE_2D,R.ga.t,'uGlowTex');
@@ -482,8 +490,64 @@ const Engine = {
     gl.uniform1f(u.uToSRGB, (this.manifest.output==='p3' && !wantP3)?1:0);
     gl.uniform1f(u.uSrcToP3, wantP3?1:0);
     GLU.drawQuad();
+    if(anOn) this.analogPass(p,L,target,R);
     return L;
   },
+  // ---------------------------------------------------------------- analog media pass
+  frameSeed:0,
+  analogPass(p,L,target,R){
+    const gl=this.gl, P=this.P.analog, u=P.u, ow=target?target.w:L.W, oh=target?target.h:L.H;
+    gl.useProgram(P.p);
+    if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target.f); } else gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,ow,oh);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,R.an.t); gl.uniform1i(u.uTex,0);
+    const osd=p.anOSD&&p.anOSD!=='none'?this.osdTex(p,L.fw,L.fh):null;
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,osd||this.borderTex); gl.uniform1i(u.uOSD,1); gl.uniform1f(u.uOSDOn,osd?1:0);
+    gl.uniform2f(u.uRes,ow,oh); gl.uniform4f(u.uFrame,L.fx,L.fy,L.fw,L.fh); gl.uniform1f(u.uSeed,(p.anSeed||0)+this.frameSeed*1.618);
+    const k=x=>(p[x]||0)/100;
+    gl.uniform4f(u.uSig1,k('anRes'),p.anLines||0,k('anChroma'),p.anShift||0);
+    gl.uniform4f(u.uSig2,k('anBleed'),k('anSharp'),k('anGhost'),p.anGhostOff??30);
+    gl.uniform4f(u.uSig3,k('anTrack'),(p.anTrackPos??72)/100,k('anHead'),k('anJitter'));
+    gl.uniform4f(u.uSig4,k('anInterlace'),k('anSat'),(p.anHue||0)*Math.PI/180,k('anNoise'));
+    gl.uniform4f(u.uDisp1,k('anScan'),p.anScanN||480,k('anCurve'),k('anBloom'));
+    gl.uniform4f(u.uDisp2,k('anMaskAmt'),k('anDrop'),k('anSnow'),k('anCNoise'));
+    gl.uniform2f(u.uDispV,k('anVig'),k('anCorner'));
+    gl.uniform4f(u.uGate,k('anOverscan'),k('anWeave'),k('anGateSoft'),k('anFlicker'));
+    gl.uniform1i(u.uMaskT,{none:0,aperture:1,shadow:2,slot:3}[p.anMask]||0);
+    gl.uniform1i(u.uGateT,{none:0,super8:1,'8mm':2,'16mm':3,super16:4,'35cine':5}[p.anGate]||0);
+    const T={none:[-1,0,0],green:[.35,1.15,.4],amber:[1.2,.75,.25],blue:[.75,.9,1.15],mono:[1,1,1]}[p.anTint]||[-1,0,0]; gl.uniform3f(u.uTintC,...T);
+    GLU.drawQuad(); },
+  // on-screen display text: VCR / camcorder / CCTV / date-back stamps
+  osdCache:{key:'',tex:null},
+  osdTex(p,fw,fh){ const W=1280, H=Math.max(2,Math.round(W*fh/fw)), key=[p.anOSD,p.anOSDText,W,H,new Date().toDateString()].join('|');
+    if(this.osdCache.key===key) return this.osdCache.tex;
+    const c=document.createElement('canvas'); c.width=W; c.height=H; const x=c.getContext('2d'); const d=new Date();
+    const M=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][d.getMonth()], dd=String(d.getDate()).padStart(2,' '), yy=d.getFullYear(), hh=d.getHours(), mi=String(d.getMinutes()).padStart(2,'0');
+    const ampm=(hh%12||12)+':'+mi+(hh<12?' AM':' PM'), custom=(p.anOSDText||'').toUpperCase();
+    const vcr=(t,X,Y,sz,al)=>{ x.font=`${sz}px "VCR OSD Mono","Share Tech Mono","Courier New",monospace`; x.textAlign=al||'left'; x.textBaseline='top';
+      x.fillStyle='rgba(0,0,0,.55)'; x.fillText(t,X+sz*.08,Y+sz*.08); x.fillStyle='#f4f4f4'; x.fillText(t,X,Y); };
+    const s=H/480*36;
+    if(p.anOSD==='vhs'){ vcr('PLAY ▶',W*.07,H*.08,s); vcr('SP',W*.93,H*.08,s,'right'); vcr(custom||(ampm),W*.07,H*.82,s); vcr(M+'. '+dd+' '+yy,W*.93,H*.82,s,'right'); }
+    else if(p.anOSD==='pause'){ vcr('PAUSE ❚❚',W*.07,H*.08,s); vcr('SLP',W*.93,H*.08,s,'right'); vcr(custom||'00:42:17',W*.07,H*.82,s); }
+    else if(p.anOSD==='rec'){ x.fillStyle='#ff2a1a'; x.beginPath(); x.arc(W*.08,H*.1+s*.5,s*.42,0,7); x.fill(); vcr('REC',W*.08+s*.7,H*.1,s); vcr('0:00:12',W*.93,H*.1,s,'right');
+      x.strokeStyle='rgba(255,255,255,.85)'; x.lineWidth=s*.09; x.strokeRect(W*.88,H*.18,s*1.6,s*.7); x.fillStyle='rgba(255,255,255,.85)'; x.fillRect(W*.88+s*1.6,H*.18+s*.2,s*.15,s*.3); x.fillRect(W*.88+s*.12,H*.18+s*.12,s*.9,s*.46);
+      vcr(custom||(ampm),W*.07,H*.82,s); vcr(M+'. '+dd+' '+yy,W*.93,H*.82,s,'right'); }
+    else if(p.anOSD==='cctv'){ const ss=s*.8; vcr('CAM 01',W*.05,H*.06,ss); vcr(custom||'ENTRANCE',W*.95,H*.06,ss,'right');
+      vcr(`${yy}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}  ${String(hh).padStart(2,'0')}:${mi}:${String(d.getSeconds()).padStart(2,'0')}`,W*.05,H*.88,ss); }
+    else if(p.anOSD==='filmdate'){ // date-back LED stamp burned into the film: orange 7-segment digits, bottom right
+      const t=custom||(`'${String(yy).slice(2)} ${String(d.getMonth()+1).padStart(2,' ')} ${dd}`); const sz=H*.042;
+      // seven-segment LED digits, slanted, glowing into the emulsion
+      const SEG={'0':'abcdef','1':'bc','2':'abdeg','3':'abcdg','4':'bcfg','5':'acdfg','6':'acdefg','7':'abc','8':'abcdefg','9':'abcdfg','-':'g'};
+      const dw=sz*.52, gap=sz*.2, th=sz*.11, chars=[...t]; let total=0; chars.forEach(ch=>total+= ch===' '?dw*.6: ch==="'"?dw*.35 : dw+gap);
+      let X=W*.93-total, Y=H*.92-sz; x.save(); x.transform(1,0,-.12,1,sz*.1,0);
+      const seg=(k,ox)=>{ const h=sz/2; const S={a:[ox,Y,dw,th],b:[ox+dw-th,Y,th,h],c:[ox+dw-th,Y+h,th,h],d:[ox,Y+sz-th,dw,th],e:[ox,Y+h,th,h],f:[ox,Y,th,h],g:[ox,Y+h-th/2,dw,th]}[k]; x.fillRect(S[0]+th*.15,S[1]+th*.15,S[2]-th*.3,S[3]-th*.3); };
+      for(const pass of [[sz*.45,'rgba(255,110,20,.55)'],[sz*.12,'rgba(255,150,50,.95)']]){ x.shadowColor='rgba(255,110,20,.9)'; x.shadowBlur=pass[0]; x.fillStyle=pass[1]; let ox=X;
+        chars.forEach(ch=>{ if(ch===' '){ ox+=dw*.6; return; } if(ch==="'"){ x.fillRect(ox,Y,th,sz*.28); ox+=dw*.35; return; } (SEG[ch]||'').split('').forEach(k=>seg(k,ox)); ox+=dw+gap; }); }
+      x.restore(); }
+    if(this.osdCache.tex) this.gl.deleteTexture(this.osdCache.tex);
+    const gl=this.gl, t=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+    for(const [a,b] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,a,b);
+    this.osdCache={key,tex:t}; return t; },
 
   // side-by-side compare: A on the left, B on the right, each fitted (or zoomed in sync) in its half
   renderSplit(pA,pB,borderFn){
@@ -671,6 +735,94 @@ const BRIGHT_FS = `#version 300 es
 precision highp float; uniform sampler2D uTex; uniform float uThr; in vec2 vUv; out vec4 o;
 void main(){ vec3 c=max(texture(uTex,vUv).rgb,0.); float Y=dot(c,vec3(.27,.67,.06));
   float k = uThr>0. ? smoothstep(uThr,uThr*2.5,Y) : 1.; o=vec4(min(c*k,vec3(40.)),1.); }`;
+const ANALOG_FS = `#version 300 es
+precision highp float; uniform sampler2D uTex,uOSD; uniform vec2 uRes; uniform vec4 uFrame; uniform float uSeed,uOSDOn;
+uniform vec4 uSig1,uSig2,uSig3,uSig4,uDisp1,uDisp2,uGate; uniform vec2 uDispV; uniform vec3 uTintC; uniform int uMaskT,uGateT;
+out vec4 o;
+float h1(vec2 p){ p=fract(p*vec2(443.897,441.423)); p+=dot(p,p.yx+19.19); return fract((p.x+p.y)*p.x); }
+float vnoise(float x){ float i=floor(x), f=fract(x); return mix(h1(vec2(i,uSeed)),h1(vec2(i+1.,uSeed)),f*f*(3.-2.*f)); }
+const mat3 YUV=mat3(.299,-.14713,.615, .587,-.28886,-.51499, .114,.436,-.10001);
+const mat3 RGB=mat3(1.,1.,1., 0.,-.39465,2.03211, 1.13983,-.5806,0.);
+vec2 fr; // frame px size
+vec3 at(vec2 q){ q=clamp(q,vec2(.0005),vec2(.9995)); return texture(uTex,(uFrame.xy+vec2(q.x,1.-q.y)*uFrame.zw)/uRes).rgb; }
+void main(){
+  vec2 px=gl_FragCoord.xy; fr=uFrame.zw; vec2 f=(px-uFrame.xy)/fr;
+  if(f.x<0.||f.y<0.||f.x>1.||f.y>1.){ o=vec4(texture(uTex,px/uRes).rgb,1.); return; }
+  vec2 q=vec2(f.x,1.-f.y);                    // top-left origin
+  // ---- CRT curvature: the picture bulges and the corners fall off the tube
+  float curve=uDisp1.z; vec2 cq=q-.5; float r2=dot(cq*vec2(fr.x/fr.y,1.)/(fr.x/fr.y),cq); q=.5+cq*(1.+curve*.32*r2*4.)/(1.+curve*.32);
+  float screen=1.; if(curve>0.&&(q.x<0.||q.y<0.||q.x>1.||q.y>1.)) screen=0.;
+  // ---- cine gate: weave, flicker, rounded window, overscan rebate with perforations
+  float gateMask=1., holeMask=0., rebate=0.;
+  if(uGateT>0){
+    float wv=uGate.y; q+= (vec2(vnoise(uSeed*7.1),vnoise(uSeed*5.3+9.))-.5)*wv*.012;
+    float ov=uGate.x, soft=uGate.z; float ar=fr.x/fr.y;
+    vec2 wc=vec2(.5,.5), ws=vec2(1.)-ov*vec2(.30,.16);       // window size in frame uv
+    if(uGateT==2||uGateT==4) wc.x+=ov*.07;                    // single-side perfs push the picture over
+    vec2 d=abs(q-wc)-ws*.5; float rad=(uGateT==1||uGateT==2?.075:.045)*ws.y; vec2 dd=vec2(d.x*ar,d.y);
+    float sd=length(max(dd+rad,0.))+min(max(dd.x,dd.y),0.)-rad;
+    gateMask=1.-smoothstep(-.004-soft*.02,.002,sd);
+    if(ov>0.){ // perforations in the rebate, at film scale
+      rebate=1.-gateMask; float ph=ws.y*.18, pw=ph*.62/ar*1.4;
+      vec2 holes[4]; int n=0;
+      if(uGateT==1){ holes[0]=vec2(wc.x-ws.x*.5-pw*1.1,.5); n=1; }                              // Super 8: beside the frame
+      else if(uGateT==2){ holes[0]=vec2(wc.x-ws.x*.5-pw*1.1,.5-ws.y*.5-ph*.08); holes[1]=holes[0]+vec2(0.,ws.y+ph*.16); n=2; } // Standard 8: at the frame line
+      else if(uGateT==3){ for(int k=0;k<2;k++){ float xs=k==0?wc.x-ws.x*.5-pw*.9:wc.x+ws.x*.5+pw*.9; holes[k*2]=vec2(xs,.5-ws.y*.5-ph*.1); holes[k*2+1]=vec2(xs,.5+ws.y*.5+ph*.1);} n=4; } // 16mm double perf
+      else if(uGateT==4){ holes[0]=vec2(wc.x-ws.x*.5-pw*.9,.5-ws.y*.5-ph*.1); holes[1]=vec2(holes[0].x,.5+ws.y*.5+ph*.1); n=2; }      // Super 16 single perf
+      else { holes[0]=vec2(wc.x-ws.x*.5-pw*.8,.5); holes[1]=vec2(wc.x+ws.x*.5+pw*.8,.5); n=2; }  // 35mm cine
+      for(int k=0;k<4;k++){ if(k>=n) break; vec2 hd=abs(q-holes[k])-vec2(pw,ph)*.5; vec2 hh=vec2(hd.x*ar,hd.y); float hr=ph*.25;
+        float hs=length(max(hh+hr,0.))+min(max(hh.x,hh.y),0.)-hr; holeMask=max(holeMask,1.-smoothstep(-.002,.002,hs)); }
+      q=(q-wc)/ws+.5; }
+  }
+  // ---- signal: lines, time-base jitter, tracking, head switching, interlace
+  float lines = uSig1.y>0. ? min(uSig1.y,fr.y/3.2) : fr.y; float L=floor(q.y*lines); if(uSig1.y>0.) q.y=(L+.5)/lines;
+  float dx=0.; float jit=uSig3.w; dx+=(h1(vec2(L,uSeed))-.5)*jit*.004;
+  float tr=uSig3.x; if(tr>0.){ float b=uSig3.y, bd=abs(q.y-b); float band=1.-smoothstep(.0,.045+tr*.05,bd);
+    dx+=band*(vnoise(L*.35+uSeed*3.)-.3)*tr*.06 + band*(h1(vec2(L*1.7,uSeed))-.5)*tr*.02; }
+  float hs=uSig3.z; if(hs>0.&&q.y>.965){ float k=(q.y-.965)/.035; dx+=hs*.03*k*(1.+h1(vec2(L,uSeed+2.))); }
+  if(uSig4.x>0.&&mod(L,2.)>.5) dx+=uSig4.x*.006;
+  float xpx=1./fr.x;
+  // luma with bandwidth loss, chroma with heavier loss + shift + rightward smear
+  float res=uSig1.x, chr=uSig1.z, sh=uSig1.w, bleed=uSig2.x;
+  float Y=0., wY=0., Yw=0., wW=0.; vec2 C=vec2(0.); float wC=0.;
+  float sY=1.+res*14., sC=2.+chr*40.;
+  for(int i=-8;i<=8;i++){ float t=float(i);
+    vec3 a=YUV*at(vec2(q.x+dx+t*sY*.35*xpx,q.y)); float k=exp(-t*t/18.); Y+=a.x*k; wY+=k;
+    vec3 b=YUV*at(vec2(q.x+dx+t*sY*1.2*xpx,q.y)); Yw+=b.x*k; wW+=k;
+    vec3 c=YUV*at(vec2(q.x+dx-sh*xpx*fr.x*.004+t*sC*.35*xpx - (t>0.?t*bleed*6.*xpx:0.),q.y)); float kc=exp(-t*t/18.)*(t>0.?1.+bleed*2.:1.); C+=c.yz*kc; wC+=kc; }
+  Y/=wY; Yw/=wW; C/=wC;
+  Y+=uSig2.y*(Y-Yw)*2.2;                                       // sharpening halos (edge enhancement)
+  if(uSig2.z>0.){ float g=(YUV*at(vec2(q.x+dx-uSig2.w*xpx*fr.x*.0015,q.y))).x; Y=mix(Y,Y+g*.6,uSig2.z); Y/=1.+uSig2.z*.35; } // ghost / multipath echo
+  // colour: saturation and hue drift
+  float sat=1.+uSig4.y; float hr=uSig4.z; C=mat2(cos(hr),sin(hr),-sin(hr),cos(hr))*C*sat;
+  // noise: luma grain stretched along the line, chroma blotches, snow, dropouts
+  vec2 np=vec2(floor(q.x*fr.x/(1.+uSig1.x*3.)),L);
+  Y+=(h1(np+uSeed)-.5)*uSig4.w*.25;
+  C+=(vec2(h1(vec2(floor(q.x*fr.x/6.),L)+uSeed*1.3),h1(vec2(floor(q.x*fr.x/6.),L)+uSeed*2.7))-.5)*uDisp2.w*.22;
+  if(uDisp2.z>0.){ float sn=h1(np*1.7+uSeed*5.); Y=mix(Y,sn,uDisp2.z*.5*step(.4,sn)); }
+  { float dp=uDisp2.y; if(dp>0.){ float lr=h1(vec2(L,uSeed+11.)); if(lr<dp*.012){ float st=h1(vec2(L,uSeed+13.)), ln=.05+h1(vec2(L,uSeed+17.))*.3; if(q.x>st&&q.x<st+ln) Y=mix(Y,1.,.85); } } }
+  vec3 c=clamp(RGB*vec3(Y,C),0.,1.);
+  if(uTintC.x>=0.){ float y=dot(c,vec3(.299,.587,.114)); c=y*uTintC; }
+  // cine flicker
+  c*=1.+(h1(vec2(uSeed,3.7))-.5)*uGate.w*.25;
+  // ---- display: phosphor bloom, scanlines, shadow mask, vignette, rounded tube corners
+  float bl=uDisp1.w; if(bl>0.){ vec3 g=vec3(0.); for(int i=0;i<8;i++){ float a=float(i)*.785+.3; for(int j=1;j<=2;j++){ vec2 off=vec2(cos(a),sin(a))*float(j)*.006*vec2(fr.y/fr.x,1.); g+=at(q+off); } } g/=16.; c+=max(g-.35,0.)*bl*.9; }
+  float sc=uDisp1.x; if(sc>0.){ float n=min(uDisp1.y,fr.y/3.2); float ph=fract(q.y*n); float lum=dot(c,vec3(.3,.6,.1)); float w=mix(.32,.5,lum); float beam=smoothstep(0.,w,ph)*smoothstep(1.,1.-w,ph); c*=mix(1.,beam*1.55,sc); }
+  if(uMaskT>0){ float m=uDisp2.x; vec2 sp=gl_FragCoord.xy/max(1.,fr.x/900.); vec3 mk;
+    if(uMaskT==1){ float k=mod(floor(sp.x),3.); mk=vec3(k<.5?1.:.25,k>.5&&k<1.5?1.:.25,k>1.5?1.:.25); }
+    else if(uMaskT==2){ float row=floor(sp.y/2.); float k=mod(floor(sp.x+mod(row,2.)*1.5),3.); mk=vec3(k<.5?1.:.3,k>.5&&k<1.5?1.:.3,k>1.5?1.:.3)*(mod(floor(sp.y),2.)<.5?1.:.8); }
+    else { float row=floor(sp.y/3.); float k=mod(floor(sp.x),3.); float slot=step(.5,mod(floor(sp.y)+mod(floor(sp.x/3.),2.)*1.5,3.)); mk=vec3(k<.5?1.:.25,k>.5&&k<1.5?1.:.25,k>1.5?1.:.25)*mix(.6,1.,slot); }
+    c*=mix(vec3(1.),mk*1.45,m); }
+  o.rgb=c;
+  // ---- on-screen display (follows the tube's curve)
+  if(uOSDOn>.5){ vec4 t=texture(uOSD,q); o.rgb=mix(o.rgb,t.rgb,t.a); }
+  // vignette + corners + gate
+  { float cv=uDispV.x, cr=uDispV.y; vec2 ee=(q-.5)*2.; float v=1.-cv*.75*smoothstep(.3,1.45,length(ee*vec2(1.,1.)));
+    vec2 cd=abs(ee)-(1.-cr*.18); float corner=cr>0.?1.-smoothstep(-.01,.01,length(max(cd,0.))-cr*.18):1.; o.rgb*=v*corner; }
+  o.rgb*=screen;
+  if(uGateT>0){ vec3 base=vec3(.05,.045,.04)+vec3(.02)*h1(px*.5); o.rgb=mix(base,o.rgb,gateMask); o.rgb=mix(o.rgb,vec3(.9,.88,.84),holeMask*rebate); }
+  o.a=1.;
+}`;
 const PACK_FS = `#version 300 es
 precision highp float; uniform sampler2D uA,uB,uC,uD; uniform vec3 uOn; in vec2 vUv; out vec4 o;
 void main(){ vec3 L=vec3(.27,.67,.06); o=vec4(uOn.x>.5?dot(texture(uA,vUv).rgb,L):0., uOn.y>.5?dot(texture(uB,vUv).rgb,L)*.55+dot(texture(uD,vUv).rgb,L)*.45:0., uOn.z>.5?dot(texture(uC,vUv).rgb,L):0., 1.); }`;

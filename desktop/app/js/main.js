@@ -36,7 +36,7 @@ const App = {
     UI.select(b,'paper','Print / Lab',()=>Engine.stock(P().stock).papers.map(x=>[x.id,x.name]), ()=>Engine.paperFor(P()).id, async v=>{ P().paper=v; await Engine.ensureLuts(P()); this.changed(); this.commit(); });
     UI.seg(b,'format','Format',Object.entries(FORMATS).map(([k,f])=>[k,f.label]),()=>P().format,v=>{ P().format=v; this.changed(); this.commit(); });
     S(b,'filmAmt','Strength',{min:0,max:100,step:1,fmt:x=>Math.round(x)+'%'});
-    { const fr=UI.check(b,'showFrame','Show frame / border',()=>P().border!=='none'&&!(P().off&&P().off.frame),v=>{ const p=P(); p.off=Object.assign({},p.off||{}); if(v){ delete p.off.frame; if(p.border==='none'){ const d=(Engine.stock(p.stock).defaults||{}).border; p.border=d||'35mm'; } } else p.off.frame=true; this.changed(); this.commit(); UI.refresh(); this.syncToggles(); }); }
+    { const fr=UI.check(b,'showFrame','Show frame / border',()=>P().border!=='none'&&!(P().off&&P().off.frame),v=>{ const p=P(); p.off=Object.assign({},p.off||{}); if(v){ delete p.off.frame; if(p.border==='none'){ const d=(Engine.stock(p.stock).defaults||{}).border; p.border=d||'film'; } } else p.off.frame=true; this.changed(); this.commit(); UI.refresh(); this.syncToggles(); }); }
     S(b,'push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box':(x>0?'+':'−')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
     UI.check(b,'autoExp','Auto exposure (lab metering)',()=>P().autoExp,v=>{ P().autoExp=v; this.changed(); this.commit(); });
     UI.note(b,'','stockNote');
@@ -91,7 +91,7 @@ const App = {
     UI.note(b,'Softness blurs the whole frame the way instant film and old lenses resolve less detail; Diffusion (Halation & Glow) adds the hazy bloom.');
     // Frame
     b=UI.panel(root,'pFrame','Frame',false);
-    UI.select(b,'border','Border',()=>Borders.styles,()=>P().border,v=>{ P().border=v; this.changed(); this.commit(); });
+    UI.select(b,'border','Border',()=>Borders.styles,()=>Borders.isFilm(P().border)?'film':P().border,v=>{ P().border=v; this.changed(); this.commit(); });
     UI.select(b,'frameTone','Frame color',()=>[['auto','Auto (film’s own)'],['white','White'],['cream','Cream'],['black','Black']],()=>P().frameTone||'auto',v=>{ P().frameTone=v; this.changed(); this.commit(); });
     UI.select(b,'edgeText','Edge print',()=>[['stock','Film stock'],['custom','Custom text'],['none','None']],()=>P().edgeText,v=>{ P().edgeText=v; ct.style.display=v==='custom'?'':'none'; this.changed(); this.commit(); });
     const ct=document.createElement('div'); ct.className='row'; ct.innerHTML='<label>Text</label><input class="askIn" spellcheck="false" maxlength="40" placeholder="e.g. DANIEL S. WORKMAN 400">'; b.appendChild(ct);
@@ -127,11 +127,9 @@ const App = {
     UI.button(vr,'Export orbit video…',()=>this.orbitDialog(),'tbtn accent');
     b=$('#cameraBody'); b.innerHTML='';
     { if(!this.camDefaults) this.camDefaults=this.camSnap();
+      UI.select(b,'camPreset','Presets',()=>[['','Choose a saved camera…']].concat((this.scanPresets||[]).map((x,i)=>[String(i),x.name])),()=>'',v=>{ if(v==='') return; this.applyCam(this.scanPresets[+v].cam); this.toast('Loaded '+this.scanPresets[+v].name); });
       const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r);
-      UI.select(r,'camPreset','',()=>[['','Camera presets…']].concat((this.scanPresets||[]).map((x,i)=>[String(i),x.name])),()=>'',v=>{ if(v==='') return; this.applyCam(this.scanPresets[+v].cam); this.toast('Loaded '+this.scanPresets[+v].name); });
-      UI.button(r,'Save…',()=>this.saveCamPreset()); UI.button(r,'Reset',()=>{ this.applyCam(this.camDefaults); this.toast('Camera reset to defaults'); });
-      const r2=document.createElement('div'); r2.className='btnrow'; b.appendChild(r2);
-      UI.button(r2,'Delete preset…',()=>this.deleteCamPreset()); }
+      UI.button(r,'Save preset…',()=>this.saveCamPreset()); UI.button(r,'Delete…',()=>this.deleteCamPreset()); UI.button(r,'Reset camera',()=>{ this.applyCam(this.camDefaults); this.toast('Camera reset to defaults'); }); }
     UI.select(b,'lens','Lens',()=>[['','Custom']].concat(LENSES.map(l=>[l.id,l.name])),()=>c.lens||'',v=>this.setLens(v));
     UI.note(b,'','lensNote'); this.lensNote();
     UI.seg(b,'cfmt','Format',Object.keys(SCAN_FORMATS).map(k=>[k,k.replace('x','×')]),()=>c.format,v=>{ c.format=v; c.fmm=SCAN_FORMATS[v].f; UI.refresh(); d(); });
@@ -305,7 +303,7 @@ const App = {
 
   // ================================================================ edits / history
   // on/off switch in each panel header: hides that section's effect without losing its settings
-  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sFlare:['flare'],sLens:['lensfx']},
+  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sAnalog:['analog'],sFlare:['flare'],sLens:['lensfx']},
   addStudioToggles(){ Object.assign(this.PANEL_SECTIONS,this.STUDIO_SECTIONS); this.addToggles(); $('#studioRandom').onclick=e=>{ e.stopPropagation(); Studio.randomLook(); }; $('#studioReset').onclick=e=>{ e.stopPropagation(); Studio.resetAll(); this.toast('Studio effects cleared'); }; },
   PANEL_SECTIONS:{pFilm:['film'],pBasic:['wb','tone','presence'],pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pDetail:['detail'],pGrain:['grain'],pHal:['halation'],pLens:['lens'],pFrame:['frame'],pMasks:['masks']},
   addToggles(){
@@ -321,7 +319,7 @@ const App = {
     // Studio panels
     for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('edited',this.studioEdited(id)); }
     const any=Object.keys(this.STUDIO_OWN).some(id=>this.studioEdited(id)); const nav=document.querySelector('[data-m="studio"]'); if(nav) nav.classList.toggle('edited',any); },
-  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sFlare:[['flare']],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
+  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sAnalog:[['anOn']],sFlare:[['flare']],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
   studioEdited(id){ const [ks,...cats]=this.STUDIO_OWN[id], p=Engine.p, fx=p.fx||{};
     if(id==='sSilver'&&!p.silver) return false; if(id==='sTwoTone'&&!p.ttOn) return false;
     return ks.some(k=>JSON.stringify(p[k])!==JSON.stringify(DEFAULTS[k]))||cats.some(c=>fx[c]&&fx[c].id&&fx[c].amt>0); },
@@ -676,7 +674,7 @@ const App = {
   pipeDone(ok){ clearInterval(this._pt); if(ok&&this.pp){ this.pp.stage=7; $('#pipeFill').style.width='100%'; document.querySelectorAll('.pst').forEach(c=>{ c.className='pst ok'; c.querySelector('span').textContent='done'; }); $('#pipeEta').textContent=''; } },
   scanLayoutSize(){ // image size for the scan view = fit of sensor aspect into the viewer
     const [sw,sh]=Splat.sensor(); const c=$('#view'), dpr=window.devicePixelRatio||1, W=c.clientWidth*dpr, H=c.clientHeight*dpr;
-    const b=Borders.margins(Engine.p.border,sw,sh), pad=28*dpr; const fw0=sw*(1+b.l+b.r), fh0=sh*(1+b.t+b.b);
+    const b=Borders.margins(Engine.eff(Engine.p).border,sw,sh), pad=28*dpr; const fw0=sw*(1+b.l+b.r), fh0=sh*(1+b.t+b.b);
     const s=Math.min((W-2*pad)/fw0,(H-2*pad)/fh0); return [Math.max(16,Math.round(sw*s)),Math.max(16,Math.round(sh*s))];
   },
   renderScanSource(w,h){
@@ -730,7 +728,8 @@ const App = {
   // the scan view renders with the photo look from Develop plus the lens's own traits
   scanParams(base){ const post=Splat.cam.post||{}; const o=Object.assign({},base,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
     if('falloff' in post) o.falloff=post.falloff; if('glow' in post) o.glow=Math.max(o.glow||0,post.glow);
-    for(const k of ['fringe','distort','softEdges','flare','flareLen','flareGhost','flareColor','flareSens']) if(k in post) o[k]=post[k]; return o; },
+    for(const k of ['fringe','distort','softEdges','flare','flareLen','flareGhost','flareColor','flareSens']) if(k in post) o[k]=post[k];
+    o.format={'35mm':'35mm','6x7':'6x7','4x5':'4x5','8x10':'8x10'}[Splat.cam.format]||o.format; return o; },
   levelScan(){ if(!Splat.scene){ this.toast('Load a scan first'); return; } if(Splat.scene.demo){ this.toast('The demo is already level'); return; }
     const ok=Splat.autoLevel(); this.saveScanView(); this.scanKey=null; Engine.dirty=true; UI.refresh();
     this.toast(ok?'Levelled to the ground plane — use Horizon to fine-tune':'No clear ground plane — try “Level to view”'); },
@@ -782,7 +781,7 @@ const App = {
         if(st.grain) Engine.grainSeed=(keepSeed+f*2654435761)>>>0;
         const src={tex:tmp.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1};
         const ks=Engine.src, kb=Engine.before, kc=Engine.cropMode; Engine.src=src; Engine.before=false; Engine.cropMode=false;
-        Engine.render({layout:L,target:out,RT,params:EP,forceAfter:true,p3});
+        Engine.frameSeed=f+1; Engine.render({layout:L,target:out,RT,params:EP,forceAfter:true,p3}); Engine.frameSeed=0;
         Engine.src=ks; Engine.before=kb; Engine.cropMode=kc;
         gl.bindFramebuffer(gl.FRAMEBUFFER,out.f); gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
         for(let y=0;y<h;y++) id.data.set(px.subarray((h-1-y)*w*4,(h-y)*w*4),y*w*4); x.putImageData(id,0,0);
