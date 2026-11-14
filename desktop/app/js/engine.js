@@ -19,6 +19,7 @@ const DEFAULTS = {
   leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
   dustAmt:0, scratchAmt:0, hairAmt:0, dustSeed:7, dustKind:'scan',
   ttOn:false, ttPalette:'red-cyan', ttGhost:80, ttMono:85, ttDX:6, ttDY:-4, ttScale:100, ttBand:0, ttBandPos:45,
+  flare:0, flareLen:60, flareGhost:35, flareColor:'blue', flareSens:50,
   fx:{}, softness:0, distort:0, zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
   gShH:220, gShS:0, gShL:0, gMidH:40, gMidS:0, gMidL:0, gHiH:45, gHiS:0, gHiL:0, gBlend:50, gBalance:0,
@@ -30,8 +31,12 @@ const SECTIONS = { film:['filmAmt','push'], wb:['temp','tint'], tone:['ev','cont
   curve:['curve'], hsl:['hslH','hslS','hslL'], grade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'], detail:['sharpen','nr','nrColor'],
   grain:['grain'], halation:['halation','glow'], lens:['falloff','softness'], frame:['border'], masks:['masks'],
   silver:['silver','sFilterAmt','structure','sBurn'], dbl:['dblId'], leak:['leakAmt'], dust:['dustAmt','scratchAmt','hairAmt'],
-  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'], assets:['fx'] };
+  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'], flare:['flare'], assets:['fx'] };
 // Studio asset layers (scanned-look textures). Order = compositing order.
+// lens flare colours: anamorphic streak tint, then the ghost tints
+const FLARE_COLORS={ blue:[[.25,.55,1.7],[.35,.6,1.4],[.9,.5,1.3],[.4,1.,.7]], amber:[[1.7,.75,.22],[1.3,.7,.3],[.6,.9,.4],[1.2,.5,.6]], violet:[[1.,.35,1.7],[.7,.4,1.4],[.4,.8,1.2],[1.3,.6,.4]],
+  teal:[[.25,1.3,1.25],[.3,1.,1.1],[1.1,.7,.4],[.5,.6,1.3]], red:[[1.8,.28,.2],[1.3,.4,.3],[.4,.7,1.1],[1.2,.9,.4]], gold:[[1.5,1.1,.4],[1.2,1.,.5],[.5,.7,1.2],[1.,.6,.4]],
+  green:[[.4,1.6,.5],[.5,1.2,.6],[1.,.5,.9],[.5,.8,1.3]], white:[[1.1,1.1,1.1],[.9,.95,1.05],[1.,.9,.8],[.8,.9,1.1]] };
 const FX_SLOTS=['leak','burn','flare','texture','dust','frame'];
 const FX_MODE={leak:0,burn:0,flare:0,texture:2,dust:1,frame:1};
 const TT_PALETTES = { 'red-cyan':['#ff1a24','#12e6e0'], 'magenta-green':['#ff2bd0','#2bff6a'], 'blue-orange':['#2a6bff','#ff8a1a'], 'pink-blue':['#ff5aa8','#3a8bff'], 'purple-yellow':['#9a3cff','#ffd21a'], 'red-blue':['#ff2020','#2a4dff'] };
@@ -52,7 +57,7 @@ const Engine = {
     try{ if('drawingBufferColorSpace' in gl){ gl.drawingBufferColorSpace='display-p3'; this.outP3 = gl.drawingBufferColorSpace==='display-p3'; } }catch(e){}
     this.P = {
       prep: GLU.program(GLU.QUAD_VS, PREP_FS),
-      bright: GLU.program(GLU.QUAD_VS, BRIGHT_FS),
+      bright: GLU.program(GLU.QUAD_VS, BRIGHT_FS), pack: GLU.program(GLU.QUAD_VS, PACK_FS),
       blur: GLU.program(GLU.QUAD_VS, BLUR_FS),
       final: GLU.program(GLU.QUAD_VS, FINAL_FS),
       detail: GLU.program(GLU.QUAD_VS, DETAIL_FS),
@@ -184,9 +189,10 @@ const Engine = {
       const turn = (A<1)!==(B<1) ? 90 : 0, r=(rot+turn)%360, fl=L.flip?-1:1;
       const R={0:[fl,0,0, 0,1,0],90:[0,1,0, -fl,0,0],180:[-fl,0,0, 0,-1,0],270:[0,-1,0, fl,0,0]}[r]||[1,0,0,0,1,0];
       return [R[0],R[1],.5-.5*R[0]-.5*R[1], R[3],R[4],.5-.5*R[3]-.5*R[4], 0,0,1]; }
+    const turn=(A<1)!==(B<1); if(turn) B=1/B;   // landscape overlays turn to fit portrait photos (and back)
     const ovW = B>=A ? B : A, ovH = B>=A ? 1 : A/B, a=-rot*Math.PI/180, c=Math.cos(a), sn=Math.sin(a);
     const T1=[A,0,-A/2-(L.x||0)*A, 0,1,-.5-(L.y||0), 0,0,1], R=[c*k,-sn*k,0, sn*k,c*k,0, 0,0,1], T2=[(L.flip?-1:1)/ovW,0,.5, 0,1/ovH,.5, 0,0,1];
-    return CM.mul(T2,CM.mul(R,T1)); },
+    const M=CM.mul(T2,CM.mul(R,T1)); return turn?CM.mul([0,1,0, -1,0,1, 0,0,1],M):M; },
   hueTint(h,sat){ // hue rotation as a tint multiplier for screen layers
     if(!h&&!sat) return [1,1,1]; const a=(h||0)*Math.PI/180, c=Math.cos(a), s=Math.sin(a), k=1/3, sq=Math.sqrt(1/3);
     return [c+(1-c)*k, k*(1-c)-sq*s, k*(1-c)+sq*s]; },
@@ -387,16 +393,36 @@ const Engine = {
     const ahAmt = {strong:0.16, weak:0.45, none:1.5}[st.antihalation] ?? 0.3;
     const halAmt = ahAmt*p.halation*(1+0.15*Math.max(0,p.push||0));
     if(halAmt>0.001) blurChain(R.ha,R.hb,1.6,0.006);
+    // lens flare: a long horizontal streak (anamorphic) + soft ghosts, packed with halation into one texture
+    const flOn = (p.flare||0)>0.5;
+    if(flOn){ const thr=1.0-0.8*((p.flareSens??50)/100);
+      R.fa1=GLU.ensure(R.fa1,qw,qh); R.fa2=GLU.ensure(R.fa2,qw,qh); R.fg1=GLU.ensure(R.fg1,qw,qh); R.fg2=GLU.ensure(R.fg2,qw,qh); R.pk=GLU.ensure(R.pk,qw,qh); R.fa3=GLU.ensure(R.fa3,qw,qh);
+      blurChain(R.fg1,R.fg2,thr,0.03);
+      gl.useProgram(this.P.bright.p); u=this.P.bright.u; gl.bindFramebuffer(gl.FRAMEBUFFER,R.fa1.f); gl.viewport(0,0,qw,qh);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,R.prep.t); gl.uniform1i(u.uTex,0); gl.uniform1f(u.uThr,thr); GLU.drawQuad();
+      gl.useProgram(this.P.blur.p); u=this.P.blur.u; gl.uniform1i(u.uTex,0);
+      // two lengths summed: a bright short core and a long faint tail, so the streak tapers away from the light
+      const len=(0.08+0.9*((p.flareLen??60)/100))*qw; gl.activeTexture(gl.TEXTURE0);
+      const pass=(src,dst,k)=>{ const step=Math.max(0.5,len*k/12); gl.bindFramebuffer(gl.FRAMEBUFFER,dst.f); gl.bindTexture(gl.TEXTURE_2D,src.t); gl.uniform2f(u.uDir,step/qw,0); GLU.drawQuad(); };
+      pass(R.fa1,R.fa2,0.012); pass(R.fa2,R.fa1,0.04); pass(R.fa1,R.fa2,0.13);   // short → fa2
+      pass(R.fa2,R.fa3,0.38); pass(R.fa3,R.fa1,1.0);                             // long  → fa1
+      R.faOut=R.fa2; const faLong=R.fa1;
+      gl.useProgram(this.P.pack.p); u=this.P.pack.u; gl.bindFramebuffer(gl.FRAMEBUFFER,R.pk.f);
+      [[0,R.ha.t,'uA'],[1,R.faOut.t,'uB'],[2,R.fg1.t,'uC'],[3,faLong.t,'uD']].forEach(([i,t,n])=>{ gl.activeTexture(gl.TEXTURE0+i); gl.bindTexture(gl.TEXTURE_2D,t); gl.uniform1i(u[n],i); });
+      gl.uniform3f(u.uOn,halAmt>0.001?1:0,1,1); GLU.drawQuad(); }
     if(p.glow>0.001) blurChain(R.ga,R.gb,0.0,0.03);
     const doStruct = p.silver && [p.structure,p.sStructHi,p.sStructMid,p.sStructSh,p.sSoft].some(v=>Math.abs(v||0)>0.5);
     if(doStruct){ R.sa=GLU.ensure(R.sa,qw,qh); R.sb=GLU.ensure(R.sb,qw,qh); blurChain(R.sa,R.sb,0.0,0.012); }
     const doFine = p.silver && Math.abs(p.sFine||0)>0.5;
     if(doFine){ R.fa=GLU.ensure(R.fa,qw,qh); R.fb=GLU.ensure(R.fb,qw,qh); blurChain(R.fa,R.fb,0.0,0.0025); }
     gl.useProgram(this.P.final.p); u=this.P.final.u;
+    { const g=paper.grade, on=g!==undefined&&(g!==2||paper.tone||paper.lift); 
+      gl.uniform4f(this.P.final.u.uPaperG,on?1:0,Math.pow(1.32,(g??2)-2),paper.lift||0,0);
+      gl.uniform3f(this.P.final.u.uPaperT,...(paper.tone==='warm'?[1.04,1.0,.9]:paper.tone==='cool'?[.97,.99,1.04]:[1,1,1])); }
     if(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target.f); gl.viewport(0,0,target.w,target.h); }
     else { gl.bindFramebuffer(gl.FRAMEBUFFER,null); gl.viewport(0,0,L.W,L.H); }
     const bind=(unit,type,tex,name)=>{ gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(type,tex); gl.uniform1i(u[name],unit); };
-    bind(0,gl.TEXTURE_2D,R.prep.t,'uPrep'); bind(1,gl.TEXTURE_2D,R.ha.t,'uHal'); bind(2,gl.TEXTURE_2D,R.ga.t,'uGlowTex');
+    bind(0,gl.TEXTURE_2D,R.prep.t,'uPrep'); bind(1,gl.TEXTURE_2D,flOn?R.pk.t:R.ha.t,'uHal'); bind(2,gl.TEXTURE_2D,R.ga.t,'uGlowTex');
     bind(3,gl.TEXTURE_3D,lut||null,'uLut'); bind(4,gl.TEXTURE_2D,s.tex,'uSrc'); bind(5,gl.TEXTURE_2D,opts.borderTex||this.borderTex,'uBorder');
     bind(6,gl.TEXTURE_2D,this.curveLUT(p),'uCurve');
     bind(7,gl.TEXTURE_2D,doStruct?R.sa.t:R.prep.t,'uStructTex'); gl.uniform1f(u.uStruct,doStruct?1:0);
@@ -427,7 +453,9 @@ const Engine = {
     gl.uniform4f(u.uFrame,L.fx,L.fy,L.fw,L.fh); gl.uniform4f(u.uImg,L.ix,L.iy,L.iw,L.ih); gl.uniform4f(u.uWin,u0,v0,u1,v1);
     gl.uniformMatrix3fv(u.uGeo,true,geo);
     gl.uniform1f(u.uFilmAmt,Math.max(0,Math.min(1,(p.filmAmt??100)/100))); gl.uniform1f(u.uOrig,orig?1:0); gl.uniform1f(u.uHasLut,lut?1:0); gl.uniform1f(u.uN,this.manifest.lutSize); gl.uniform2f(u.uShaper,this.manifest.shaper.lo,this.manifest.shaper.hi);
-    gl.uniform1f(u.uHalAmt, halAmt>0.001?halAmt:0); gl.uniform1f(u.uGlow,p.glow);
+    gl.uniform1f(u.uHalAmt, halAmt>0.001?halAmt:0);
+    { const F=FLARE_COLORS[p.flareColor]||FLARE_COLORS.blue, a=(p.flare||0)/100; gl.uniform3f(u.uFlare,flOn?1:0,a*a*22,flOn?((p.flareGhost??35)/100)*a*1.6:0);
+      gl.uniform3fv(u.uFlareC,new Float32Array(F.flat())); } gl.uniform1f(u.uGlow,p.glow);
     gl.uniform1f(u.uBefore,(this.before&&!opts.forceAfter)?1:0); gl.uniform1f(u.uFlip,s.flipY?1:0); gl.uniform1f(u.uEncoded,s.encoded?1:0);
     gl.uniform1f(u.uContrast,p.contrast/100); gl.uniform1f(u.uHighlights,p.highlights/100); gl.uniform1f(u.uShadows,p.shadows/100);
     gl.uniform1f(u.uWhites,p.whites/100); gl.uniform1f(u.uBlacks,p.blacks/100); gl.uniform1f(u.uVibrance,p.vibrance/100); gl.uniform1f(u.uSat,p.saturation/100);
@@ -643,6 +671,9 @@ const BRIGHT_FS = `#version 300 es
 precision highp float; uniform sampler2D uTex; uniform float uThr; in vec2 vUv; out vec4 o;
 void main(){ vec3 c=max(texture(uTex,vUv).rgb,0.); float Y=dot(c,vec3(.27,.67,.06));
   float k = uThr>0. ? smoothstep(uThr,uThr*2.5,Y) : 1.; o=vec4(min(c*k,vec3(40.)),1.); }`;
+const PACK_FS = `#version 300 es
+precision highp float; uniform sampler2D uA,uB,uC,uD; uniform vec3 uOn; in vec2 vUv; out vec4 o;
+void main(){ vec3 L=vec3(.27,.67,.06); o=vec4(uOn.x>.5?dot(texture(uA,vUv).rgb,L):0., uOn.y>.5?dot(texture(uB,vUv).rgb,L)*.55+dot(texture(uD,vUv).rgb,L)*.45:0., uOn.z>.5?dot(texture(uC,vUv).rgb,L):0., 1.); }`;
 const BLUR_FS = `#version 300 es
 precision highp float; uniform sampler2D uTex; uniform vec2 uDir; in vec2 vUv; out vec4 o;
 void main(){ vec3 s=vec3(0.); float w=0.; for(int i=-12;i<=12;i++){ float f=float(i); float k=exp(-f*f/60.); s+=texture(uTex,vUv+uDir*f).rgb*k; w+=k; } o=vec4(s/w,1.); }`;
@@ -650,6 +681,8 @@ const FINAL_FS = `#version 300 es
 precision highp float; precision highp sampler3D;
 uniform sampler2D uPrep,uHal,uGlowTex,uSrc,uBorder,uCurve; uniform sampler3D uLut;
 uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; uniform mat3 uGeo;
+uniform vec3 uFlare; uniform vec3 uFlareC[4];
+uniform vec4 uPaperG; uniform vec3 uPaperT;
 uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
 uniform sampler2D uA[6]; uniform float uAOn[6],uAAmt[6],uAInv[6]; uniform int uAMode[6]; uniform mat3 uAM[6]; uniform vec3 uAHue[6];
 uniform sampler2D uStructTex,uDust; uniform sampler2D uFineTex; uniform float uFine,uToneBal; uniform vec4 uStructB,uSB,uSVig,uBurnS; uniform vec3 uSAmp; uniform vec2 uZones;
@@ -724,13 +757,20 @@ void main(){
         E*=pow(Y/Yb, clamp(k,-1.,1.5)*.9); }
       if(uFine!=0.){ vec3 B=texture(uFineTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6);
         E*=pow(Y/Yb, clamp(uFine,-1.,1.)*1.3); }
-      if(uHalAmt>0.){ vec3 h=texture(uHal,puv).rgb; float hy=dot(h,vec3(.3,.6,.1)); E += hy*vec3(1.,.12,.02)*uHalAmt; }
+      if(uHalAmt>0.){ vec3 h=texture(uHal,puv).rgb; float hy=uFlare.x>.5?h.r:dot(h,vec3(.3,.6,.1)); E += hy*vec3(1.,.12,.02)*uHalAmt; }
+      if(uFlare.x>.5){ float st=texture(uHal,puv).g; E += st*uFlareC[0]*uFlare.y;
+        // ghosts: soft discs mirrored through the centre at different scales
+        vec2 d=puv-.5; float gs[4]=float[4](-.45,-1.1,.6,-1.8); float gw[4]=float[4](.9,.55,.35,.4);
+        for(int i=0;i<4;i++){ vec2 q=.5+d*gs[i]; if(q.x<0.||q.y<0.||q.x>1.||q.y>1.) continue; float g=texture(uHal,q).b; E += g*uFlareC[i==0?1:i]*gw[i]*uFlare.z; } }
       if(uGlow>0.){ vec3 g=texture(uGlowTex,puv).rgb; E = mix(E, E*.75+g*.5, uGlow*.6); }
       vec3 c;
       if(uHasLut>.5){
         vec3 x=clamp((log2(max(E,vec3(1e-12))/.18)+uShaper.x)/(uShaper.x+uShaper.y),0.,1.);
         c=texture(uLut, x*(uN-1.)/uN + .5/uN).rgb;
         if(uFilmAmt<.999){ vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); vec3 nt=enc(l*1.2/(1.+l)); c=mix(nt,c,uFilmAmt); }
+        if(uPaperG.x>.5){ // darkroom paper: contrast grade, base lift, paper tone
+          float y=max(luma(c),1e-4), k=uPaperG.y, v=y<.5?.5*pow(2.*y,k):1.-.5*pow(2.*(1.-y),k); v=uPaperG.z+v*(1.-uPaperG.z);
+          c=clamp(c*(v/y),0.,1.); c*=mix(vec3(1.),uPaperT,(1.-v)*.9+.1); }
       } else if(uOrig>.5){ c=clamp(enc(max(R709_TO_P3*(AP1_TO_709*E),0.)),0.,1.); }   // the photo as shot
       else { vec3 l=max(R709_TO_P3*(AP1_TO_709*E),0.); c=enc(l*1.2/(1.+l)); }
       float y=luma(c);

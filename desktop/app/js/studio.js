@@ -63,6 +63,8 @@ const STUDIO_RECIPES = [
   ['Analog · Darkroom print', {...SF('fp4'),sFilterHue:60,sFilterAmt:40,structure:20,sTone:'selenium',sToneAmt:40,fx:{texture:{pick:1,amt:35},dust:{pick:2,amt:45,invert:true},frame:{pick:1,amt:100}}}],
   ['Cinema · Teal & orange', {contrast:15,gShH:195,gShS:30,gHiH:35,gHiS:30,saturation:5}],
   ['Cinema · Moody night', {ev:-0.3,contrast:10,gShH:220,gShS:30,gMidH:210,gMidS:10,halation:1.5,glow:0.3,saturation:-10}],
+  ['Cinema · Anamorphic night', {flare:70,flareColor:'blue',flareLen:75,flareGhost:40,flareSens:60,contrast:10,gShH:215,gShS:20,halation:1.2}],
+  ['Cinema · Golden flare', {flare:60,flareColor:'amber',flareLen:55,flareGhost:55,flareSens:45,gHiH:40,gHiS:25,glow:0.2}],
   ['Cinema · Dreamy halation', {glow:0.6,halation:1.8,softEdges:30,highlights:-10,fx:{flare:{pick:0,amt:40}}}],
   ['Creative · Toy camera', {softEdges:60,fringe:40,falloff:1.2,leakAmt:25,leakColor:'magenta',saturation:20,contrast:15}],
   ['Creative · Zoom burst', {zoomBlur:55}],
@@ -80,7 +82,7 @@ const STUDIO_RECIPES = [
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
 
 const Studio = {
   host:null,
@@ -207,6 +209,16 @@ const Studio = {
     b=UI.panel(root,'sFrameFx','Frames & Edges',false,()=>this.clearLayer('frame'));
     this.assetLayer(b,'frame','Frames');
     UI.note(b,'Scanned negative carriers, plate edges and print borders, laid over the edges of the photo. Instant-film frames are under Develop → Frame.');
+    }
+    // ---------------------------------------------------------------- Lens flare
+    if(want('sFlare')){
+    b=UI.panel(root,'sFlare','Lens Flare',false,()=>this.reset(['flare','flareLen','flareGhost','flareColor','flareSens']));
+    this.S(b,'flare','Amount',{min:0,max:100,step:1});
+    this.sel(b,'flareColor','Colour',[['blue','Anamorphic blue'],['amber','Amber'],['gold','Gold'],['violet','Violet'],['teal','Teal'],['red','Red'],['green','Green'],['white','Clean white']]);
+    this.S(b,'flareLen','Streak length',{min:0,max:100,step:1});
+    this.S(b,'flareGhost','Ghosts',{min:0,max:100,step:1});
+    this.S(b,'flareSens','Sensitivity',{min:0,max:100,step:1});
+    UI.note(b,'Bright points throw a horizontal streak across the frame, like cinema anamorphic glass, plus coloured ghosts mirrored through the centre. Raise Sensitivity to make dimmer lights flare.');
     }
     // ---------------------------------------------------------------- Lens
     if(want('sLens')){

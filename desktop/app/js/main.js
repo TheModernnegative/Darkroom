@@ -126,6 +126,12 @@ const App = {
     UI.button(vr,'Reset view',()=>{ Splat.frame(); this.scanKey=null; d(); },'tbtn');
     UI.button(vr,'Export orbit video…',()=>this.orbitDialog(),'tbtn accent');
     b=$('#cameraBody'); b.innerHTML='';
+    { if(!this.camDefaults) this.camDefaults=this.camSnap();
+      const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r);
+      UI.select(r,'camPreset','',()=>[['','Camera presets…']].concat((this.scanPresets||[]).map((x,i)=>[String(i),x.name])),()=>'',v=>{ if(v==='') return; this.applyCam(this.scanPresets[+v].cam); this.toast('Loaded '+this.scanPresets[+v].name); });
+      UI.button(r,'Save…',()=>this.saveCamPreset()); UI.button(r,'Reset',()=>{ this.applyCam(this.camDefaults); this.toast('Camera reset to defaults'); });
+      const r2=document.createElement('div'); r2.className='btnrow'; b.appendChild(r2);
+      UI.button(r2,'Delete preset…',()=>this.deleteCamPreset()); }
     UI.select(b,'lens','Lens',()=>[['','Custom']].concat(LENSES.map(l=>[l.id,l.name])),()=>c.lens||'',v=>this.setLens(v));
     UI.note(b,'','lensNote'); this.lensNote();
     UI.seg(b,'cfmt','Format',Object.keys(SCAN_FORMATS).map(k=>[k,k.replace('x','×')]),()=>c.format,v=>{ c.format=v; c.fmm=SCAN_FORMATS[v].f; UI.refresh(); d(); });
@@ -147,6 +153,12 @@ const App = {
     UI.slider(b,'lfringe','Fringing',Object.assign({min:0,max:60,step:1,def:0},PP('fringe')));
     UI.slider(b,'ldist','Distortion',Object.assign({min:-80,max:40,step:1,def:0},PP('distort')));
     UI.slider(b,'lsoft','Soft corners',Object.assign({min:0,max:80,step:1,def:0},PP('softEdges')));
+    UI.note(b,'<span class="sub">Lens flare</span>');
+    UI.slider(b,'lflare','Flare',Object.assign({min:0,max:100,step:1,def:0,fmt:x=>Math.round(x)},PP('flare')));
+    UI.select(b,'lflareC','Flare colour',()=>[['blue','Anamorphic blue'],['amber','Amber'],['gold','Gold'],['violet','Violet'],['teal','Teal'],['red','Red'],['green','Green'],['white','Clean white']],()=>(c.post||{}).flareColor||'blue',v=>{ c.post=Object.assign({},c.post||{},{flareColor:v}); c.lens=''; d(); });
+    UI.slider(b,'lflareL','Streak length',Object.assign({min:0,max:100,step:1,def:60,fmt:x=>Math.round(x)},{get:()=>((c.post||{}).flareLen??60),set:v=>{ c.post=Object.assign({},c.post||{},{flareLen:v}); d(); }}));
+    UI.slider(b,'lflareG','Ghosts',Object.assign({min:0,max:100,step:1,def:35,fmt:x=>Math.round(x)},{get:()=>((c.post||{}).flareGhost??35),set:v=>{ c.post=Object.assign({},c.post||{},{flareGhost:v}); d(); }}));
+    UI.slider(b,'lflareS','Flare sensitivity',Object.assign({min:0,max:100,step:1,def:50,fmt:x=>Math.round(x)},{get:()=>((c.post||{}).flareSens??50),set:v=>{ c.post=Object.assign({},c.post||{},{flareSens:v}); d(); }}));
     UI.note(b,'Click the image to focus; focus stays locked to that point while you orbit. Double-click to orbit around it.');
   },
 
@@ -293,7 +305,7 @@ const App = {
 
   // ================================================================ edits / history
   // on/off switch in each panel header: hides that section's effect without losing its settings
-  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sLens:['lensfx']},
+  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sFlare:['flare'],sLens:['lensfx']},
   addStudioToggles(){ Object.assign(this.PANEL_SECTIONS,this.STUDIO_SECTIONS); this.addToggles(); $('#studioRandom').onclick=e=>{ e.stopPropagation(); Studio.randomLook(); }; $('#studioReset').onclick=e=>{ e.stopPropagation(); Studio.resetAll(); this.toast('Studio effects cleared'); }; },
   PANEL_SECTIONS:{pFilm:['film'],pBasic:['wb','tone','presence'],pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pDetail:['detail'],pGrain:['grain'],pHal:['halation'],pLens:['lens'],pFrame:['frame'],pMasks:['masks']},
   addToggles(){
@@ -309,7 +321,7 @@ const App = {
     // Studio panels
     for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('edited',this.studioEdited(id)); }
     const any=Object.keys(this.STUDIO_OWN).some(id=>this.studioEdited(id)); const nav=document.querySelector('[data-m="studio"]'); if(nav) nav.classList.toggle('edited',any); },
-  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
+  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sFlare:[['flare']],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
   studioEdited(id){ const [ks,...cats]=this.STUDIO_OWN[id], p=Engine.p, fx=p.fx||{};
     if(id==='sSilver'&&!p.silver) return false; if(id==='sTwoTone'&&!p.ttOn) return false;
     return ks.some(k=>JSON.stringify(p[k])!==JSON.stringify(DEFAULTS[k]))||cats.some(c=>fx[c]&&fx[c].id&&fx[c].amt>0); },
@@ -701,15 +713,24 @@ const App = {
   },
   flash(){ const v=$('#viewer'); v.animate([{background:'#fff'},{background:'#121212'}],{duration:250}); },
 
+  // ---- camera presets (lens, format, aperture, character, flare, backdrop — not the scene's framing)
+  CAM_KEYS:['format','portrait','fmm','stop','tilt','tiltDir','dof','bg','lens','swirl','catEye','anam','post','focus'],
+  camSnap(){ const c=Splat.cam, o={}; this.CAM_KEYS.forEach(k=>o[k]=JSON.parse(JSON.stringify(c[k]??null))); return o; },
+  applyCam(o){ const c=Splat.cam; this.CAM_KEYS.forEach(k=>{ if(k in o) c[k]=JSON.parse(JSON.stringify(o[k])); }); c.focusLock=null; this.lensNote(); this.scanKey=null; Splat.lastSortView=null; Engine.dirty=true; UI.refresh(); },
+  async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this camera preset',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return;
+    this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap()}; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
+    this.saveSoon(); this.buildScanPanels(); this.toast('Saved camera preset “'+name+'”'); },
+  async deleteCamPreset(){ const L=this.scanPresets||[]; if(!L.length){ this.toast('No camera presets yet'); return; }
+    const name=await this.ask('Delete which preset? ('+L.map(x=>x.name).join(', ')+')',L[L.length-1].name); const i=L.findIndex(x=>x.name===name); if(i<0) return; L.splice(i,1); this.saveSoon(); this.buildScanPanels(); this.toast('Deleted “'+name+'”'); },
   setLens(id){ const c=Splat.cam, L=LENSES.find(l=>l.id===id); c.lens=id; if(!L){ this.lensNote(); return; }
     c.format=L.format; c.fmm=L.fmm; c.swirl=L.swirl||0; c.catEye=L.catEye||0; c.anam=L.anam||0; c.tilt=L.tilt||0; c.tiltDir=L.tiltDir||0; c.post=Object.assign({},L.post);
-    const i=STOPS.findIndex(x=>Math.abs(x-L.f)<0.01); if(i>=0) c.stop=i; if(L.landscape) c.portrait=false;
+    let i=0; STOPS.forEach((x,j)=>{ if(Math.abs(x-L.f)<Math.abs(STOPS[i]-L.f)) i=j; }); c.stop=i; if(L.landscape) c.portrait=false;
     UI.refresh(); this.lensNote(); this.scanKey=null; Engine.dirty=true; this.toast(L.name); },
   lensNote(){ const el=$('#lensNote'); if(!el) return; const L=LENSES.find(l=>l.id===Splat.cam.lens); el.innerHTML=L?L.desc:'Pick a lens to load its focal length, widest aperture and rendering character — then adjust anything.'; },
   // the scan view renders with the photo look from Develop plus the lens's own traits
   scanParams(base){ const post=Splat.cam.post||{}; const o=Object.assign({},base,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
     if('falloff' in post) o.falloff=post.falloff; if('glow' in post) o.glow=Math.max(o.glow||0,post.glow);
-    for(const k of ['fringe','distort','softEdges']) if(k in post) o[k]=post[k]; return o; },
+    for(const k of ['fringe','distort','softEdges','flare','flareLen','flareGhost','flareColor','flareSens']) if(k in post) o[k]=post[k]; return o; },
   levelScan(){ if(!Splat.scene){ this.toast('Load a scan first'); return; } if(Splat.scene.demo){ this.toast('The demo is already level'); return; }
     const ok=Splat.autoLevel(); this.saveScanView(); this.scanKey=null; Engine.dirty=true; UI.refresh();
     this.toast(ok?'Levelled to the ground plane — use Horizon to fine-tune':'No clear ground plane — try “Level to view”'); },
@@ -885,7 +906,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const data={v:1,presets:this.userPresets,lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
+    const data={v:1,presets:this.userPresets,scanPresets:this.scanPresets||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -893,7 +914,7 @@ const App = {
     let json='';
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
-    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },
@@ -1031,7 +1052,7 @@ const App = {
   placeTarget(){ if(this.module!=='studio'||!this.cur||this.compare||Engine.cropMode) return null; return Studio.placeTarget(); },
   placeBox(){ const el=$('#placeBox'); const T=this.placeTarget(), L=this._lastL;
     if(!T||!L||Engine.view.mode!=='fit'){ el.classList.remove('on'); return; }
-    const o=T.get(), A=L.iw/L.ih, B=T.B, ovW=B>=A?B:A, ovH=B>=A?1:A/B, dpr=L.dpr, r=$('#view').getBoundingClientRect();
+    const o=T.get(), A=L.iw/L.ih, B=(T.kind!=='dbl'&&(A<1)!==(T.B<1))?1/T.B:T.B, ovW=B>=A?B:A, ovH=B>=A?1:A/B, dpr=L.dpr, r=$('#view').getBoundingClientRect();
     const cl=$('#placeClip'); Object.assign(cl.style,{left:r.left+L.ix/dpr+'px',top:r.top+(L.H-L.iy-L.ih)/dpr+'px',width:L.iw/dpr+'px',height:L.ih/dpr+'px'});
     const cx=(.5+o.x)*L.iw/dpr, cy=(.5+o.y)*L.ih/dpr;
     Object.assign(el.style,{left:cx+'px',top:cy+'px',width:ovW*o.scale*L.ih/dpr+'px',height:ovH*o.scale*L.ih/dpr+'px',transform:`translate(-50%,-50%) rotate(${o.rot}deg)`});

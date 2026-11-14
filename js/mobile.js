@@ -76,7 +76,7 @@ const M = {
   },
   // ----------------------------------------------------------------- edits
   thumbSoon(){},
-  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; { const q=Engine.p; e.studio=!!(Object.keys(q.fx||{}).some(k=>q.fx[k]&&q.fx[k].id&&q.fx[k].amt>0)||q.silver||q.ttOn||q.dblId||q.leakAmt||q.dustAmt||q.scratchAmt||q.hairAmt||q.zoomBlur||q.motionBlur||q.softEdges||q.tiltShift||q.fringe); } document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
+  dots(){ const e=Tools.edited(Engine.p); e.light=e.light||e.masks; { const q=Engine.p; e.studio=!!(q.flare||Object.keys(q.fx||{}).some(k=>q.fx[k]&&q.fx[k].id&&q.fx[k].amt>0)||q.silver||q.ttOn||q.dblId||q.leakAmt||q.dustAmt||q.scratchAmt||q.hairAmt||q.zoomBlur||q.motionBlur||q.softEdges||q.tiltShift||q.fringe); } document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('edited',!!e[b.dataset.t])); },
   changed(){ Engine.dirty=true; this.title(); clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),100); clearTimeout(this._sv); this._sv=setTimeout(()=>{ try{ localStorage.setItem('dr.last',JSON.stringify(Engine.p)); }catch(e){} },400); },
   commit(){ const s=JSON.stringify(Engine.p); if(this.hist[this.hist.length-1]!==s){ this.hist.push(s); this.fut=[]; if(this.hist.length>100) this.hist.shift(); } },
   async undo(){ if(this.hist.length<2){ this.toast('Nothing to undo'); return; } this.fut.push(this.hist.pop()); Engine.p=withDefaults(JSON.parse(this.hist[this.hist.length-1])); await Engine.ensureLuts(Engine.p); this.changed(); this.showTab(this.tab); },
@@ -89,7 +89,7 @@ const M = {
     const sp=h.querySelector('span'); sp.after(b); },
   kit(){
     const M=this;
-    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks'],sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sLens:['lensfx']};
+    const SEC={pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pMasks:['masks'],sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sFlare:['flare'],sLens:['lensfx']};
     UI.panel=(parent,id,title,open,reset)=>{ const h=document.createElement('div'); h.className='paneHead'; h.innerHTML=`<span>${title}</span>`+(reset?'<button class="rst">Reset</button>':''); if(SEC[id]) M.secSwitch(h,SEC[id]);
       if(reset) h.querySelector('.rst').onclick=()=>{ reset(); M.showTab(M.tab,true); }; parent.appendChild(h); const b=document.createElement('div'); parent.appendChild(b); return b; };
     UI.slider=(parent,key,label,o)=>M.slider(parent,key,label||'',o);
@@ -195,7 +195,7 @@ const M = {
       const on=k=>Tools.edited ? false : false;
       [['sSilver','Silver — Black & White',p.silver?'On':'B&W with real colour filters, structure, toning'],['sTwoTone','Two-Tone Flash',p.ttOn?'On':'Red/cyan gel ghost'],
        ['sDouble','Double Exposure',p.dblId?'On':'Blend a second photo'],['sLeak','Light Leaks',(p.leakAmt||has('leak'))?'On':'Scanned leaks and edge flares'],['sBurn','Film Burns & Flares',(has('burn')||has('flare'))?'On':'Burnt ends, sun flares, glow'],
-       ['sDust','Dust & Scratches',(p.dustAmt||p.scratchAmt||p.hairAmt||has('dust'))?'On':'Specks, scratches, hair'],['sTexture','Paper & Texture',has('texture')?'On':'Paper, emulsion and print textures'],['sFrameFx','Frames & Edges',has('frame')?'On':'Negative carriers, plate edges, borders'],['sLens','Lens Effects',(p.zoomBlur||p.motionBlur||p.softEdges||p.tiltShift||p.fringe)?'On':'Zoom, motion, tilt-shift, fringing']]
+       ['sDust','Dust & Scratches',(p.dustAmt||p.scratchAmt||p.hairAmt||has('dust'))?'On':'Specks, scratches, hair'],['sTexture','Paper & Texture',has('texture')?'On':'Paper, emulsion and print textures'],['sFrameFx','Frames & Edges',has('frame')?'On':'Negative carriers, plate edges, borders'],['sFlare','Lens Flare',p.flare?'On':'Anamorphic streaks and ghosts'],['sLens','Lens Effects',(p.zoomBlur||p.motionBlur||p.softEdges||p.tiltShift||p.fringe)?'On':'Zoom, motion, tilt-shift, fringing']]
         .forEach(([id,title,sub])=>this.toolRow(pane,title,sub,()=>this.openTool(title,b=>Studio.build(b,id)),sub==='On'));
     } else if(t==='presets'){
       const vh=document.createElement('div'); vh.className='paneHead'; vh.innerHTML='<span>Versions of this photo</span><button>+ Save version</button>'; vh.querySelector('button').onclick=()=>this.addVersion(); pane.appendChild(vh);
