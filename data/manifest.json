@@ -1,0 +1,614 @@
+{
+ "version": 1,
+ "lutSize": 33,
+ "shaper": {
+  "lo": 11,
+  "hi": 7
+ },
+ "stocks": [
+  {
+   "id": "kodak_portra_160",
+   "name": "Portra 160",
+   "maker": "Kodak",
+   "iso": 160,
+   "group": "Kodak Professional",
+   "type": "negative",
+   "pgi": 28,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Finest-grain Portra. Soft contrast, natural skin, gentle pastel highlights.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_portra_160__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_portra_160__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_portra_400",
+   "name": "Portra 400",
+   "maker": "Kodak",
+   "iso": 400,
+   "group": "Kodak Professional",
+   "type": "negative",
+   "pgi": 37,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "The wedding & portrait standard. Warm skin, huge latitude, muted greens.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_portra_400__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_portra_400__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_portra_800",
+   "name": "Portra 800",
+   "maker": "Kodak",
+   "iso": 800,
+   "group": "Kodak Professional",
+   "type": "negative",
+   "pgi": 48,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Richer, denser and warmer than 400 with visible but tight grain.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_portra_800__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_portra_800__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_portra_800_push1",
+   "name": "Portra 800 +1",
+   "maker": "Kodak",
+   "iso": 1600,
+   "group": "Kodak Professional",
+   "type": "negative",
+   "pgi": 58,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Portra 800 pushed one stop: more contrast and saturation, coarser grain.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_portra_800_push1__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_portra_800_push1__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_portra_800_push2",
+   "name": "Portra 800 +2",
+   "maker": "Kodak",
+   "iso": 3200,
+   "group": "Kodak Professional",
+   "type": "negative",
+   "pgi": 70,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Pushed two stops: punchy, contrasty, gritty.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_portra_800_push2__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_portra_800_push2__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_ektar_100",
+   "name": "Ektar 100",
+   "maker": "Kodak",
+   "iso": 100,
+   "group": "Kodak Professional",
+   "type": "negative",
+   "pgi": 22,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "World's finest-grain colour negative. Saturated reds and blues, crisp.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_ektar_100__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_ektar_100__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_gold_200",
+   "name": "Gold 200",
+   "maker": "Kodak",
+   "iso": 200,
+   "group": "Kodak Consumer",
+   "type": "negative",
+   "pgi": 33,
+   "antihalation": "weak",
+   "tungsten": false,
+   "desc": "Golden-hour warmth, yellow cast, nostalgic saturation.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_gold_200__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_gold_200__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "kodak_ultramax_400",
+   "name": "UltraMax 400",
+   "maker": "Kodak",
+   "iso": 400,
+   "group": "Kodak Consumer",
+   "type": "negative",
+   "pgi": 42,
+   "antihalation": "weak",
+   "tungsten": false,
+   "desc": "Consumer 400: punchy, warm, slightly rough grain.",
+   "papers": [
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "kodak_ultramax_400__kodak_portra_endura"
+    },
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "kodak_ultramax_400__fujifilm_crystal_archive_typeii"
+    }
+   ]
+  },
+  {
+   "id": "fujifilm_c200",
+   "name": "C200",
+   "maker": "Fujifilm",
+   "iso": 200,
+   "group": "Fujifilm",
+   "type": "negative",
+   "pgi": 35,
+   "antihalation": "weak",
+   "tungsten": false,
+   "desc": "Fuji consumer stock: cooler, greener, clean.",
+   "papers": [
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "fujifilm_c200__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "fujifilm_c200__kodak_portra_endura"
+    }
+   ]
+  },
+  {
+   "id": "fujifilm_xtra_400",
+   "name": "Superia X-TRA 400",
+   "maker": "Fujifilm",
+   "iso": 400,
+   "group": "Fujifilm",
+   "type": "negative",
+   "pgi": 40,
+   "antihalation": "weak",
+   "tungsten": false,
+   "desc": "Green-leaning shadows, cool contrasty Fuji snapshot look.",
+   "papers": [
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "fujifilm_xtra_400__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "fujifilm_xtra_400__kodak_portra_endura"
+    }
+   ]
+  },
+  {
+   "id": "fujifilm_pro_400h",
+   "name": "Pro 400H",
+   "maker": "Fujifilm",
+   "iso": 400,
+   "group": "Fujifilm",
+   "type": "negative",
+   "pgi": 32,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Airy pastels, minty greens and cyan-leaning highlights. Discontinued legend.",
+   "papers": [
+    {
+     "id": "fujifilm_crystal_archive_typeii",
+     "name": "Fujifilm Crystal Archive II",
+     "lut": "fujifilm_pro_400h__fujifilm_crystal_archive_typeii"
+    },
+    {
+     "id": "kodak_portra_endura",
+     "name": "Kodak Portra Endura",
+     "lut": "fujifilm_pro_400h__kodak_portra_endura"
+    }
+   ]
+  },
+  {
+   "id": "kodak_vision3_50d",
+   "name": "Vision3 50D",
+   "maker": "Kodak",
+   "iso": 50,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 22,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Daylight cinema negative printed to 2383: cinematic contrast, deep blacks.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_vision3_50d__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_vision3_50d__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "kodak_vision3_250d",
+   "name": "Vision3 250D",
+   "maker": "Kodak",
+   "iso": 250,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 30,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Daylight cinema stock with wide latitude.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_vision3_250d__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_vision3_250d__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "kodak_vision3_200t",
+   "name": "Vision3 200T",
+   "maker": "Kodak",
+   "iso": 200,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 29,
+   "antihalation": "strong",
+   "tungsten": true,
+   "desc": "Tungsten-balanced: shoot under warm light, or enjoy cool daylight.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_vision3_200t__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_vision3_200t__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "kodak_vision3_500t",
+   "name": "Vision3 500T",
+   "maker": "Kodak",
+   "iso": 500,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 38,
+   "antihalation": "strong",
+   "tungsten": true,
+   "desc": "Night-time tungsten cinema stock printed to 2383.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_vision3_500t__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_vision3_500t__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "cinestill_800t",
+   "name": "800T",
+   "maker": "CineStill",
+   "iso": 800,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 40,
+   "antihalation": "none",
+   "tungsten": true,
+   "desc": "500T without rem-jet: tungsten balance and red halation glow around lights.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_vision3_500t__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_vision3_500t__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "cinestill_50d",
+   "name": "50D",
+   "maker": "CineStill",
+   "iso": 50,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 22,
+   "antihalation": "none",
+   "tungsten": false,
+   "desc": "50D without rem-jet: clean daylight cinema look with halation.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_vision3_50d__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_vision3_50d__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "kodak_verita_200d",
+   "name": "Verita 200D",
+   "maker": "Kodak",
+   "iso": 200,
+   "group": "Motion Picture",
+   "type": "negative",
+   "pgi": 30,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Kodak's daylight cine stock.",
+   "papers": [
+    {
+     "id": "kodak_2383",
+     "name": "Kodak Vision 2383",
+     "lut": "kodak_verita_200d__kodak_2383"
+    },
+    {
+     "id": "kodak_2393",
+     "name": "Kodak Vision Premier 2393",
+     "lut": "kodak_verita_200d__kodak_2393"
+    }
+   ]
+  },
+  {
+   "id": "fujifilm_provia_100f",
+   "name": "Provia 100F",
+   "maker": "Fujifilm",
+   "iso": 100,
+   "group": "Slide",
+   "type": "positive",
+   "pgi": 26,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Neutral, faithful E-6 slide film with clean whites.",
+   "papers": [
+    {
+     "id": "slide",
+     "name": "Light table (slide)",
+     "lut": "fujifilm_provia_100f__slide"
+    }
+   ]
+  },
+  {
+   "id": "fujifilm_velvia_100",
+   "name": "Velvia 100",
+   "maker": "Fujifilm",
+   "iso": 100,
+   "group": "Slide",
+   "type": "positive",
+   "pgi": 26,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Ultra-saturated landscape slide film. Deep blues, electric greens.",
+   "papers": [
+    {
+     "id": "slide",
+     "name": "Light table (slide)",
+     "lut": "fujifilm_velvia_100__slide"
+    }
+   ]
+  },
+  {
+   "id": "kodak_ektachrome_100",
+   "name": "Ektachrome E100",
+   "maker": "Kodak",
+   "iso": 100,
+   "group": "Slide",
+   "type": "positive",
+   "pgi": 26,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Clean, slightly cool modern Kodak slide.",
+   "papers": [
+    {
+     "id": "slide",
+     "name": "Light table (slide)",
+     "lut": "kodak_ektachrome_100__slide"
+    }
+   ]
+  },
+  {
+   "id": "kodak_kodachrome_64",
+   "name": "Kodachrome 64",
+   "maker": "Kodak",
+   "iso": 64,
+   "group": "Slide",
+   "type": "positive",
+   "pgi": 30,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "The classic: dense reds, deep shadows, mid-century colour.",
+   "papers": [
+    {
+     "id": "slide",
+     "name": "Light table (slide)",
+     "lut": "kodak_kodachrome_64__slide"
+    }
+   ]
+  },
+  {
+   "id": "tri-x",
+   "name": "Tri-X 400",
+   "maker": "Kodak",
+   "iso": 400,
+   "group": "Black & White",
+   "type": "bw",
+   "pgi": 56,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "The photojournalist's film: punchy mid-tones, gritty iconic grain.",
+   "papers": [
+    {
+     "id": "bw",
+     "name": "Graded fibre paper",
+     "lut": "bw_tri-x"
+    }
+   ]
+  },
+  {
+   "id": "hp5",
+   "name": "HP5 Plus",
+   "maker": "Ilford",
+   "iso": 400,
+   "group": "Black & White",
+   "type": "bw",
+   "pgi": 52,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Softer, forgiving Ilford 400 with broad tonality.",
+   "papers": [
+    {
+     "id": "bw",
+     "name": "Graded fibre paper",
+     "lut": "bw_hp5"
+    }
+   ]
+  },
+  {
+   "id": "acros",
+   "name": "Acros 100 II",
+   "maker": "Fujifilm",
+   "iso": 100,
+   "group": "Black & White",
+   "type": "bw",
+   "pgi": 24,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Ultra-fine grain; reduced red sensitivity darkens reds and skin.",
+   "papers": [
+    {
+     "id": "bw",
+     "name": "Graded fibre paper",
+     "lut": "bw_acros"
+    }
+   ]
+  },
+  {
+   "id": "tmax100",
+   "name": "T-Max 100",
+   "maker": "Kodak",
+   "iso": 100,
+   "group": "Black & White",
+   "type": "bw",
+   "pgi": 27,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Clean, modern T-grain: smooth and sharp.",
+   "papers": [
+    {
+     "id": "bw",
+     "name": "Graded fibre paper",
+     "lut": "bw_tmax100"
+    }
+   ]
+  },
+  {
+   "id": "delta3200",
+   "name": "Delta 3200",
+   "maker": "Ilford",
+   "iso": 3200,
+   "group": "Black & White",
+   "type": "bw",
+   "pgi": 72,
+   "antihalation": "strong",
+   "tungsten": false,
+   "desc": "Low-light Ilford: big, beautiful grain and soft blacks.",
+   "papers": [
+    {
+     "id": "bw",
+     "name": "Graded fibre paper",
+     "lut": "bw_delta3200"
+    }
+   ]
+  }
+ ],
+ "credits": "Colour film models: spektrafilm by Andrea Volpato (github.com/andreavolpato/spektrafilm), profiles & LUTs CC BY-SA 4.0. Black & white models: Splat Darkroom."
+}
