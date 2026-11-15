@@ -92,7 +92,7 @@ const STUDIO_RECIPES = [
   ['Wet plate · Gem in brass', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'tintype',sToneAmt:90,sVig:40,fx:{frame:{id:'frame_tintype_5',amt:100},texture:{id:'tex_collodion_4',amt:45}}}],
   ['Wet plate · Cased ambrotype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'ambrotype',sToneAmt:90,sSoft:15,fx:{frame:{id:'frame_ambrotype_2',amt:100},texture:{id:'tex_collodion_3',amt:40}}}],
   ['Wet plate · Alumitype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'sepia',sToneAmt:55,sAmpW:20,fx:{frame:{id:'frame_alumitype_1',amt:100},texture:{id:'tex_collodion_1',amt:35}}}],
-  ['Wet plate · Glass plate', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'selenium',sToneAmt:40,sBright:10,fx:{frame:{id:'frame_glassneg_1',amt:100},texture:{id:'tex_collodion_2',amt:40}}}],
+  ['Wet plate · Glass negative', {negMode:'bw',...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'selenium',sToneAmt:40,sBright:10,fx:{frame:{id:'frame_glassneg_1',amt:100},texture:{id:'tex_collodion_2',amt:40}}}],
   ['Wet plate · Spirit tintype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'tintype',sToneAmt:95,dblId:'__self',dblMode:'screen',dblAmt:40,dblScale:1.2,dblX:0.08,dblSmear:30,dblSmearAng:-80,fx:{frame:{id:'frame_tintype_2',amt:100},texture:{id:'tex_collodion_4',amt:50}}}],
   ['Alt process · Ambrotype', {...SF('ortho'),structure:25,sContrast:10,sSoft:15,sTone:'ambrotype',sToneAmt:90,sBurn:35,softEdges:30,fx:{frame:{id:'frame_ambrotype_1',amt:100}},grain:0.2}],
   ['Alt process · Cyanotype', {...SF('ortho'),sTone:'cyanotype',sToneAmt:100,sContrast:10,sBurn:20,fx:{texture:{pick:0,amt:35}}}],
@@ -147,7 +147,7 @@ const STUDIO_RECIPES = [
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','dblSmear','dblSmearAng','dblZoom','dblEchoes','dblEchoX','dblEchoY','dblEchoFade','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','cps',...AN_KEYS,'flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','cps','negMode',...AN_KEYS,'flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
 
 const Studio = {
   host:null,
@@ -220,6 +220,9 @@ const Studio = {
     const CS=(k,l,o)=>UI.slider(b,'cp_'+k,l,Object.assign({min:-100,max:100,step:1,def:0,get:()=>{ const c=cur(); return c?(c[k]||0):0; },set:v=>{ const c=cur(); if(!c) return; c[k]=v; H.changed(); },commit:()=>H.commit()},o));
     const sliders=[CS('r','Size',{min:3,max:80,step:0.5,def:15,get:()=>{ const c=cur(); return c?Math.round((c.r||0.15)*100*2)/2:15; },set:v=>{ const c=cur(); if(!c) return; c.r=v/100; H.changed(); },fmt:x=>Math.round(x)+'%'}),
       CS('b','Brightness'),CS('c','Contrast'),CS('s','Saturation'),CS('st','Structure'),CS('w','Warmth')];
+    // while a point's slider is held (or the pointer is over it), its reach shows in red
+    sliders.forEach(d=>{ const on=()=>{ Engine.cpShow=this.cpSel; Engine.dirty=true; }, off=()=>{ clearTimeout(this._cpt); this._cpt=setTimeout(()=>{ Engine.cpShow=-1; Engine.dirty=true; },500); };
+      d.addEventListener('pointerdown',on); d.addEventListener('pointerup',off); d.addEventListener('pointerenter',on); d.addEventListener('pointerleave',off); });
     const row=document.createElement('div'); row.className='btnrow'; b.appendChild(row);
     const del=UI.button(row,'Delete point',()=>{ const a=P().cps||[]; if(this.cpSel<0||!a[this.cpSel]) return; a.splice(this.cpSel,1); this.cpSel=Math.min(this.cpSel,a.length-1); H.changed(); H.commit(); this.renderCP(); });
     UI.button(row,'Duplicate',()=>{ const c=cur(); if(!c) return; const a=P().cps; if(a.length>=8) return; const n=JSON.parse(JSON.stringify(c)); n.x=Math.min(.95,n.x+.05); a.push(n); this.cpSel=a.length-1; H.changed(); H.commit(); this.renderCP(); });
@@ -306,6 +309,7 @@ const Studio = {
     if(want('sFrameFx')){
     b=UI.panel(root,'sFrameFx','Frames & Edges',false,()=>this.clearLayer('frame'));
     this.assetLayer(b,'frame','Frames');
+    this.sel(b,'negMode','Show as negative',[['none','Off — positive'],['bw','B&W negative (glass plate, sheet film)'],['colour','Colour negative (orange mask)']]);
     UI.note(b,'Scanned negative carriers, plate edges and print borders, laid over the edges of the photo. Instant-film frames are under Develop → Frame.');
     }
     // ---------------------------------------------------------------- Analog media

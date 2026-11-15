@@ -71,7 +71,7 @@ track(){ local st="$1" tot="$2" lab="$3" re="$4"; shift 4
     :
   done; }
 # stop child tools too when the app cancels
-trap 'pkill -P $$ 2>/dev/null; exit 143' TERM INT
+trap 'pkill -CONT -x brush 2>/dev/null; pkill -TERM -x brush 2>/dev/null; pkill -P $$ 2>/dev/null; exit 143' TERM INT
 need(){ command -v "$1" >/dev/null 2>&1 || { echo "✗ '$1' not found. $2"; exit 1; }; }
 need colmap "Run: bash $HERE/install.sh"
 need ffmpeg "Run: bash $HERE/install.sh"
@@ -176,11 +176,25 @@ if [[ "$TRAINER" == brush ]]; then
   CMD+=("$DATA")
   # Brush's flag names have changed between releases — use whatever this build has
   for f in --total-train-steps --total-steps --max-steps; do grep -q -- "$f" <<<"$HELP" && { CMD+=("$f" "$STEPS"); break; }; done
-  grep -q -- '--export-every' <<<"$HELP" && CMD+=(--export-every 5000)
+  grep -q -- '--export-every' <<<"$HELP" && CMD+=(--export-every 2500)
   grep -q -- '--export-path'  <<<"$HELP" && CMD+=(--export-path "$OUT")
   [[ "$VIEWER" == 1 ]] && grep -q -- '--with-viewer' <<<"$HELP" && CMD+=(--with-viewer)
   # (checkpoints every 5000 steps, so a late crash still leaves a usable scan)
   echo "  ${CMD[*]}"
+  # training control from the app: it writes "pause", "run" or "finish" into $OUT/.control
+  #   pause  → freeze the trainer (SIGSTOP) so the GPU is free to preview the latest checkpoint
+  #   run    → carry on exactly where it stopped
+  #   finish → stop now and keep the newest checkpoint as the finished scan
+  CTL="$OUT/.control"; rm -f "$CTL"
+  ( last=""; while sleep 1; do c="$(cat "$CTL" 2>/dev/null || true)"
+      if [[ "$c" != "$last" ]]; then
+        case "$c" in
+          pause)  pkill -STOP -x brush 2>/dev/null; echo "@@state paused" ;;
+          finish) pkill -CONT -x brush 2>/dev/null; sleep 0.5; pkill -INT -x brush 2>/dev/null; sleep 3; pkill -TERM -x brush 2>/dev/null; echo "@@state finishing" ;;
+          *)      pkill -CONT -x brush 2>/dev/null; [[ -n "$last" ]] && echo "@@state running" ;;
+        esac; last="$c"; fi
+    done ) & CTLPID=$!
+  trap 'kill $CTLPID 2>/dev/null; pkill -CONT -x brush 2>/dev/null; true' EXIT
   prog 6 0 "$STEPS" "Preparing GPU — the first run can take a few minutes"
   T0=$SECONDS; OK=1
   track 6 "$STEPS" "Training splats" "([0-9]+) ?/ ?${STEPS}([^0-9]|$)" "${CMD[@]}" || OK=0
@@ -188,6 +202,7 @@ if [[ "$TRAINER" == brush ]]; then
     echo "⚠ pseudo-terminal wrapper failed — running Brush directly"; CMD=("${CMD[@]:3}"); OK=1
     track 6 "$STEPS" "Training splats" "([0-9]+) ?/ ?${STEPS}([^0-9]|$)" "${CMD[@]}" || OK=0
   fi
+  [[ "$(cat "$CTL" 2>/dev/null)" == finish ]] && { OK=1; echo "■ Finished early at your request — keeping the newest checkpoint"; }
   if [[ $OK == 0 ]]; then
     echo "⚠ Brush crashed — retrying once with lighter GPU settings"
     LIGHT=()
@@ -199,6 +214,7 @@ if [[ "$TRAINER" == brush ]]; then
     track 6 "$STEPS" "Training splats (lighter retry)" "([0-9]+) ?/ ?${STEPS}([^0-9]|$)" "${CMD[@]}" "${LIGHT[@]}" || {
       echo "✗ Brush crashed again. Full log: $OUT/build.log"; exit 3; }
   fi
+  kill $CTLPID 2>/dev/null; rm -f "$CTL"
   prog 6 "$STEPS" "$STEPS" "Training splats"
 else
   prog 6 0 "$STEPS" "Preparing GPU — the first run can take a few minutes"

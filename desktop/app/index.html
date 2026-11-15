@@ -32,7 +32,7 @@
       </section>
       <!-- studio: one-click recipes -->
       <section class="panel open mod-studio" id="pRecipes">
-        <h3><i></i>Looks<span class="hbtns"><button class="hbtn dice" id="studioRandom" title="Random look — press again for another">🎲 Random</button><button class="hbtn" id="studioReset" title="Clear all Studio effects">⟲</button></span></h3>
+        <h3><i></i>Looks<span class="hbtns"><button class="hbtn" id="lookSheet" title="Contact sheet: this photo in every look">⊞</button><button class="hbtn dice" id="studioRandom" title="Random look — press again for another">🎲 Random</button><button class="hbtn" id="studioReset" title="Clear all Studio effects">⟲</button></span></h3>
         <div class="body"><div id="recipeList"></div></div>
       </section>
       <!-- develop: versions of this photo -->
@@ -54,7 +54,7 @@
       </section>
       <!-- develop: film stocks -->
       <section class="panel open mod-develop mod-library" id="pPresets">
-        <h3><i></i>Film Stocks<input id="presetSearch" placeholder="Search" spellcheck="false"><span class="hbtns"><button class="hbtn" id="stockGrid" title="Show previews of every film on this photo">▦</button></span></h3>
+        <h3><i></i>Film Stocks<input id="presetSearch" placeholder="Search" spellcheck="false"><span class="hbtns"><button class="hbtn" id="stockSheet" title="Contact sheet: this photo through every film">⊞</button><button class="hbtn" id="stockGrid" title="Show previews of every film on this photo">▦</button></span></h3>
         <div class="body" id="presetList"></div>
       </section>
       <!-- history of the current photo / scan look -->
@@ -82,7 +82,7 @@
     <!-- ===================================================== centre -->
     <section id="centre">
       <div id="viewer">
-        <canvas id="view"></canvas><div id="cpLayer"></div><div id="splitBar"><i>BEFORE</i><b>AFTER</b></div><div id="placeClip"><div id="placeBox"><i class="hint">Drag to move · scroll to scale · ⇧-drag or ⌥-scroll to rotate · ⌥-drag to resize · double-click to reset</i></div></div>
+        <canvas id="view"></canvas><div id="cpLayer"></div><div id="pipeMini"><span id="pmText">Training…</span><button id="pmPause">Pause</button><button id="pmPreview">Preview latest</button><button id="pmFinish">Finish now</button><button id="pmShow">Show</button></div><div id="splitBar"><i>BEFORE</i><b>AFTER</b></div><div id="placeClip"><div id="placeBox"><i class="hint">Drag to move · scroll to scale · ⇧-drag or ⌥-scroll to rotate · ⌥-drag to resize · double-click to reset</i></div></div>
         <div id="grid"></div>
         <div id="ring"></div>
         <canvas id="cropOv"></canvas>
@@ -116,7 +116,7 @@
           <button class="ibtn devonly" id="tbSync" title="⌘-click photos in the filmstrip, then sync settings to them" disabled>Sync…</button>
         </div>
         <div class="tgroup scanonly">
-          <span class="hint">drag orbit · ⇧/right-drag pan · scroll dolly · click focus · double-click pivot</span>
+          <span class="hint">drag orbit · ⇧-drag or arrows move · ⇧+arrows orbit · scroll or +/− dolly · click focus · double-click pivot</span>
           <button class="ibtn accent" id="tbExpose" title="Expose a frame into the library">● Expose</button>
           <button class="ibtn" id="tbSaveScan" title="Save this view as an image file (⌘E)">Save image…</button>
         </div>
@@ -158,7 +158,11 @@
     <div class="pbar"><i id="pipeFill"></i></div>
     <div class="pmeta"><span id="pipeNow">Starting…</span><span id="pipeEta"></span></div>
     <details id="pipeDetails"><summary>Details</summary><pre id="pipeLog"></pre></details>
-    <div class="dlgBtns"><button class="tbtn" id="pipeCancel">Cancel</button><button class="tbtn accent" id="pipeClose" disabled>Close</button></div>
+    <div class="dlgBtns"><button class="tbtn" id="pipeCancel">Cancel</button><span class="sp"></span>
+      <button class="tbtn tctl" id="pipePause" title="Freeze training and free the graphics card — look at the latest checkpoint">Pause &amp; preview</button>
+      <button class="tbtn tctl" id="pipeFinish" title="Stop now and keep the newest checkpoint as the finished scan">Finish now</button>
+      <button class="tbtn" id="pipeHide" title="Keep training in the background and use the app">Hide</button>
+      <button class="tbtn accent" id="pipeClose" disabled>Close</button></div>
   </div>
 </div>
 <input type="file" id="fileIn" multiple accept="image/*,.heic,.heif,.dng,.ply,.splat" hidden>

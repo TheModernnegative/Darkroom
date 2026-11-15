@@ -391,3 +391,10 @@ button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;w
 #stockCard h4{margin:0 0 4px;font:600 13px var(--sans);color:#fff}
 #stockCard .sc-meta{font:11px var(--sans);color:#ff9a3c;margin-bottom:6px}
 #stockCard p{margin:0;font:12px/1.45 var(--sans);color:#bbb}
+#pipe .dlgBtns{display:flex;gap:8px;align-items:center}
+#pipe .dlgBtns .sp{flex:1}
+#pipeMini{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:40;display:none;align-items:center;gap:6px;padding:6px 8px 6px 14px;background:#1d2028ee;border:1px solid #3d4556;border-radius:20px;box-shadow:0 6px 20px #0009;font:12px var(--sans);color:#ddd}
+#pipeMini.on{display:flex}
+#pipeMini.paused{border-color:#ff8a1f}
+#pipeMini button{background:#2c3240;border:1px solid #444c5e;color:#eee;border-radius:12px;padding:3px 10px;font:12px var(--sans);cursor:pointer}
+#pipeMini button:hover{background:#3d5a90}

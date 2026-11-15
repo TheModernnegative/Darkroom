@@ -129,7 +129,8 @@ const App = {
     { const h=document.createElement('div'); h.className='ahead'; h.textContent='Camera move (keyframes)'; b.appendChild(h);
       const kl=document.createElement('div'); kl.className='cpList'; kl.id='keyList'; b.appendChild(kl);
       const kr=document.createElement('div'); kr.className='btnrow'; b.appendChild(kr);
-      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'Clear',()=>{ this.scanKeys=[]; this.renderKeys(); });
+      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'▶ Preview',()=>this.previewKeys()); UI.button(kr,'Clear',()=>{ this.scanKeys=[]; this.keySel=-1; this.renderKeys(); });
+      const ko=document.createElement('div'); ko.id='keyOpts'; b.appendChild(ko);
       UI.note(b,'Frame a shot, press + Keyframe; move, refocus or change aperture / focal length, add another. Export video → “Keyframes” glides between them (dolly, rack focus, aperture pull).');
       setTimeout(()=>this.renderKeys(),0); }
     b=$('#cameraBody'); b.innerHTML='';
@@ -170,6 +171,7 @@ const App = {
   buildPresets(){ UI.favs=new Set(this.favStocks||[]); UI.onFav=f=>{ this.favStocks=f; this.saveSoon(); this.stockThumbsSoon(true); };
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
       this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
+    $('#stockSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'stocks'); }; $('#lookSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'looks'); };
     $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
     { const el=$('#presetList'), btn=$('#stockGrid'); const set=on=>{ el.classList.toggle('gridmode',on); btn.classList.toggle('on',on); try{ localStorage.stockGrid=on?'1':''; }catch(e){} if(on) this.stockThumbsSoon(true); };
       btn.onclick=e=>{ e.stopPropagation(); set(!el.classList.contains('gridmode')); }; let v=''; try{ v=localStorage.stockGrid; }catch(e){} set(v==='1');
@@ -178,6 +180,31 @@ const App = {
     $('#presetSearch').addEventListener('keydown',e=>e.stopPropagation());
   },
 
+  // ---- contact sheet: the current photo through every film stock (or every look), labelled, as one JPEG
+  async contactSheet(kind){ if(!this.cur||!Engine.src){ this.toast('Open a photo first'); return; }
+    let items=[];
+    if(kind==='looks') items=STUDIO_RECIPES.map(([n,r])=>({label:n.replace(' · ',' — '),p:()=>Studio.recipeParams(r)}));
+    else { const st=Engine.manifest.stocks.filter(s=>s.type!=='original'&&(kind!=='favs'||(this.favStocks||[]).includes(s.id)));
+      items=st.map(s=>({label:(s.maker&&s.maker!=='Original'?s.maker+' ':'')+s.name,p:()=>Tools.stockParams(Engine.p,s.id,false)})); }
+    if(!items.length){ this.toast(kind==='favs'?'Star some films first (☆ on a film)':'Nothing to show'); return; }
+    const T=420, cols=items.length>24?7:items.length>12?6:4, [sw,sh]=Engine.dims(Engine.p), tw=sw>=sh?T:Math.round(T*sw/sh), th=sw>=sh?Math.round(T*sh/sw):T, pad=14, lab=30, head=60;
+    const rows=Math.ceil(items.length/cols), cv=document.createElement('canvas'); cv.width=cols*(tw+pad)+pad; cv.height=head+rows*(th+lab+pad)+pad; const x=cv.getContext('2d');
+    x.fillStyle='#111'; x.fillRect(0,0,cv.width,cv.height); x.fillStyle='#ddd'; x.font='600 22px "Helvetica Neue",Arial'; x.fillText((this.cur.name||'Photo')+' — '+(kind==='looks'?'every look':'every film stock'),pad,38);
+    x.font='12px "Helvetica Neue",Arial'; x.fillStyle='#777'; x.fillText('Splat Darkroom · '+new Date().toLocaleDateString(),pad,54);
+    this._stopSheet=false;
+    for(let i=0;i<items.length;i++){ if(this._stopSheet) break; this.busy(`Contact sheet — ${i+1} / ${items.length}  (Esc to stop)`);
+      const p=items[i].p(); try{ await Engine.ensureLuts(p); }catch(e){} const u=this.renderThumb(p,T); if(!u) continue;
+      const im=await new Promise(r=>{ const m=new Image(); m.onload=()=>r(m); m.onerror=()=>r(null); m.src=u; }); const cx=pad+(i%cols)*(tw+pad), cy=head+Math.floor(i/cols)*(th+lab+pad);
+      if(im) x.drawImage(im,cx,cy,tw,th); x.fillStyle='#ccc'; x.font='13px "Helvetica Neue",Arial'; x.fillText(items[i].label,cx,cy+th+19,tw); await new Promise(r=>setTimeout(r,0)); }
+    this.busy(); Engine.dirty=true; await Engine.ensureLuts(Engine.p);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.9)), name=(this.cur.name||'photo').replace(/\.[^.]+$/,'')+' — contact sheet.jpg';
+    if(Native.available){ const path=await Native.call('pickSave',{name,dir:this.info&&this.info.splatDir+'/exports'}); if(!path) return; await Native.call('writeFile',{path,base64:await this.blobB64(blob)}); this.toast('Saved '+path.split('/').pop()); Native.call('reveal',{path}).catch(()=>{}); }
+    else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); } },
+  sheetMenu(btn,kind){ const m=$('#ctxMenu'); m.innerHTML=''; const item=(l,f)=>{ const b=document.createElement('button'); b.textContent=l; b.onclick=()=>{ m.classList.remove('on'); f(); }; m.appendChild(b); };
+    if(kind==='looks') item('Contact sheet of every look…',()=>this.contactSheet('looks'));
+    else { item('Contact sheet of every film stock…',()=>this.contactSheet('stocks')); item('Contact sheet of favourite films…',()=>this.contactSheet('favs')); }
+    const r=btn.getBoundingClientRect(); m.style.left=r.left+'px'; m.style.top=(r.bottom+4)+'px'; m.classList.add('on');
+    setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
   // ---- film stock previews: each visible film rendered on the current photo, a few at a time
   stockThumbsSoon(force){ if(force) this._stKey=null; clearTimeout(this._stt); this._stt=setTimeout(()=>this.stockThumbs(),300); },
   async stockThumbs(){ const el=$('#presetList'); if(!el||!el.classList.contains('gridmode')||!this.cur||!Engine.src||this.module==='scan') return;
@@ -635,7 +662,7 @@ const App = {
   loadScanBuffer(buf,name,path){ this._scanBytes=buf.byteLength; setTimeout(()=>this.renderScanInfo(),50);
     try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.cam.model=null; Splat.cam.roll=0; Splat.load(s); this.scanName=name; this.scanPath=path||null;
       { const sc=this.scans.find(x=>x.path===path); if(sc&&sc.view){ const v=sc.view; Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); Splat.frame(); } }
-      if(path && !this.scans.find(x=>x.path===path)) this.scans.unshift({name:name.replace(/\.(ply|splat)$/i,''),path,thumb:null}); }
+      if(path && !/\/export_\d+\.ply$/.test(path) && !this.scans.find(x=>x.path===path)) this.scans.unshift({name:name.replace(/\.(ply|splat)$/i,''),path,thumb:null}); }
     catch(e){ this.toast(e.message); return; }
     this.scanKey=null; this.setModule('scan'); UI.refresh(); this.saveSoon();
   },
@@ -696,11 +723,12 @@ const App = {
   async newScan(input){
     if(!Native.available){ this.toast('Building scans runs in the Mac app'); return; }
     if(!input){ const p=await Native.call('open',{files:true,dirs:true,multiple:false,title:'Choose an orbit video, or a folder of photos',dir:this.info&&this.info.splatDir+'/captures'}); if(!p||!p[0]) return; input=p[0]; }
+    this._pipeOut=(this.info&&this.info.splatDir||'')+'/scans/'+input.split('/').pop().replace(/\.[^.\/]+$/,''); this._pipeState='running';
     this._pipeBusy=true; $('#pipe').classList.add('on'); $('#pipeLog').textContent=''; $('#pipeTitle').textContent='Building scan from '+input.split('/').pop()+'…'; $('#pipeClose').disabled=true;
     this.pipeStart();
     const job=Native.call('runPipeline',{input});
     this._pipeJob=null;
-    try{ const r=await job; this._pipeBusy=false; Engine.dirty=true; $('#pipeClose').disabled=false;
+    try{ const r=await job; this._pipeBusy=false; this._pipeState=null; this.pipeMini(); Engine.dirty=true; $('#pipeClose').disabled=false; $('#pipe').classList.add('on');
       clearInterval(this._pt); if(r&&r.ply){ this.pipeDone(true); $('#pipeTitle').textContent='Scan ready'; await this.loadScanPath(r.ply); $('#pipe').classList.remove('on'); this.toast('Scan loaded — orbit, focus, then Expose'); }
       else { this.pipeDone(false); $('#pipeTitle').textContent='Scan failed (exit '+(r?r.code:'?')+') — see Details'; $('#pipeDetails').open=true; } }
     catch(e){ this._pipeBusy=false; $('#pipeTitle').textContent='Error: '+e.message; $('#pipeClose').disabled=false; }
@@ -719,6 +747,7 @@ const App = {
     const lines=P.buf.split('\n'); P.buf=lines.pop(); let out='';
     for(const l of lines){ const m=l.match(/^@@progress (\d) (\d+) (\d+) (.*)$/);
       if(m){ const st=+m[1]; if(st!==P.stage){ P.stage=st; P.ts=Date.now(); } P.done=+m[2]; P.total=Math.max(1,+m[3]); P.label=m[4]; P.counts[st]=[P.done,P.total]; }
+      else if(/^@@state /.test(l)){ this._pipeState=l.slice(8).trim(); if(this._pipeState==='running'&&P.pausedAt){ P.t0+=Date.now()-P.pausedAt; if(P.s6) P.s6.t+=Date.now()-P.pausedAt; P.pausedAt=null; } this.pipeMini(); }
       else out+=l+'\n'; }
     if(out){ P.log=(P.log||'')+out; if(P.log.length>60000) P.log=P.log.slice(-40000); }
     // touch the page at most twice a second, and the log only when Details is open
@@ -726,8 +755,22 @@ const App = {
     if(P.log!==P.shown&&$('#pipeDetails').open){ const el=$('#pipeLog'); el.textContent=P.log; el.scrollTop=el.scrollHeight; P.shown=P.log; }
     this.pipeRender();
   },
+  // ---- training controls: pause (and preview), resume, finish now, hide
+  pipeCtl(cmd){ if(!this._pipeOut) return; Native.call('writeFile',{path:this._pipeOut+'/.control',base64:btoa(cmd)}).catch(e=>this.toast('Could not reach the trainer: '+e.message));
+    const P=this.pp; if(cmd==='pause'&&P&&!P.pausedAt) P.pausedAt=Date.now(); this._pipeState=cmd==='pause'?'paused':cmd==='finish'?'finishing':'running';
+    this._pipeBusy=cmd!=='pause'&&$('#pipe').classList.contains('on'); this.pipeMini(); },
+  async previewCheckpoint(){ let files=[]; try{ files=await Native.call('listDir',{path:this._pipeOut}); }catch(e){}
+    const ck=files.filter(f=>/^export_\d+\.ply$/.test(f)).sort(); if(!ck.length){ this.toast('No checkpoint yet — the first one is saved at step 2,500'); return; }
+    const f=ck[ck.length-1]; $('#pipe').classList.remove('on'); this._pipeBusy=false; this.pipeMini(); this.setModule('scan');
+    await this.loadScanPath(this._pipeOut+'/'+f); this.toast('Previewing checkpoint at step '+(+f.match(/\d+/)[0]).toLocaleString()+' — Resume when you’re done looking'); },
+  pipeMini(){ const m=$('#pipeMini'); if(!m) return; const st=this._pipeState, shown=$('#pipe').classList.contains('on'), P=this.pp;
+    const on=!!st&&!shown; m.classList.toggle('on',on); m.classList.toggle('paused',st==='paused');
+    const k=P&&P.counts&&P.counts[6]; $('#pmText').textContent=(st==='paused'?'Training paused':st==='finishing'?'Finishing…':'Training')+(k?` · ${k[0].toLocaleString()} / ${k[1].toLocaleString()}`:'');
+    $('#pmPause').textContent=st==='paused'?'Resume':'Pause'; $('#pmFinish').style.display=P&&P.stage===6&&st!=='finishing'?'':'none'; $('#pmPreview').style.display=P&&P.stage===6?'':'none';
+    const sh=P&&P.stage===6&&st&&st!=='finishing'; $('#pipePause').style.display=sh?'':'none'; $('#pipeFinish').style.display=sh?'':'none'; $('#pipeHide').style.display=st?'':'none';
+    $('#pipePause').textContent=st==='paused'?'Resume':'Pause & preview'; },
   pipeRender(){
-    const P=this.pp; if(!P) return; const W=this.PIPE_W, now=Date.now(), el=(now-P.t0)/1000;
+    const P=this.pp; if(!P) return; if(P.pausedAt){ $('#pipeEta').textContent='Paused'; $('#pipeNow').textContent=`Paused at ${(P.done||0).toLocaleString()} / ${P.total.toLocaleString()} — the trainer is frozen, your Mac's graphics are free`; this.pipeMini(); return; } const W=this.PIPE_W, now=Date.now(), el=(now-P.t0)/1000;
     let frac=Math.min(1,P.done/P.total);
     // Brush may not print step counts: fall back to time for training (~25 min typical on Apple Silicon)
     if(P.stage===6 && P.done===0) frac=Math.min(0.95,(now-P.ts)/1000/1500);
@@ -826,11 +869,31 @@ const App = {
     await new Promise(r=>{ const prev=Splat.onDirty; Splat.onDirty=()=>{ Splat.onDirty=prev; r(); }; Splat.requestSort(); }); },
   keySnap(){ const c=Splat.cam; return {yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,fnum:c.fnum||STOPS[c.stop],fmm:c.fmm,roll:c.roll||0}; },
   addKey(){ if(!Splat.scene){ this.toast('Load a scan first'); return; } this.scanKeys=this.scanKeys||[]; this.scanKeys.push(this.keySnap()); this.renderKeys(); this.toast('Keyframe '+this.scanKeys.length+' saved'); },
-  renderKeys(){ const el=$('#keyList'); if(!el) return; el.innerHTML=''; const K=this.scanKeys||[];
+  renderKeys(){ const el=$('#keyList'), ko=$('#keyOpts'); if(!el) return; el.innerHTML=''; if(ko) ko.innerHTML=''; const K=this.scanKeys||[];
     if(!K.length){ el.innerHTML='<span class="note">No keyframes yet.</span>'; return; }
-    K.forEach((k,i)=>{ const t=document.createElement('button'); t.className='ltab'; t.textContent=String(i+1); t.title='Jump to keyframe '+(i+1)+' · right-click to delete';
-      t.onclick=()=>{ const c=Splat.cam; Object.assign(c,{yaw:k.yaw,pitch:k.pitch,dist:k.dist,target:k.target.slice(),focus:k.focus,fmm:k.fmm,roll:k.roll,focusLock:null}); let si=0; STOPS.forEach((x,j)=>{ if(Math.abs(x-k.fnum)<Math.abs(STOPS[si]-k.fnum)) si=j; }); c.stop=si; c.fnum=null; Splat.lastSortView=null; Engine.dirty=true; UI.refresh(); };
+    if(this.keySel>=K.length) this.keySel=K.length-1;
+    if(ko&&this.keySel>=0&&K[this.keySel]){ const k=K[this.keySel];
+      UI.slider(ko,'kHold','Hold here',{min:0,max:5,step:0.1,def:0,get:()=>k.hold||0,set:v=>k.hold=v,fmt:x=>x?x.toFixed(1)+' s':'No hold'});
+      UI.seg(ko,'kEase','Move to next',[['smooth','Smooth'],['in','Ease in'],['out','Ease out'],['linear','Linear']],()=>k.ease||'smooth',v=>k.ease=v);
+      const r=document.createElement('div'); r.className='btnrow'; ko.appendChild(r); UI.button(r,'Update to current view',()=>{ Object.assign(k,this.keySnap()); this.toast('Keyframe '+(this.keySel+1)+' updated'); }); UI.button(r,'Delete',()=>{ K.splice(this.keySel,1); this.keySel--; this.renderKeys(); }); }
+    K.forEach((k,i)=>{ const t=document.createElement('button'); t.className='ltab'+(i===this.keySel?' on':''); t.textContent=String(i+1); t.title='Jump to keyframe '+(i+1)+' · right-click to delete';
+      t.onclick=()=>{ this.keySel=i; this.renderKeys(); const c=Splat.cam; Object.assign(c,{yaw:k.yaw,pitch:k.pitch,dist:k.dist,target:k.target.slice(),focus:k.focus,fmm:k.fmm,roll:k.roll,focusLock:null}); let si=0; STOPS.forEach((x,j)=>{ if(Math.abs(x-k.fnum)<Math.abs(STOPS[si]-k.fnum)) si=j; }); c.stop=si; c.fnum=null; Splat.lastSortView=null; Engine.dirty=true; UI.refresh(); };
       t.oncontextmenu=e=>{ e.preventDefault(); K.splice(i,1); this.renderKeys(); }; el.appendChild(t); }); },
+  // keyframe timeline: hold at each key, then move to the next over moveDur seconds with that key's easing
+  keyTimeline(moveDur){ const K=this.scanKeys||[], segs=[]; let t=0;
+    K.forEach((k,i)=>{ const h=k.hold||0; if(h>0){ segs.push({hold:true,i,t0:t,t1:t+h}); t+=h; } if(i<K.length-1){ segs.push({i,t0:t,t1:t+moveDur}); t+=moveDur; } }); return {segs,T:t}; },
+  keyCamAt(tl,time){ const K=this.scanKeys, c=Splat.cam; let sg=tl.segs.find(s=>time>=s.t0&&time<s.t1)||tl.segs[tl.segs.length-1]; if(!sg) return;
+    const A=K[sg.i], B=sg.hold?A:K[sg.i+1]; let u=sg.hold?0:Math.min(1,(time-sg.t0)/(sg.t1-sg.t0)); if(time>=tl.T&&!sg.hold) u=1;
+    const ez={linear:u,in:u*u*u,out:1-Math.pow(1-u,3)}[A.ease]; const e=ez!==undefined?ez:u*u*(3-2*u);
+    let dy=B.yaw-A.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); const L=(a,b)=>a+(b-a)*e;
+    c.yaw=A.yaw+dy*e; c.pitch=L(A.pitch,B.pitch); c.dist=Math.exp(L(Math.log(A.dist),Math.log(B.dist))); c.target=A.target.map((v,j)=>L(v,B.target[j]));
+    c.focusLock=null; c.focus=Math.exp(L(Math.log(Math.max(1e-3,A.focus)),Math.log(Math.max(1e-3,B.focus)))); c.fnum=Math.exp(L(Math.log(A.fnum),Math.log(B.fnum))); c.fmm=Math.exp(L(Math.log(A.fmm),Math.log(B.fmm))); c.roll=L(A.roll||0,B.roll||0); },
+  previewKeys(){ const K=this.scanKeys||[]; if(K.length<2){ this.toast('Add at least two keyframes'); return; }
+    if(this._kprev){ this._kprev=false; return; } const secs=(this._orbitPrefs&&this._orbitPrefs.secs)||6, tl=this.keyTimeline(secs/(K.length-1)), c=Splat.cam;
+    const keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,focusLock:c.focusLock,fmm:c.fmm,fnum:c.fnum,roll:c.roll}; const t0=performance.now(); this._kprev=true;
+    this.toast('Previewing the move ('+tl.T.toFixed(1)+' s) — click ▶ Preview again to stop');
+    const step=()=>{ const t=(performance.now()-t0)/1000; if(!this._kprev||t>tl.T+0.4){ this._kprev=false; Object.assign(c,keep); c.fnum=keep.fnum||null; Splat.lastSortView=null; Engine.dirty=true; return; }
+      this.keyCamAt(tl,Math.min(t,tl.T)); Splat.lastSortView=null; Engine.dirty=true; requestAnimationFrame(step); }; requestAnimationFrame(step); },
   async orbitDialog(){
     if(!Splat.scene){ this.toast('Load a scan first'); return; }
     if(!Native.available){ this.toast('Video export runs in the Mac app'); return; }
@@ -857,7 +920,7 @@ const App = {
     const [sw,sh]=Splat.sensor(); const long=st.size; let w=Math.round(sw>=sh?long:long*sw/sh), h=Math.round(sw>=sh?long*sh/sw:long); w-=w%2; h-=h%2;
     const job=await Native.call('videoBegin',{path,w,h,fps:st.fps});
     const c=Splat.cam, keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,focusLock:c.focusLock,fmm:c.fmm,fnum:c.fnum,roll:c.roll}, keepSeed=Engine.grainSeed;
-    const frames=Math.round(st.secs*st.fps), gl=Engine.gl;
+    const tl=st.move==='keys'?this.keyTimeline(st.secs/Math.max(1,(this.scanKeys||[]).length-1)):null; const frames=Math.round((tl?tl.T:st.secs)*st.fps), gl=Engine.gl;
     const tmp=GLU.target(w,h,'rgba16f'), out=GLU.target(w,h,'rgba8'), RT={};
     const cv=document.createElement('canvas'); cv.width=w; cv.height=h; let x=null; try{ x=cv.getContext('2d',{colorSpace:'display-p3'}); }catch(e){} if(!x) x=cv.getContext('2d');
     const p3=!!(x.getContextAttributes&&x.getContextAttributes().colorSpace==='display-p3');
@@ -871,10 +934,7 @@ const App = {
         const t=f/frames;
         if(st.move==='swing') c.yaw=keep.yaw+Math.sin(t*2*Math.PI)*st.arc/2*Math.PI/180;
         else if(st.move==='orbit') c.yaw=keep.yaw+t*2*Math.PI;
-        else if(st.move==='keys'){ const K=this.scanKeys, seg=t*(K.length-1)*(frames/(frames-1||1)), i=Math.min(K.length-2,Math.floor(seg)), u=Math.min(1,seg-i), e=u*u*(3-2*u), A=K[i], B=K[i+1];
-          let dy=B.yaw-A.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); const L=(a,b)=>a+(b-a)*e;
-          c.yaw=A.yaw+dy*e; c.pitch=L(A.pitch,B.pitch); c.dist=Math.exp(L(Math.log(A.dist),Math.log(B.dist))); c.target=A.target.map((v,j)=>L(v,B.target[j]));
-          c.focusLock=null; c.focus=Math.exp(L(Math.log(Math.max(1e-3,A.focus)),Math.log(Math.max(1e-3,B.focus)))); c.fnum=Math.exp(L(Math.log(A.fnum),Math.log(B.fnum))); c.fmm=Math.exp(L(Math.log(A.fmm),Math.log(B.fmm))); c.roll=L(A.roll||0,B.roll||0); }
+        else if(st.move==='keys'){ this.keyCamAt(tl,f/st.fps); }
         else { const e=.5-.5*Math.cos(t*Math.PI); c.dist=keep.dist*(1-.35*e); c.yaw=keep.yaw+(e-.5)*st.arc/3*Math.PI/180; }
         await this.sortSync(); Splat.render(tmp);
         if(st.grain) Engine.grainSeed=(keepSeed+f*2654435761)>>>0;
@@ -1116,7 +1176,13 @@ const App = {
     $('#clipLo').onclick=$('#clipHi').onclick=()=>{ Engine.showClip=!Engine.showClip; Engine.dirty=true; };
     $('#fileIn').onchange=e=>{ const f=[...e.target.files]; e.target.value=''; this.addFiles(f); };
     $('#pipeClose').onclick=()=>$('#pipe').classList.remove('on');
-    $('#pipeCancel').onclick=()=>{ Native.call('cancelPipeline',{job:this._pipeJobId||-1}).catch(()=>{}); $('#pipe').classList.remove('on'); };
+    $('#pipePause').onclick=()=>{ if(this._pipeState==='paused') this.pipeCtl('run'); else { this.pipeCtl('pause'); setTimeout(()=>this.previewCheckpoint(),1200); } };
+    $('#pipeFinish').onclick=$('#pmFinish').onclick=async()=>{ if(!confirm('Stop training now and keep the newest checkpoint as the finished scan?')) return; this.pipeCtl('finish'); $('#pipe').classList.add('on'); this.pipeMini(); };
+    $('#pipeHide').onclick=()=>{ $('#pipe').classList.remove('on'); this._pipeBusy=false; this.pipeMini(); this.toast('Training continues — the bar at the bottom shows progress'); };
+    $('#pmShow').onclick=()=>{ $('#pipe').classList.add('on'); this._pipeBusy=this._pipeState==='running'; this.pipeMini(); };
+    $('#pmPause').onclick=()=>this.pipeCtl(this._pipeState==='paused'?'run':'pause');
+    $('#pmPreview').onclick=()=>{ if(this._pipeState!=='paused') this.pipeCtl('pause'); setTimeout(()=>this.previewCheckpoint(),1200); };
+    $('#pipeCancel').onclick=()=>{ this._pipeState=null; this.pipeMini(); Native.call('cancelPipeline',{job:this._pipeJobId||-1}).catch(()=>{}); $('#pipe').classList.remove('on'); };
     Native.on('pipelineStarted',d=>{ this._pipeJobId=d.job; });
     Native.on('pipelineLog',d=>this.pipeText(d.text));
     Native.on('drop',paths=>this.addPaths(paths));
@@ -1137,10 +1203,16 @@ const App = {
     const r=$('#view').getBoundingClientRect(); Object.assign(h.style,{left:r.left+(L.ix+Engine.splitX*L.iw)/L.dpr+'px',top:r.top+Math.max(0,(L.H-L.iy-L.ih))/L.dpr+'px',height:Math.min(L.ih,L.H)/L.dpr+'px'}); },
   toggleBefore(){ Engine.before=!Engine.before; $('#beforeTag').classList.toggle('on',Engine.before); $('#tbBefore').classList.toggle('on',Engine.before); Engine.dirty=true; },
   key(e){
-    if(e.key==='Escape' && $('#busy').classList.contains('on')) this._cancelVideo=true;
+    if(e.key==='Escape' && $('#busy').classList.contains('on')){ this._cancelVideo=true; this._stopSheet=true; }
     if(e.target.tagName==='INPUT'&&e.target.type!=='range'||e.target.tagName==='SELECT') return;
     const k=e.key, meta=e.metaKey||e.ctrlKey;
     if(meta&&k.toLowerCase()==='z'){ e.preventDefault(); e.shiftKey?this.redo():this.undo(); return; }
+    // 3D Scan camera from the keyboard: arrows move (pan), ⇧+arrows orbit, +/− or PageUp/PageDown dolly in and out
+    if(this.module==='scan'&&Splat.scene&&!meta&&/^(Arrow(Up|Down|Left|Right)|PageUp|PageDown|\+|=|-|_)$/.test(k)){ e.preventDefault(); const c=Splat.cam, st=e.altKey?8:30;
+      if(k.startsWith('Arrow')){ const dx=k==='ArrowLeft'?-1:k==='ArrowRight'?1:0, dy=k==='ArrowUp'?-1:k==='ArrowDown'?1:0;
+        if(e.shiftKey){ c.yaw-=dx*0.06; c.pitch=Math.max(-1.45,Math.min(1.45,c.pitch+dy*0.05)); } else Splat.pan(-dx*st,-dy*st); }
+      else c.dist=Math.max(0.05,c.dist*((k==='PageUp'||k==='+'||k==='=')?0.92:1.087));
+      Splat.lastSortView=null; Engine.dirty=true; return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='c'){ e.preventDefault(); const cp=cloneParams(Engine.p); PER_PHOTO_KEYS.forEach(k=>delete cp[k]); this.clipboard=JSON.stringify(Engine.p); this._clipLite=JSON.stringify(cp); this.toast('Settings copied'); return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='v'){ e.preventDefault(); if(this.clipboard){ this.applySettings(Object.assign(cloneParams(Engine.p),JSON.parse(this._clipLite||this.clipboard))); this.commit(); this.toast('Settings pasted'); } return; }
     if(meta&&k.toLowerCase()==='a'&&this.module!=='scan'){ e.preventDefault(); this.items.forEach(x=>x.sel=true); this.renderStrip(); this.renderGrid(); this.updateSync(); this.toast(this.items.length+' photos selected'); return; }
@@ -1193,12 +1265,12 @@ const App = {
       m.style.left=(c.x*100)+'%'; m.style.top=(c.y*100)+'%'; const rp=(c.r||0.15)*L.ih/dpr*0.85; const ring=m.querySelector('.ring'); ring.style.width=ring.style.height=rp*2+'px'; }); },
   cpBind(m){ let drag=null;
     m.addEventListener('pointerdown',e=>{ e.stopPropagation(); e.preventDefault(); const i=+m.dataset.i, c=Engine.p.cps[i]; Studio.cpSel=i; Studio.renderCP&&Studio.renderCP(); UI.refresh();
-      const ring=e.target.classList.contains('ring'); drag={i,ring,x0:e.clientX,y0:e.clientY,c0:{x:c.x,y:c.y,r:c.r}}; m.setPointerCapture(e.pointerId); });
+      Engine.cpShow=i; const ring=e.target.classList.contains('ring'); drag={i,ring,x0:e.clientX,y0:e.clientY,c0:{x:c.x,y:c.y,r:c.r}}; m.setPointerCapture(e.pointerId); });
     m.addEventListener('pointermove',e=>{ if(!drag) return; const L=this._lastL, dpr=L.dpr, c=Engine.p.cps[drag.i]; if(!c) return;
       if(drag.ring){ const lay=$('#cpLayer').getBoundingClientRect(), cx=lay.left+c.x*lay.width, cy=lay.top+c.y*lay.height; c.r=Math.max(0.02,Math.min(0.9,Math.hypot(e.clientX-cx,e.clientY-cy)/(L.ih/dpr*0.85))); }
       else { c.x=Math.max(0,Math.min(1,drag.c0.x+(e.clientX-drag.x0)*dpr/L.iw)); c.y=Math.max(0,Math.min(1,drag.c0.y+(e.clientY-drag.y0)*dpr/L.ih)); }
       this.changed(); this.cpOverlay(); UI.refresh(); });
-    m.addEventListener('pointerup',e=>{ if(!drag) return; const c=Engine.p.cps[drag.i]; if(c&&!drag.ring) this.cpSample(c); drag=null; this.commit(); }); },
+    m.addEventListener('pointerup',e=>{ if(!drag) return; const c=Engine.p.cps[drag.i]; if(c&&!drag.ring) this.cpSample(c); drag=null; this.commit(); setTimeout(()=>{ Engine.cpShow=-1; Engine.dirty=true; },400); }); },
   cpSample(c){ const L=this._lastL; if(!L) return; const px=L.ix+c.x*L.iw, py=L.iy+L.ih-c.y*L.ih; const v=Engine.sampleAt(px,py,L); if(v) c.col=Array.from(CM.vec(CM.REC709_TO_AP1,v)).slice(0,3); },   // back to the prep (AP1) space the shader compares in
   bindPlace(v){
     // adding a control point: the next click on the photo places it
