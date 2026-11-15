@@ -171,6 +171,7 @@ const App = {
   buildPresets(){ UI.favs=new Set(this.favStocks||[]); UI.onFav=f=>{ this.favStocks=f; this.saveSoon(); this.stockThumbsSoon(true); };
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
       this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
+    $('#scanFxSwitch').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; document.body.classList.toggle('scanFx',b.dataset.v==='fx'); $('#scanFxSwitch').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); UI.refresh(); };
     $('#stockSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'stocks'); }; $('#lookSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'looks'); };
     $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
     { const el=$('#presetList'), btn=$('#stockGrid'); const set=on=>{ el.classList.toggle('gridmode',on); btn.classList.toggle('on',on); try{ localStorage.stockGrid=on?'1':''; }catch(e){} if(on) this.stockThumbsSoon(true); };
@@ -1131,7 +1132,7 @@ const App = {
         else Engine.render({params:p,borderTex:this.borderFor(L,p)});
         Tools.overlay(); this.placeBox(); this.cpOverlay(); this.splitBar(); this.histo(); this.status(); this.navPreview(p);
         if(this.module==='develop'&&this.cur&&$('#presetList').classList.contains('gridmode')) this.stockThumbsSoon();
-        if(this.module==='studio'&&this.cur){ clearTimeout(this._rt); this._rt=setTimeout(()=>{ const q=cloneParams(Engine.p); STUDIO_KEYS.forEach(k=>delete q[k]); Studio.refreshRecipeThumbs(this.cur.id+JSON.stringify(q)+Object.values(Engine.assetTexs).filter(t=>t.ready).length); },500); }
+        if((this.module==='studio'||(this.module==='scan'&&Splat.scene&&!this._pipeBusy&&!this._ptrDown))&&this.cur){ clearTimeout(this._rt); this._rt=setTimeout(()=>{ const q=cloneParams(Engine.p); STUDIO_KEYS.forEach(k=>delete q[k]); Studio.refreshRecipeThumbs(this.cur.id+JSON.stringify(q)+Object.values(Engine.assetTexs).filter(t=>t.ready).length); },500); }
       }
     }catch(e){ console.error(e); }
     requestAnimationFrame(()=>this.loop());

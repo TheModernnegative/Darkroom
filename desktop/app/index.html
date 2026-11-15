@@ -31,7 +31,7 @@
         <div class="body"><canvas id="navCanvas"></canvas></div>
       </section>
       <!-- studio: one-click recipes -->
-      <section class="panel open mod-studio" id="pRecipes">
+      <section class="panel open mod-studio mod-scan" id="pRecipes">
         <h3><i></i>Looks<span class="hbtns"><button class="hbtn" id="lookSheet" title="Contact sheet: this photo in every look">⊞</button><button class="hbtn dice" id="studioRandom" title="Random look — press again for another">🎲 Random</button><button class="hbtn" id="studioReset" title="Clear all Studio effects">⟲</button></span></h3>
         <div class="body"><div id="recipeList"></div></div>
       </section>
@@ -41,7 +41,7 @@
         <div class="body"><div id="verList"></div></div>
       </section>
       <!-- develop: user presets -->
-      <section class="panel open mod-develop mod-library" id="pUserPresets">
+      <section class="panel open mod-develop mod-library mod-scan" id="pUserPresets">
         <h3><i></i>Presets<span class="hbtns"><button class="hbtn" id="presetImport" title="Import presets (.json)">↓</button><button class="hbtn" id="presetExport" title="Export presets to share with the phone app">↑</button><button class="hbtn" id="presetAdd" title="Create preset from current settings">+</button></span></h3>
         <div class="body">
           <div id="presetNew" class="pnew">
@@ -135,6 +135,7 @@
           <div id="histoInfo"></div>
         </div>
       </section>
+      <div class="mod-scan" id="scanFxSwitch"><button data-v="dev" class="on">Develop</button><button data-v="fx">Studio effects</button></div>
       <div id="devPanels"></div>
       <div id="fxPanels"></div>
       <div class="credits" id="credits"></div>

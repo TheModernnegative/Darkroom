@@ -398,3 +398,16 @@ button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;w
 #pipeMini.paused{border-color:#ff8a1f}
 #pipeMini button{background:#2c3240;border:1px solid #444c5e;color:#eee;border-radius:12px;padding:3px 10px;font:12px var(--sans);cursor:pointer}
 #pipeMini button:hover{background:#3d5a90}
+
+/* 3D Scan can use Studio effects + looks */
+body.m-scan #pRecipes{display:block}
+#scanFxSwitch{display:flex;gap:2px;margin:8px 10px 4px;background:#1a1a1a;border-radius:6px;padding:2px}
+body:not(.m-scan) #scanFxSwitch{display:none}
+#scanFxSwitch button{flex:1;background:none;border:0;color:#999;padding:6px 0;border-radius:5px;font:inherit;font-size:12px;cursor:pointer}
+#scanFxSwitch button.on{background:#333;color:#eee}
+body.m-scan.scanFx #devPanels{display:none}
+body.m-scan.scanFx #fxPanels{display:block}
+body.m-scan .cpAdd{display:none}
+body.m-scan #left{display:flex;flex-direction:column}
+body.m-scan #left>*{flex-shrink:0}
+body.m-scan #pRecipes,body.m-scan #pUserPresets{order:10}
