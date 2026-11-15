@@ -24,6 +24,7 @@ const DEFAULTS = {
   anTrack:0, anTrackPos:72, anHead:0, anDrop:0, anJitter:0, anInterlace:0, anSat:0, anHue:0, anTint:'none',
   anBlock:0, anScan:0, anScanN:480, anMask:'none', anMaskAmt:50, anCurve:0, anBloom:0, anVig:0, anCorner:0,
   anGate:'none', anOverscan:0, anGateSoft:30, anWeave:0, anFlicker:0, anOSD:'none', anOSDText:'',
+  cps:[],   // control points (U-point style): {x,y,r,col,b,c,s,st,w}
   flare:0, flareLen:60, flareGhost:35, flareColor:'blue', flareSens:50,
   fx:{}, softness:0, distort:0, zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
@@ -36,7 +37,7 @@ const SECTIONS = { film:['filmAmt','push'], wb:['temp','tint'], tone:['ev','cont
   curve:['curve'], hsl:['hslH','hslS','hslL'], grade:['gShS','gShL','gMidS','gMidL','gHiS','gHiL'], detail:['sharpen','nr','nrColor'],
   grain:['grain'], halation:['halation','glow'], lens:['falloff','softness'], frame:['border'], masks:['masks'],
   silver:['silver','sFilterAmt','structure','sBurn'], dbl:['dblId'], leak:['leakAmt'], dust:['dustAmt','scratchAmt','hairAmt'],
-  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'], flare:['flare'], analog:['anOn'], assets:['fx'] };
+  lensfx:['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort'], twotone:['ttOn'], flare:['flare'], points:['cps'], analog:['anOn'], assets:['fx'] };
 // Studio asset layers (scanned-look textures). Order = compositing order.
 // lens flare colours: anamorphic streak tint, then the ghost tints
 const FLARE_COLORS={ blue:[[.25,.55,1.7],[.35,.6,1.4],[.9,.5,1.3],[.4,1.,.7]], amber:[[1.7,.75,.22],[1.3,.7,.3],[.6,.9,.4],[1.2,.5,.6]], violet:[[1.,.35,1.7],[.7,.4,1.4],[.4,.8,1.2],[1.3,.6,.4]],
@@ -198,7 +199,7 @@ const Engine = {
         let srcImg=im; if(a.cat==='frame'&&typeof Borders!=='undefined'){ const c=document.createElement('canvas'); c.width=im.naturalWidth; c.height=im.naturalHeight; const x=c.getContext('2d'); x.drawImage(im,0,0); Borders.sealEdges(x,c.width,c.height,0.012); srcImg=c; }
         gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,srcImg); gl.generateMipmap(gl.TEXTURE_2D);
-        const rep=a.cat==='texture'?gl.REPEAT:gl.CLAMP_TO_EDGE;
+        const rep=a.cat==='texture'&&a.tile!==false?gl.REPEAT:gl.CLAMP_TO_EDGE;
         for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,rep],[gl.TEXTURE_WRAP_T,rep]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
         Object.assign(e,{ready:true,tex:t,w:im.naturalWidth,h:im.naturalHeight}); this.dirty=true; };
     im.src='data/assets/'+a.file; return null; },
@@ -434,7 +435,8 @@ const Engine = {
       [[0,R.ha.t,'uA'],[1,R.faOut.t,'uB'],[2,R.fg1.t,'uC'],[3,faLong.t,'uD']].forEach(([i,t,n])=>{ gl.activeTexture(gl.TEXTURE0+i); gl.bindTexture(gl.TEXTURE_2D,t); gl.uniform1i(u[n],i); });
       gl.uniform3f(u.uOn,halAmt>0.001?1:0,1,1); GLU.drawQuad(); }
     if(p.glow>0.001) blurChain(R.ga,R.gb,0.0,0.03);
-    const doStruct = p.silver && [p.structure,p.sStructHi,p.sStructMid,p.sStructSh,p.sSoft].some(v=>Math.abs(v||0)>0.5);
+    const cps=(p.cps||[]).slice(0,8), cpStruct=cps.some(c=>Math.abs(c.st||0)>0.5);
+    const doStruct = (p.silver && [p.structure,p.sStructHi,p.sStructMid,p.sStructSh,p.sSoft].some(v=>Math.abs(v||0)>0.5)) || cpStruct;
     if(doStruct){ R.sa=GLU.ensure(R.sa,qw,qh); R.sb=GLU.ensure(R.sb,qw,qh); blurChain(R.sa,R.sb,0.0,0.012); }
     const doFine = p.silver && Math.abs(p.sFine||0)>0.5;
     if(doFine){ R.fa=GLU.ensure(R.fa,qw,qh); R.fb=GLU.ensure(R.fb,qw,qh); blurChain(R.fa,R.fb,0.0,0.0025); }
@@ -451,7 +453,10 @@ const Engine = {
     bind(3,gl.TEXTURE_3D,lut||null,'uLut'); bind(4,gl.TEXTURE_2D,s.tex,'uSrc'); bind(5,gl.TEXTURE_2D,opts.borderTex||this.borderTex,'uBorder');
     bind(6,gl.TEXTURE_2D,this.curveLUT(p),'uCurve');
     bind(7,gl.TEXTURE_2D,doStruct?R.sa.t:R.prep.t,'uStructTex'); gl.uniform1f(u.uStruct,doStruct?1:0);
-    gl.uniform4f(u.uStructB,(p.structure||0)/100,(p.sStructHi||0)/100,(p.sStructMid||0)/100,(p.sStructSh||0)/100);
+    if(p.silver) gl.uniform4f(u.uStructB,(p.structure||0)/100,(p.sStructHi||0)/100,(p.sStructMid||0)/100,(p.sStructSh||0)/100); else gl.uniform4f(u.uStructB,0,0,0,0);
+    { const P=new Float32Array(32), C=new Float32Array(24), A=new Float32Array(32);
+      cps.forEach((c,i)=>{ P.set([c.x,c.y,Math.max(0.01,c.r||0.15),(c.w||0)/100],i*4); C.set(c.col||[.18,.18,.18],i*3); A.set([(c.b||0)/100,(c.c||0)/100,(c.s||0)/100,(c.st||0)/100],i*4); });
+      gl.uniform1i(u.uCPn,cps.length); gl.uniform4fv(u.uCP,P); gl.uniform3fv(u.uCPc,C); gl.uniform4fv(u.uCPa,A); }
     gl.uniform4f(u.uSB,(p.sBright||0)/100,(p.sBrightHi||0)/100,(p.sBrightSh||0)/100,(p.sContrast||0)/100);
     gl.uniform3f(u.uSAmp,(p.sAmpW||0)/100,(p.sAmpB||0)/100,doStruct?(p.sSoft||0)/100:0);
     gl.uniform4f(u.uSVig,(p.sVig||0)/100,(p.sVigSize??50)/100,(p.sVigX||0),(p.sVigY||0));
@@ -467,7 +472,7 @@ const Engine = {
         .sort((a,b)=>FX_SLOTS.indexOf(a.replace(/\d+$/,''))-FX_SLOTS.indexOf(b.replace(/\d+$/,''))||a.localeCompare(b,undefined,{numeric:true}));
       const [dw,dh]=this.dims(p,s);
       keys.forEach(key=>{ const cat=key.replace(/\d+$/,''), Ly=fx[key]; if(slot>=6||!Ly||!Ly.id||!(Ly.amt>0)) return; const t=this.assetTex(Ly.id); if(!t) return; const i=slot++;
-        const M=this.layerMatrix(Ly,dw/dh,t.w/t.h,cat); post[i]=(cat==='dust'||cat==='frame')?1:0; mono[i]=Ly.mono?1:0;
+        const M=this.layerMatrix(Ly,dw/dh,t.w/t.h,cat==='texture'&&(this.asset(Ly.id)||{}).tile===false?'leak':cat); post[i]=(cat==='dust'||cat==='frame')?1:0; mono[i]=Ly.mono?1:0;
         for(let r=0;r<3;r++) for(let q=0;q<3;q++) mats[i*9+q*3+r]=M[r*3+q];
         on[i]=1; mode[i]=FX_MODE[cat]; amt[i]=Ly.amt/100; inv[i]=Ly.invert?1:0; hue.set(this.hueTint(Ly.hue,0),i*3);
         gl.activeTexture(gl.TEXTURE9+i); gl.bindTexture(gl.TEXTURE_2D,t.tex); });
@@ -486,7 +491,7 @@ const Engine = {
     gl.uniform1f(u.uHalAmt, halAmt>0.001?halAmt:0);
     { const F=FLARE_COLORS[p.flareColor]||FLARE_COLORS.blue, a=(p.flare||0)/100; gl.uniform3f(u.uFlare,flOn?1:0,a*a*22,flOn?((p.flareGhost??35)/100)*a*1.6:0);
       gl.uniform3fv(u.uFlareC,new Float32Array(F.flat())); } gl.uniform1f(u.uGlow,p.glow);
-    gl.uniform1f(u.uBefore,(this.before&&!opts.forceAfter)?1:0); gl.uniform1f(u.uFlip,s.flipY?1:0); gl.uniform1f(u.uEncoded,s.encoded?1:0);
+    gl.uniform1f(u.uBefore,(this.before&&!opts.forceAfter)?1:0); gl.uniform1f(u.uSplit,(this.split&&!opts.forceAfter&&!opts.target)?this.splitX:-1); gl.uniform1f(u.uFlip,s.flipY?1:0); gl.uniform1f(u.uEncoded,s.encoded?1:0);
     gl.uniform1f(u.uContrast,p.contrast/100); gl.uniform1f(u.uHighlights,p.highlights/100); gl.uniform1f(u.uShadows,p.shadows/100);
     gl.uniform1f(u.uWhites,p.whites/100); gl.uniform1f(u.uBlacks,p.blacks/100); gl.uniform1f(u.uVibrance,p.vibrance/100); gl.uniform1f(u.uSat,p.saturation/100);
     gl.uniform1f(u.uCurveOn, this.curveIsIdentity(p)?0:1);
@@ -871,9 +876,10 @@ uniform sampler2D uPrep,uHal,uGlowTex,uSrc,uBorder,uCurve; uniform sampler3D uLu
 uniform vec2 uRes,uShaper; uniform vec4 uFrame,uImg,uWin; uniform vec3 uBg; uniform mat3 uGeo;
 uniform vec3 uFlare; uniform vec3 uFlareC[4];
 uniform vec4 uPaperG; uniform vec3 uPaperT;
-uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
+uniform float uSplit; uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
 uniform sampler2D uA[6]; uniform float uAPost[6],uAMono[6],uAOn[6],uAAmt[6],uAInv[6]; uniform int uAMode[6]; uniform mat3 uAM[6]; uniform vec3 uAHue[6];
 uniform sampler2D uStructTex,uDust; uniform sampler2D uFineTex; uniform float uFine,uToneBal; uniform vec4 uStructB,uSB,uSVig,uBurnS; uniform vec3 uSAmp; uniform vec2 uZones;
+uniform int uCPn; uniform vec4 uCP[8],uCPa[8]; uniform vec3 uCPc[8];
 uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
 uniform float uHslH[8]; uniform float uHslS[8]; uniform float uHslL[8];
@@ -929,7 +935,7 @@ void main(){
   bool inImg = iuv.x>=0.&&iuv.y>=0.&&iuv.x<=1.&&iuv.y<=1.;
   if(inImg && bd.a<.999){
     float u=iuv.x, vt=1.-iuv.y;
-    if(uBefore>.5){
+    if(uBefore>.5||u<uSplit){
       vec2 s=(uGeo*vec3(u,vt,1.)).xy;
       vec3 c=texture(uSrc,vec2(s.x, uFlip>.5?1.-s.y:s.y)).rgb;
       vec3 lin = uEncoded>.5 ? dec(max(c,0.)) : c;
@@ -939,6 +945,16 @@ void main(){
       vec2 puv=vec2((u-uWin.x)/(uWin.z-uWin.x), 1.-(vt-uWin.y)/(uWin.w-uWin.y));
       vec3 E=texture(uPrep,puv).rgb;
       float Yblur=-1.;
+      // control points: each point affects pixels near it AND similar in colour/brightness to where it was placed
+      if(uCPn>0){ vec4 acc=vec4(0.); float accW=0.; vec3 lE=log2(max(E,vec3(1e-4))); float ar=uImg.z/uImg.w;
+        for(int i=0;i<8;i++){ if(i>=uCPn) break; vec2 dd=(vec2(u,vt)-uCP[i].xy)*vec2(ar,1.); float dist=length(dd)/uCP[i].z; float wd=exp(-dist*dist*2.2);
+          vec3 lc=log2(max(uCPc[i],vec3(1e-4))); vec3 dl=lE-lc; float lum=dot(dl,vec3(.3,.6,.1)); vec3 chr=dl-lum; float cd=sqrt(lum*lum*.35+dot(chr,chr)*2.);
+          float w=wd*mix(1.,exp(-cd*cd/1.8),.8); acc+=uCPa[i]*w; accW+=uCP[i].w*w; }
+        if(acc.w!=0.&&uStruct!=0.){ vec3 B=texture(uStructTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6); E*=pow(Y/Yb,clamp(acc.w,-1.,1.5)*.9); }
+        E*=exp2(acc.x*1.5);
+        if(acc.y!=0.){ E=.18*pow(max(E,vec3(1e-6))/.18,vec3(1.+acc.y*.6)); }
+        if(acc.z!=0.){ float Y=dot(E,vec3(.27,.67,.06)); E=max(vec3(0.),Y+(E-Y)*(1.+acc.z)); }
+        if(accW!=0.) E*=vec3(1.+accW*.12,1.,1.-accW*.12); }
       if(uStruct!=0.){ vec3 B=texture(uStructTex,puv).rgb; float Y=max(dot(E,vec3(.27,.67,.06)),1e-6), Yb=max(dot(B,vec3(.27,.67,.06)),1e-6); Yblur=Yb;
         // structure by tone range, like Silver Efex: highlights / midtones / shadows
         float v=pow(clamp(Yb/.18*.18,0.,1.),1./2.2), ws=1.-smoothstep(.1,.45,v), wh=smoothstep(.45,.85,v), wm=max(0.,1.-ws-wh);

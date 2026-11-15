@@ -52,8 +52,12 @@ const UI = {
   refresh(){ for(const k in this.sliders) this.sliders[k](); },
 
   // ---------------------------------------------------------------- presets
+  favs:new Set(), onFav:null,
   buildPresets(el, stocks, onPick, onHover){
+    this._bp=[el,stocks,onPick,onHover];
     const groups={}; const order=[];
+    // favourites first
+    const fav=stocks.filter(s=>this.favs.has(s.id)); if(fav.length){ groups['★ Favourites']=fav.map(s=>Object.assign({},s,{_fav:1})); order.push('★ Favourites'); }
     stocks.forEach(s=>{ if(!groups[s.group]){ groups[s.group]=[]; order.push(s.group); } groups[s.group].push(s); });
     el.innerHTML='';
     order.forEach((g,gi)=>{
@@ -61,15 +65,27 @@ const UI = {
       G.querySelector('.gh').onclick=()=>G.classList.toggle('open');
       const items=G.querySelector('.items');
       groups[g].forEach(s=>{
-        const it=document.createElement('div'); it.className='preset'; it.dataset.id=s.id; it.title=s.desc;
+        const it=document.createElement('div'); it.className='preset'; it.dataset.id=s.id;
         const nm = s.maker==='CineStill' ? 'CineStill '+s.name : s.name; const mk = (s.maker==='Kodak'||s.maker==='CineStill'||(s.maker==='Fujifilm'&&g==='Fujifilm')) ? '' : s.maker;
         it.innerHTML=`<i class="pthumb"></i><span>${nm}</span><span class="mk">${mk}</span><span class="iso">${s.iso||""}</span>`;
-        it.onclick=()=>onPick(s.id); it.onmouseenter=()=>onHover(s.id); it.onmouseleave=()=>onHover(null);
+        const star=document.createElement('b'); star.className='pstar'+(this.favs.has(s.id)?' on':''); star.textContent='★'; star.title='Favourite';
+        star.onclick=e=>{ e.stopPropagation(); if(this.favs.has(s.id)) this.favs.delete(s.id); else this.favs.add(s.id); this.onFav&&this.onFav([...this.favs]); const sc=el.closest('.side')?.scrollTop; this.buildPresets(...this._bp); this.markPreset(this._marked); if(sc!=null) el.closest('.side').scrollTop=sc; };
+        it.appendChild(star);
+        it.onclick=()=>onPick(s.id); it.onmouseenter=e=>{ onHover(s.id); this.stockCard(s,it); }; it.onmouseleave=()=>{ onHover(null); this.stockCard(null); };
         items.appendChild(it); });
       el.appendChild(G);
     });
   },
-  markPreset(id){ document.querySelectorAll('.preset').forEach(p=>p.classList.toggle('on',p.dataset.id===id)); },
+  // hover card: what the film is, at a glance
+  stockCard(s,anchor){ let c=document.getElementById('stockCard'); if(!c){ c=document.createElement('div'); c.id='stockCard'; document.body.appendChild(c); }
+    if(!s){ c.classList.remove('on'); return; }
+    const type={negative:'Colour negative',positive:'Slide (reversal)',bw:'Black & white',instant:'Instant',original:'No film'}[s.type]||s.type||'';
+    const grain=s.pgi?(s.pgi<45?'Very fine':s.pgi<60?'Fine':s.pgi<80?'Moderate':'Coarse'):'';
+    c.innerHTML=`<h4></h4><div class="sc-meta"></div><p></p>`; c.querySelector('h4').textContent=(s.maker?s.maker+' ':'')+s.name;
+    c.querySelector('.sc-meta').textContent=[s.iso?'ISO '+s.iso:'',type,grain?grain+' grain':'',s.antihalation==='none'?'Strong halation':'',s.tungsten?'Tungsten-balanced':''].filter(Boolean).join(' · ');
+    c.querySelector('p').textContent=s.desc||'';
+    const r=anchor.getBoundingClientRect(); c.style.left=(r.right+8)+'px'; c.style.top=Math.min(innerHeight-120,r.top)+'px'; c.classList.add('on'); },
+  markPreset(id){ this._marked=id; document.querySelectorAll('.preset').forEach(p=>p.classList.toggle('on',p.dataset.id===id)); },
   filterPresets(q){ q=q.toLowerCase(); document.querySelectorAll('.preset').forEach(p=>{ p.style.display=!q||p.textContent.toLowerCase().includes(q)?'':'none'; }); },
 
   // ---------------------------------------------------------------- histogram (Lightroom style)

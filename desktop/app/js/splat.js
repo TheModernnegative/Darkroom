@@ -388,7 +388,7 @@ onmessage=e=>{const d=e.data;
     gl.uniformMatrix4fv(u.uProj,false,Pm); gl.uniformMatrix4fv(u.uView,false,V);
     gl.uniform2f(u.uViewport,iw,ih); gl.uniform1f(u.uFocalPx,focalPx); gl.uniform1f(u.uCovScale,this.covScale);
     gl.uniform1f(u.uFocus,c.focus); gl.uniform1f(u.uFocusY,focusY); gl.uniform1f(u.uTiltK,-Math.tan(c.tilt*Math.PI/180)); { const td=(c.tiltDir||0)*Math.PI/180; gl.uniform2f(u.uTiltDir,Math.sin(td),Math.cos(td)); }
-    gl.uniform1f(u.uFmm,c.fmm); gl.uniform1f(u.uN,STOPS[c.stop]); gl.uniform1f(u.uMmPerUnit,c.scale*1000); gl.uniform1f(u.uPxPerMm,ih/sh); gl.uniform1f(u.uDof,c.dof?1:0); gl.uniform1f(u.uSwirl,c.swirl||0); gl.uniform1f(u.uCatEye,c.catEye||0); gl.uniform1f(u.uAnam,c.anam||0);
+    gl.uniform1f(u.uFmm,c.fmm); gl.uniform1f(u.uN,c.fnum||STOPS[c.stop]); gl.uniform1f(u.uMmPerUnit,c.scale*1000); gl.uniform1f(u.uPxPerMm,ih/sh); gl.uniform1f(u.uDof,c.dof?1:0); gl.uniform1f(u.uSwirl,c.swirl||0); gl.uniform1f(u.uCatEye,c.catEye||0); gl.uniform1f(u.uAnam,c.anam||0);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,this.dataTex); gl.uniform1i(u.uData,0);
     gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
     gl.bindVertexArray(this.vao); gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,this.sortedCount); gl.bindVertexArray(null); gl.disable(gl.BLEND);

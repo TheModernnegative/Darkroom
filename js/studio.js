@@ -87,6 +87,13 @@ const STUDIO_RECIPES = [
   ['Silver · Copper print', {...SF('fp4'),sTone:'copper',sToneAmt:70,sToneBal:20,sContrast:10,sBurn:20,fx:{texture:{pick:1,amt:30}}}],
   ['Silver · Holga', {...SF('hp5'),sSoft:30,sVig:70,sVigSize:70,softEdges:50,grain:1.0,fx:{frame:{pick:2,amt:100}}}],
   ['Alt process · Wet plate tintype', {...SF('ortho'),structure:35,sContrast:20,sTone:'tintype',sToneAmt:95,sBurn:45,sBurnSize:45,border:'wetplate',dustAmt:30,scratchAmt:20,hairAmt:10,softEdges:25,grain:0.2}],
+  ['Wet plate · Heavy silver tintype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'tintype',sToneAmt:95,fx:{frame:{id:'frame_tintype_4',amt:100},texture:{id:'tex_collodion_1',amt:55}}}],
+  ['Wet plate · Fresh pour', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'tintype',sToneAmt:85,sAmpW:15,fx:{frame:{id:'frame_tintype_6',amt:100},texture:{id:'tex_collodion_2',amt:50}}}],
+  ['Wet plate · Gem in brass', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'tintype',sToneAmt:90,sVig:40,fx:{frame:{id:'frame_tintype_5',amt:100},texture:{id:'tex_collodion_4',amt:45}}}],
+  ['Wet plate · Cased ambrotype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'ambrotype',sToneAmt:90,sSoft:15,fx:{frame:{id:'frame_ambrotype_2',amt:100},texture:{id:'tex_collodion_3',amt:40}}}],
+  ['Wet plate · Alumitype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'sepia',sToneAmt:55,sAmpW:20,fx:{frame:{id:'frame_alumitype_1',amt:100},texture:{id:'tex_collodion_1',amt:35}}}],
+  ['Wet plate · Glass plate', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'selenium',sToneAmt:40,sBright:10,fx:{frame:{id:'frame_glassneg_1',amt:100},texture:{id:'tex_collodion_2',amt:40}}}],
+  ['Wet plate · Spirit tintype', {...SF('ortho'),structure:35,sContrast:20,sBurn:35,sBurnSize:45,softEdges:25,grain:0.2,sTone:'tintype',sToneAmt:95,dblId:'__self',dblMode:'screen',dblAmt:40,dblScale:1.2,dblX:0.08,dblSmear:30,dblSmearAng:-80,fx:{frame:{id:'frame_tintype_2',amt:100},texture:{id:'tex_collodion_4',amt:50}}}],
   ['Alt process · Ambrotype', {...SF('ortho'),structure:25,sContrast:10,sSoft:15,sTone:'ambrotype',sToneAmt:90,sBurn:35,softEdges:30,fx:{frame:{id:'frame_ambrotype_1',amt:100}},grain:0.2}],
   ['Alt process · Cyanotype', {...SF('ortho'),sTone:'cyanotype',sToneAmt:100,sContrast:10,sBurn:20,fx:{texture:{pick:0,amt:35}}}],
   ['Analog · Expired roll', {fx:{leak:{pick:0,amt:55},dust:{pick:0,amt:60},texture:{pick:0,amt:25}},softEdges:20,fringe:15,falloff:0.6,saturation:-10}],
@@ -140,7 +147,7 @@ const STUDIO_RECIPES = [
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
   'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','dblSmear','dblSmearAng','dblZoom','dblEchoes','dblEchoX','dblEchoY','dblEchoFade','leakAmt','leakColor','leakPos','leakSize','leakSeed',
-  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx',...AN_KEYS,'flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
+  'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx','cps',...AN_KEYS,'flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
 
 const Studio = {
   host:null,
@@ -155,13 +162,14 @@ const Studio = {
   resolveFx(fx){ const out={}; for(const key in fx||{}){ const cat=key.replace(/\d+$/,''), L=Object.assign({},fx[key]); if(L.id&&!this.assets(cat).some(a=>a.id===L.id)){ delete L.id; if(L.pick===undefined) L.pick=0; } if(L.pick!==undefined){ const list=this.assets(cat); if(!list.length) continue; L.id=list[L.pick%list.length].id; delete L.pick; } out[key]=L; } return out; },
   layer(cat){ const p=this.P(); if(!p.fx||p.fx===DEFAULTS.fx) p.fx={}; return p.fx[cat]||(p.fx[cat]={id:'',amt:0}); },
   // a look replaces the previous look: Studio starts clean, and Develop values the last look changed go back first
-  recipeParams(r){ const o=cloneParams(this.P()); r=cloneParams(r);
+  recipeParams(r,base){ const o=cloneParams(base||this.P()); r=cloneParams(r);
     const lu=o.lookUndo||{}; for(const k in lu) o[k]=cloneParams(lu[k]);
     const keepDbl=o.dblId, keepPlace={dblX:o.dblX,dblY:o.dblY,dblScale:o.dblScale,dblRot:o.dblRot}; STUDIO_KEYS.forEach(k=>o[k]=cloneParams(DEFAULTS[k])); o.fx={};
     if(keepDbl&&(r.dblMode||r.dblId)){ o.dblId=keepDbl; Object.assign(o,keepPlace); }
     o.lookUndo={}; for(const k in r) if(!STUDIO_KEYS.includes(k)&&k!=='fx') o.lookUndo[k]=cloneParams(o[k]); if(r.fx){ r.fx=this.resolveFx(r.fx); if(r.border==='wetplate'&&r.fx.frame) delete r.border; } Object.assign(o,r);
     if(r.border==='wetplate'){ const t=this.assets('frame').find(a=>/tintype|wetplate|wet-plate/i.test(a.id+a.name)); if(t){ delete o.border; o.border=this.P().border; o.fx=Object.assign({},o.fx,{frame:{id:t.id,amt:100}}); } } if(r.border==='wetplate'&&!o.edgeText) o.edgeText='none'; return o; },
-  applyRecipe(r,name){ const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!Engine.p.dblId){ this._lastDbl=keep; Engine.setDouble(null); } if(Engine.p.dblId&&Engine.p.dblId!=='__self'&&this.host.loadDouble) this.host.loadDouble();
+  applyRecipe(r,name){ this.host.applyToOthers&&this.host.applyToOthers(base=>this.recipeParams(r,base),name);
+    const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!Engine.p.dblId){ this._lastDbl=keep; Engine.setDouble(null); } if(Engine.p.dblId&&Engine.p.dblId!=='__self'&&this.host.loadDouble) this.host.loadDouble();
     if(r.dblMode && !Engine.p.dblId) this.host.toast('Pick the second photo in Double Exposure'); this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets();
     const dev=Object.keys(Engine.p.lookUndo||{}); const NM={contrast:'Contrast',saturation:'Saturation',vibrance:'Vibrance',falloff:'Vignette',grain:'Grain',grainSize:'Grain',border:'Frame',edgeText:'Frame',ev:'Exposure',highlights:'Highlights',shadows:'Shadows',temp:'White balance',tint:'White balance',halation:'Halation',glow:'Glow',stock:'Film',blacks:'Blacks',whites:'Whites'};
     this.host.toast('Applied '+name+(dev.length?' — also set in Develop: '+[...new Set(dev.map(k=>NM[k]||k))].join(', '):'')); this.host.openEdited&&this.host.openEdited(); },
@@ -203,6 +211,26 @@ const Studio = {
         c.onmouseenter=()=>{ Engine.view.zones=true; Engine.view.zoneHi=i; Engine.dirty=true; }; c.onmouseleave=()=>{ Engine.view.zones=!!this._zonesPinned; Engine.view.zoneHi=-1; Engine.dirty=true; };
         c.onclick=()=>{ this._zonesPinned=!this._zonesPinned; Engine.view.zones=this._zonesPinned; z.classList.toggle('pinned',this._zonesPinned); Engine.dirty=true; }; z.appendChild(c); } }
     UI.note(b,'Hover a zone to see where it falls in the photo (Ansel Adams zones 0–X). Click to keep the zone map on.');
+    }
+    // ---------------------------------------------------------------- Control points
+    if(want('sPoints')){
+    b=UI.panel(root,'sPoints','Control Points',true,()=>{ P().cps=[]; this.cpSel=-1; H.changed(); H.commit(); UI.refresh(); });
+    const list=document.createElement('div'); list.className='cpList'; b.appendChild(list);
+    const cur=()=>(P().cps||[])[this.cpSel];
+    const CS=(k,l,o)=>UI.slider(b,'cp_'+k,l,Object.assign({min:-100,max:100,step:1,def:0,get:()=>{ const c=cur(); return c?(c[k]||0):0; },set:v=>{ const c=cur(); if(!c) return; c[k]=v; H.changed(); },commit:()=>H.commit()},o));
+    const sliders=[CS('r','Size',{min:3,max:80,step:0.5,def:15,get:()=>{ const c=cur(); return c?Math.round((c.r||0.15)*100*2)/2:15; },set:v=>{ const c=cur(); if(!c) return; c.r=v/100; H.changed(); },fmt:x=>Math.round(x)+'%'}),
+      CS('b','Brightness'),CS('c','Contrast'),CS('s','Saturation'),CS('st','Structure'),CS('w','Warmth')];
+    const row=document.createElement('div'); row.className='btnrow'; b.appendChild(row);
+    const del=UI.button(row,'Delete point',()=>{ const a=P().cps||[]; if(this.cpSel<0||!a[this.cpSel]) return; a.splice(this.cpSel,1); this.cpSel=Math.min(this.cpSel,a.length-1); H.changed(); H.commit(); this.renderCP(); });
+    UI.button(row,'Duplicate',()=>{ const c=cur(); if(!c) return; const a=P().cps; if(a.length>=8) return; const n=JSON.parse(JSON.stringify(c)); n.x=Math.min(.95,n.x+.05); a.push(n); this.cpSel=a.length-1; H.changed(); H.commit(); this.renderCP(); });
+    UI.note(b,'Click <b>+ Add point</b>, then click the photo. A point changes the area around it that is similar in colour and brightness to the spot you clicked — like Nik’s U Point. Drag a point to move it; drag its ring to resize.');
+    this.renderCP=()=>{ list.innerHTML=''; const a=P().cps||[]; if(this.cpSel>=a.length) this.cpSel=a.length-1;
+      a.forEach((c,i)=>{ const t=document.createElement('button'); t.className='ltab'+(i===this.cpSel?' on':''); t.textContent=String(i+1); t.onclick=()=>{ this.cpSel=i; this.renderCP(); UI.refresh(); H.cpOverlay&&H.cpOverlay(); }; list.appendChild(t); });
+      const add=document.createElement('button'); add.className='ltab add cpAdd'+(this.cpAdding?' on':''); add.textContent=this.cpAdding?'Click the photo…':'+ Add point';
+      add.onclick=()=>{ if((P().cps||[]).length>=8){ H.toast&&H.toast('Up to 8 control points'); return; } this.cpAdding=!this.cpAdding; this.renderCP(); }; list.appendChild(add);
+      const has=!!cur(); sliders.forEach(d=>d.style.display=has?'':'none'); row.style.display=has?'':'none'; H.cpOverlay&&H.cpOverlay(); };
+    this.cpSel=this.cpSel??-1; this.renderCP();
+    (this._agrids=this._agrids||[]).push([list,()=>this.renderCP()]);
     }
     // ---------------------------------------------------------------- Two-tone flash
     if(want('sTwoTone')){

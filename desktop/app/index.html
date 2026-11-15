@@ -82,7 +82,7 @@
     <!-- ===================================================== centre -->
     <section id="centre">
       <div id="viewer">
-        <canvas id="view"></canvas><div id="placeClip"><div id="placeBox"><i class="hint">Drag to move · scroll to scale · ⇧-drag or ⌥-scroll to rotate · ⌥-drag to resize · double-click to reset</i></div></div>
+        <canvas id="view"></canvas><div id="cpLayer"></div><div id="splitBar"><i>BEFORE</i><b>AFTER</b></div><div id="placeClip"><div id="placeBox"><i class="hint">Drag to move · scroll to scale · ⇧-drag or ⌥-scroll to rotate · ⌥-drag to resize · double-click to reset</i></div></div>
         <div id="grid"></div>
         <div id="ring"></div>
         <canvas id="cropOv"></canvas>
@@ -108,6 +108,7 @@
       <div id="toolbar">
         <div class="tgroup">
           <button class="ibtn" id="tbBefore" title="Before / After (\)">Before / After</button>
+          <button class="ibtn" id="tbSplit" title="Split view: before on the left, after on the right — drag the line (⇧\)">Split</button>
           <button class="ibtn" id="tbZoom" title="Zoom (Z / Space)">1:1</button>
           <button class="ibtn" id="tbReset" title="Reset to original · save first · duplicate (⇧⌘R / ⌘D)">Reset ▾</button>
           <button class="ibtn devonly" id="tbCompare" title="Compare a saved version side by side (C)">Compare</button>

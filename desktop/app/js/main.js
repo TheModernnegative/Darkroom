@@ -125,6 +125,13 @@ const App = {
     const vr=document.createElement('div'); vr.className='btnrow'; b.appendChild(vr);
     UI.button(vr,'Reset view',()=>{ Splat.frame(); this.scanKey=null; d(); },'tbtn');
     UI.button(vr,'Export orbit video…',()=>this.orbitDialog(),'tbtn accent');
+    // ---- camera moves: keyframes of position, focus, aperture and focal length, rendered as one smooth shot
+    { const h=document.createElement('div'); h.className='ahead'; h.textContent='Camera move (keyframes)'; b.appendChild(h);
+      const kl=document.createElement('div'); kl.className='cpList'; kl.id='keyList'; b.appendChild(kl);
+      const kr=document.createElement('div'); kr.className='btnrow'; b.appendChild(kr);
+      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'Clear',()=>{ this.scanKeys=[]; this.renderKeys(); });
+      UI.note(b,'Frame a shot, press + Keyframe; move, refocus or change aperture / focal length, add another. Export video → “Keyframes” glides between them (dolly, rack focus, aperture pull).');
+      setTimeout(()=>this.renderKeys(),0); }
     b=$('#cameraBody'); b.innerHTML='';
     { if(!this.camDefaults) this.camDefaults=this.camSnap();
       UI.select(b,'camPreset','Presets',()=>[['','Choose a saved scan look…']].concat((this.scanPresets||[]).map((x,i)=>[String(i),x.name])),()=>'',v=>{ if(v==='') return; this.applyScanLook(this.scanPresets[+v]); });
@@ -160,7 +167,7 @@ const App = {
     UI.note(b,'Click the image to focus; focus stays locked to that point while you orbit. Double-click to orbit around it.');
   },
 
-  buildPresets(){
+  buildPresets(){ UI.favs=new Set(this.favStocks||[]); UI.onFav=f=>{ this.favStocks=f; this.saveSoon(); this.stockThumbsSoon(true); };
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
       this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
     $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
@@ -290,7 +297,12 @@ const App = {
     this.renderUserPresets(); this.saveSoon();
   },
   presetParams(ps){ return Object.assign(cloneParams(Engine.p),cloneParams(ps.settings)); },
-  async applyPreset(ps){ await this.applySettings(this.presetParams(ps)); this.commit(); this.hover(null); this.toast('Applied “'+ps.name+'”');
+  // batch: a look or preset applied while several photos are selected (⌘-click) goes onto all of them
+  applyToOthers(fn,name){ if(this.module==='scan') return 0; const others=this.selected().filter(x=>x!==this.cur&&x.kind!=='scanlook'); if(!others.length) return 0;
+    others.forEach(it=>{ const s=withDefaults(fn(withDefaults(it.settings))); delete s.crop; s.crop=it.settings.crop; s.angle=it.settings.angle; s.rot=it.settings.rot; s.flip=it.settings.flip; s.aspect=it.settings.aspect; s.masks=it.settings.masks;
+      it.settings=s; it.hist=it.hist||[]; it.hist.push(JSON.stringify(s)); it.histT=it.histT||[]; it.histT.push(Date.now()); it.thumbStale=true; });
+    this.saveSoon(); setTimeout(()=>{ this.toast('“'+name+'” applied to '+(others.length+1)+' photos — Export → Selected to save them all'); },600); return others.length; },
+  async applyPreset(ps){ this.applyToOthers(base=>Object.assign(base,cloneParams(ps.settings)),ps.name); await this.applySettings(this.presetParams(ps)); this.commit(); this.hover(null); this.toast('Applied “'+ps.name+'”');
     this.activePreset={ps,amt:100}; this.renderPresetAmt(); },
   renderPresetAmt(){ const el=$('#presetAmt'); if(!el) return; el.innerHTML=''; const a=this.activePreset;
     if(!a||!this.cur){ el.style.display='none'; return; } el.style.display='';
@@ -324,7 +336,7 @@ const App = {
 
   // ================================================================ edits / history
   // on/off switch in each panel header: hides that section's effect without losing its settings
-  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sFrameFx:['fx_frame'],sAnalog:['analog'],sFlare:['flare'],sLens:['lensfx']},
+  STUDIO_SECTIONS:{sSilver:['silver'],sTwoTone:['twotone'],sDouble:['dbl'],sLeak:['leak','fx_leak'],sBurn:['fx_burn','fx_flare'],sDust:['dust','fx_dust'],sTexture:['fx_texture'],sPoints:['points'],sFrameFx:['fx_frame'],sAnalog:['analog'],sFlare:['flare'],sLens:['lensfx']},
   addStudioToggles(){ Object.assign(this.PANEL_SECTIONS,this.STUDIO_SECTIONS); this.addToggles(); $('#studioRandom').onclick=e=>{ e.stopPropagation(); Studio.randomLook(); }; $('#studioReset').onclick=e=>{ e.stopPropagation(); Studio.resetAll(); this.toast('Studio effects cleared'); }; },
   PANEL_SECTIONS:{pFilm:['film'],pBasic:['wb','tone','presence'],pCurve:['curve'],pHSL:['hsl'],pGrade:['grade'],pDetail:['detail'],pGrain:['grain'],pHal:['halation'],pLens:['lens'],pFrame:['frame'],pMasks:['masks']},
   addToggles(){
@@ -340,7 +352,7 @@ const App = {
     // Studio panels
     for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('edited',this.studioEdited(id)); }
     const any=Object.keys(this.STUDIO_OWN).some(id=>this.studioEdited(id)); const nav=document.querySelector('[data-m="studio"]'); if(nav) nav.classList.toggle('edited',any); },
-  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sAnalog:[['anOn']],sFlare:[['flare']],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
+  STUDIO_OWN:{sSilver:[SILVER_KEYS],sTwoTone:[['ttOn']],sDouble:[['dblId']],sLeak:[['leakAmt'],'leak'],sBurn:[[],'burn','flare'],sDust:[['dustAmt','scratchAmt','hairAmt'],'dust'],sTexture:[[],'texture'],sFrameFx:[[],'frame'],sPoints:[['cps']],sAnalog:[['anOn']],sFlare:[['flare']],sLens:[['zoomBlur','motionBlur','softEdges','tiltShift','fringe','distort']]},
   studioEdited(id){ const [ks,...cats]=this.STUDIO_OWN[id], p=Engine.p, fx=p.fx||{};
     if(id==='sSilver'&&!p.silver) return false; if(id==='sTwoTone'&&!p.ttOn) return false;
     return ks.some(k=>JSON.stringify(p[k])!==JSON.stringify(DEFAULTS[k]))||cats.some(c=>Object.keys(fx).some(k=>k.replace(/\d+$/,'')===c&&fx[k]&&fx[k].id&&fx[k].amt>0)); },
@@ -812,13 +824,21 @@ const App = {
   // ================================================================ orbit video (scan module)
   async sortSync(){ while(Splat.sortBusy) await new Promise(r=>setTimeout(r,4));
     await new Promise(r=>{ const prev=Splat.onDirty; Splat.onDirty=()=>{ Splat.onDirty=prev; r(); }; Splat.requestSort(); }); },
+  keySnap(){ const c=Splat.cam; return {yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,fnum:c.fnum||STOPS[c.stop],fmm:c.fmm,roll:c.roll||0}; },
+  addKey(){ if(!Splat.scene){ this.toast('Load a scan first'); return; } this.scanKeys=this.scanKeys||[]; this.scanKeys.push(this.keySnap()); this.renderKeys(); this.toast('Keyframe '+this.scanKeys.length+' saved'); },
+  renderKeys(){ const el=$('#keyList'); if(!el) return; el.innerHTML=''; const K=this.scanKeys||[];
+    if(!K.length){ el.innerHTML='<span class="note">No keyframes yet.</span>'; return; }
+    K.forEach((k,i)=>{ const t=document.createElement('button'); t.className='ltab'; t.textContent=String(i+1); t.title='Jump to keyframe '+(i+1)+' · right-click to delete';
+      t.onclick=()=>{ const c=Splat.cam; Object.assign(c,{yaw:k.yaw,pitch:k.pitch,dist:k.dist,target:k.target.slice(),focus:k.focus,fmm:k.fmm,roll:k.roll,focusLock:null}); let si=0; STOPS.forEach((x,j)=>{ if(Math.abs(x-k.fnum)<Math.abs(STOPS[si]-k.fnum)) si=j; }); c.stop=si; c.fnum=null; Splat.lastSortView=null; Engine.dirty=true; UI.refresh(); };
+      t.oncontextmenu=e=>{ e.preventDefault(); K.splice(i,1); this.renderKeys(); }; el.appendChild(t); }); },
   async orbitDialog(){
     if(!Splat.scene){ this.toast('Load a scan first'); return; }
     if(!Native.available){ this.toast('Video export runs in the Mac app'); return; }
     try{ await Native.call('videoEnd',{job:'probe'}); }catch(e){ if(/unknown command/.test(String(e.message||e))){ this.toast('Rebuild the app once to enable video export (see chat)'); return; } }
     const st=Object.assign({secs:6,arc:40,move:'swing',size:1920,fps:30,grain:true},this._orbitPrefs||{});
     const body=$('#dlgBody'); body.innerHTML=''; $('#dlg h2').textContent='Orbit video'; $('#dlgOk').textContent='Render';
-    UI.seg(body,'omove','Move',[['swing','Swing'],['orbit','Full orbit'],['push','Push in']],()=>st.move,v=>st.move=v);
+    if((this.scanKeys||[]).length>=2&&!st._k){ st.move='keys'; st._k=1; }
+    UI.seg(body,'omove','Move',[['swing','Swing'],['orbit','Full orbit'],['push','Push in']].concat((this.scanKeys||[]).length>=2?[['keys','Keyframes ('+this.scanKeys.length+')']]:[]),()=>st.move,v=>st.move=v);
     UI.slider(body,'oarc','Swing arc',{min:5,max:120,step:1,def:40,get:()=>st.arc,set:v=>st.arc=v,fmt:x=>Math.round(x)+'°'});
     UI.slider(body,'osecs','Length',{min:2,max:20,step:1,def:6,get:()=>st.secs,set:v=>st.secs=v,fmt:x=>Math.round(x)+' s'});
     UI.seg(body,'osize','Size',[['1080','1080p'],['1920','1920'],['3840','4K']],()=>String(st.size),v=>st.size=+v);
@@ -836,7 +856,7 @@ const App = {
     const path=await Native.call('pickSave',{name,dir:this.info&&this.info.splatDir+'/exports'}); if(!path) return;
     const [sw,sh]=Splat.sensor(); const long=st.size; let w=Math.round(sw>=sh?long:long*sw/sh), h=Math.round(sw>=sh?long*sh/sw:long); w-=w%2; h-=h%2;
     const job=await Native.call('videoBegin',{path,w,h,fps:st.fps});
-    const c=Splat.cam, keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice()}, keepSeed=Engine.grainSeed;
+    const c=Splat.cam, keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,focusLock:c.focusLock,fmm:c.fmm,fnum:c.fnum,roll:c.roll}, keepSeed=Engine.grainSeed;
     const frames=Math.round(st.secs*st.fps), gl=Engine.gl;
     const tmp=GLU.target(w,h,'rgba16f'), out=GLU.target(w,h,'rgba8'), RT={};
     const cv=document.createElement('canvas'); cv.width=w; cv.height=h; let x=null; try{ x=cv.getContext('2d',{colorSpace:'display-p3'}); }catch(e){} if(!x) x=cv.getContext('2d');
@@ -851,6 +871,10 @@ const App = {
         const t=f/frames;
         if(st.move==='swing') c.yaw=keep.yaw+Math.sin(t*2*Math.PI)*st.arc/2*Math.PI/180;
         else if(st.move==='orbit') c.yaw=keep.yaw+t*2*Math.PI;
+        else if(st.move==='keys'){ const K=this.scanKeys, seg=t*(K.length-1)*(frames/(frames-1||1)), i=Math.min(K.length-2,Math.floor(seg)), u=Math.min(1,seg-i), e=u*u*(3-2*u), A=K[i], B=K[i+1];
+          let dy=B.yaw-A.yaw; dy=Math.atan2(Math.sin(dy),Math.cos(dy)); const L=(a,b)=>a+(b-a)*e;
+          c.yaw=A.yaw+dy*e; c.pitch=L(A.pitch,B.pitch); c.dist=Math.exp(L(Math.log(A.dist),Math.log(B.dist))); c.target=A.target.map((v,j)=>L(v,B.target[j]));
+          c.focusLock=null; c.focus=Math.exp(L(Math.log(Math.max(1e-3,A.focus)),Math.log(Math.max(1e-3,B.focus)))); c.fnum=Math.exp(L(Math.log(A.fnum),Math.log(B.fnum))); c.fmm=Math.exp(L(Math.log(A.fmm),Math.log(B.fmm))); c.roll=L(A.roll||0,B.roll||0); }
         else { const e=.5-.5*Math.cos(t*Math.PI); c.dist=keep.dist*(1-.35*e); c.yaw=keep.yaw+(e-.5)*st.arc/3*Math.PI/180; }
         await this.sortSync(); Splat.render(tmp);
         if(st.grain) Engine.grainSeed=(keepSeed+f*2654435761)>>>0;
@@ -868,7 +892,7 @@ const App = {
       const done=await Native.call('videoEnd',{job}); this.busy(); this.toast(done?'Saved '+done.split('/').pop():'Video writer failed');
       if(done) Native.call('reveal',{path:done}).catch(()=>{});
     } catch(e){ await Native.call('videoEnd',{job}).catch(()=>{}); throw e; }
-    finally{ Object.assign(c,keep); Engine.grainSeed=keepSeed; GLU.free(tmp); GLU.free(out); for(const k in RT) GLU.free(RT[k]); Splat.lastSortView=null; Engine.dirty=true; }
+    finally{ Object.assign(c,keep); c.fnum=keep.fnum||null; Engine.grainSeed=keepSeed; GLU.free(tmp); GLU.free(out); for(const k in RT) GLU.free(RT[k]); Splat.lastSortView=null; Engine.dirty=true; }
   },
   // ================================================================ export
   async exportDialog(){
@@ -980,7 +1004,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const sl=this.scanItem||this._scanLookSaved; const data={v:1,scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -988,7 +1012,7 @@ const App = {
     let json='';
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
-    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this._scanLookSaved=d.scanLook||null; this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },
@@ -1045,7 +1069,7 @@ const App = {
         const L=Engine.layout(); this._lastL=L;
         if(this.compare && Engine.src && !Engine.cropMode){ const Ls=Engine.renderSplit(this.compare.settings,p,(L2,p2)=>this.borderFor(L2,p2)); document.body.classList.toggle('splitV',!!Engine.splitVertical); this._lastL=Object.assign({},Ls[1],{W:L.W,H:L.H}); }
         else Engine.render({params:p,borderTex:this.borderFor(L,p)});
-        Tools.overlay(); this.placeBox(); this.histo(); this.status(); this.navPreview(p);
+        Tools.overlay(); this.placeBox(); this.cpOverlay(); this.splitBar(); this.histo(); this.status(); this.navPreview(p);
         if(this.module==='develop'&&this.cur&&$('#presetList').classList.contains('gridmode')) this.stockThumbsSoon();
         if(this.module==='studio'&&this.cur){ clearTimeout(this._rt); this._rt=setTimeout(()=>{ const q=cloneParams(Engine.p); STUDIO_KEYS.forEach(k=>delete q[k]); Studio.refreshRecipeThumbs(this.cur.id+JSON.stringify(q)+Object.values(Engine.assetTexs).filter(t=>t.ready).length); },500); }
       }
@@ -1069,7 +1093,10 @@ const App = {
     $('#presetAdd').onclick=e=>{ e.stopPropagation(); $('#pUserPresets').classList.add('open'); $('#presetNew').classList.toggle('on'); if($('#presetNew').classList.contains('on')){ const n=$('#presetName'); n.value=Engine.stock().name+' — '; n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };
     $('#presetSave').onclick=()=>{ this.savePreset($('#presetName').value,$('#presetWB').checked); $('#presetNew').classList.remove('on'); };
     $('#presetName').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') $('#presetSave').click(); if(e.key==='Escape') $('#presetNew').classList.remove('on'); });
-    $('#tbBefore').onclick=()=>this.toggleBefore(); $('#tbZoom').onclick=()=>this.toggleZoom();
+    $('#tbBefore').onclick=()=>this.toggleBefore(); $('#tbSplit').onclick=()=>this.toggleSplit();
+    { const h=$('#splitBar'); let dr=false; h.addEventListener('pointerdown',e=>{ dr=true; h.setPointerCapture(e.pointerId); e.stopPropagation(); });
+      h.addEventListener('pointermove',e=>{ if(!dr) return; const L=this._lastL, r=$('#view').getBoundingClientRect(); Engine.splitX=Math.max(0,Math.min(1,((e.clientX-r.left)*L.dpr-L.ix)/L.iw)); Engine.dirty=true; this.splitBar(); });
+      h.addEventListener('pointerup',()=>dr=false); } $('#tbZoom').onclick=()=>this.toggleZoom();
     $('#tbCrop').onclick=()=>{ if(this.module!=='develop') this.setModule('develop'); Tools.setCropMode(!Engine.cropMode); };
     $('#tbSync').onclick=()=>this.syncDialog();
     $('#libFilter').onchange=e=>{ this.filter=e.target.value; this.renderStrip(); this.renderGrid(); };
@@ -1105,6 +1132,9 @@ const App = {
     if(Native.available){ Native.call('open',{multiple:true,exts:['jpg','jpeg','heic','heif','png','tif','tiff','dng','cr2','cr3','nef','arw','raf','orf','rw2','ply','splat']}).then(p=>p&&p.length&&this.addPaths(p)); }
     else { const i=$('#fileIn'); i.accept='image/*,.heic,.heif,.ply,.splat'; i.click(); }
   },
+  toggleSplit(){ Engine.split=!Engine.split; Engine.splitX=Engine.splitX??0.5; $('#tbSplit').classList.toggle('on',Engine.split); Engine.dirty=true; this.splitBar(); },
+  splitBar(){ const h=$('#splitBar'), L=this._lastL; if(!h) return; const on=Engine.split&&L&&Engine.src&&this.module!=='library'; h.classList.toggle('on',!!on); if(!on) return;
+    const r=$('#view').getBoundingClientRect(); Object.assign(h.style,{left:r.left+(L.ix+Engine.splitX*L.iw)/L.dpr+'px',top:r.top+Math.max(0,(L.H-L.iy-L.ih))/L.dpr+'px',height:Math.min(L.ih,L.H)/L.dpr+'px'}); },
   toggleBefore(){ Engine.before=!Engine.before; $('#beforeTag').classList.toggle('on',Engine.before); $('#tbBefore').classList.toggle('on',Engine.before); Engine.dirty=true; },
   key(e){
     if(e.key==='Escape' && $('#busy').classList.contains('on')) this._cancelVideo=true;
@@ -1130,7 +1160,8 @@ const App = {
     if((k==='r'||k==='R') && this.cur && this.module!=='scan'){ if(this.module!=='develop') this.setModule('develop'); Tools.setCropMode(true); return; }
     if((k==='c'||k==='C')&&this.cur&&this.module!=='scan'){ if(this.module!=='develop') this.setModule('develop'); this.toggleCompare(); return; }
     if(k==='Escape'&&this.compare){ this.setCompare(null); return; }
-    if(k==='\\'){ this.toggleBefore(); }
+    if(k==='|'){ this.toggleSplit(); }
+    else if(k==='\\'){ this.toggleBefore(); }
     else if(k==='z'||k==='Z'){ this.toggleZoom(); }
     else if(k==='j'||k==='J'){ Engine.showClip=!Engine.showClip; Engine.dirty=true; }
     else if(k==='g'||k==='G'){ this.setModule('library'); }
@@ -1151,7 +1182,31 @@ const App = {
     const cx=(.5+o.x)*L.iw/dpr, cy=(.5+o.y)*L.ih/dpr;
     Object.assign(el.style,{left:cx+'px',top:cy+'px',width:ovW*o.scale*L.ih/dpr+'px',height:ovH*o.scale*L.ih/dpr+'px',transform:`translate(-50%,-50%) rotate(${o.rot}deg)`});
     el.dataset.label={dbl:'Second exposure',leak:'Light leak',burn:'Film burn',flare:'Flare',dust:'Dust'}[T.kind.replace(/\d+$/,'')]; el.classList.add('on'); },
-  bindPlace(v){ let drag=null; const T=()=>this.placeTarget();
+  // ---- control point markers on the photo (Studio)
+  cpOverlay(){ const lay=$('#cpLayer'), L=this._lastL; if(!lay) return;
+    const a=(Engine.p.cps||[]), show=this.module==='studio'&&L&&Engine.src&&!this.compare&&(a.length||Studio.cpAdding)&&!(Engine.p.off||{}).points;
+    lay.classList.toggle('on',!!show); lay.classList.toggle('adding',!!Studio.cpAdding); if(!show){ lay.innerHTML=''; return; }
+    const r=$('#view').getBoundingClientRect(), dpr=L.dpr; Object.assign(lay.style,{left:r.left+L.ix/dpr+'px',top:r.top+(L.H-L.iy-L.ih)/dpr+'px',width:L.iw/dpr+'px',height:L.ih/dpr+'px'});
+    if(lay.children.length!==a.length) lay.innerHTML='';
+    a.forEach((c,i)=>{ let m=lay.children[i]; if(!m){ m=document.createElement('div'); m.className='cpm'; m.innerHTML='<i class="ring"></i><b></b>'; lay.appendChild(m); this.cpBind(m); }
+      m.dataset.i=i; m.querySelector('b').textContent=i+1; m.classList.toggle('sel',i===Studio.cpSel);
+      m.style.left=(c.x*100)+'%'; m.style.top=(c.y*100)+'%'; const rp=(c.r||0.15)*L.ih/dpr*0.85; const ring=m.querySelector('.ring'); ring.style.width=ring.style.height=rp*2+'px'; }); },
+  cpBind(m){ let drag=null;
+    m.addEventListener('pointerdown',e=>{ e.stopPropagation(); e.preventDefault(); const i=+m.dataset.i, c=Engine.p.cps[i]; Studio.cpSel=i; Studio.renderCP&&Studio.renderCP(); UI.refresh();
+      const ring=e.target.classList.contains('ring'); drag={i,ring,x0:e.clientX,y0:e.clientY,c0:{x:c.x,y:c.y,r:c.r}}; m.setPointerCapture(e.pointerId); });
+    m.addEventListener('pointermove',e=>{ if(!drag) return; const L=this._lastL, dpr=L.dpr, c=Engine.p.cps[drag.i]; if(!c) return;
+      if(drag.ring){ const lay=$('#cpLayer').getBoundingClientRect(), cx=lay.left+c.x*lay.width, cy=lay.top+c.y*lay.height; c.r=Math.max(0.02,Math.min(0.9,Math.hypot(e.clientX-cx,e.clientY-cy)/(L.ih/dpr*0.85))); }
+      else { c.x=Math.max(0,Math.min(1,drag.c0.x+(e.clientX-drag.x0)*dpr/L.iw)); c.y=Math.max(0,Math.min(1,drag.c0.y+(e.clientY-drag.y0)*dpr/L.ih)); }
+      this.changed(); this.cpOverlay(); UI.refresh(); });
+    m.addEventListener('pointerup',e=>{ if(!drag) return; const c=Engine.p.cps[drag.i]; if(c&&!drag.ring) this.cpSample(c); drag=null; this.commit(); }); },
+  cpSample(c){ const L=this._lastL; if(!L) return; const px=L.ix+c.x*L.iw, py=L.iy+L.ih-c.y*L.ih; const v=Engine.sampleAt(px,py,L); if(v) c.col=Array.from(CM.vec(CM.REC709_TO_AP1,v)).slice(0,3); },   // back to the prep (AP1) space the shader compares in
+  bindPlace(v){
+    // adding a control point: the next click on the photo places it
+    v.addEventListener('pointerdown',e=>{ if(this.module!=='studio'||!Studio.cpAdding||e.button!==0) return; const L=this._lastL; if(!L) return; e.stopImmediatePropagation(); e.preventDefault();
+      const r=v.getBoundingClientRect(), dpr=L.dpr, x=((e.clientX-r.left)*dpr-L.ix)/L.iw, y=((e.clientY-r.top)*dpr-(L.H-L.iy-L.ih))/L.ih; if(x<0||y<0||x>1||y>1) return;
+      const a=Engine.p.cps=(Engine.p.cps&&Engine.p.cps!==DEFAULTS.cps)?Engine.p.cps:[]; if(a.length>=8) return;
+      const c={x,y,r:0.15,col:[.18,.18,.18],b:0,c:0,s:0,st:0,w:0}; this.cpSample(c); a.push(c); Studio.cpSel=a.length-1; Studio.cpAdding=false;
+      this.changed(); this.commit(); Studio.renderCP&&Studio.renderCP(); UI.refresh(); this.toast('Point added — now move the sliders (Brightness, Contrast, Structure…)'); },true); let drag=null; const T=()=>this.placeTarget();
     const toImg=(L)=>({sx:L.dpr/L.iw, sy:L.dpr/L.ih});
     v.addEventListener('pointerdown',e=>{ const t=T(); if(!t||Engine.view.mode!=='fit'||e.button!==0) return; const L=this._lastL; if(!L) return;
       const o=t.get(), r=v.getBoundingClientRect(), b=$('#placeBox').getBoundingClientRect(), c={x:b.left+b.width/2,y:b.top+b.height/2};

@@ -712,11 +712,71 @@
    "h": 2000
   },
   {
+   "id": "frame_tintype_4",
+   "cat": "frame",
+   "name": "Tintype Heavy Silver",
+   "file": "frame/frame_tintype_4.png",
+   "thumb": "frame/frame_tintype_4_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_tintype_6",
+   "cat": "frame",
+   "name": "Tintype Fresh Pour",
+   "file": "frame/frame_tintype_6.png",
+   "thumb": "frame/frame_tintype_6_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_alumitype_1",
+   "cat": "frame",
+   "name": "Alumitype Trophy Plate",
+   "file": "frame/frame_alumitype_1.png",
+   "thumb": "frame/frame_alumitype_1_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
    "id": "frame_ambrotype_1",
    "cat": "frame",
    "name": "Ambrotype Glass",
    "file": "frame/frame_ambrotype_1.png",
    "thumb": "frame/frame_ambrotype_1_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_tintype_5",
+   "cat": "frame",
+   "name": "Gem Tintype Brass Mat",
+   "file": "frame/frame_tintype_5.png",
+   "thumb": "frame/frame_tintype_5_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_ambrotype_2",
+   "cat": "frame",
+   "name": "Cased Ambrotype",
+   "file": "frame/frame_ambrotype_2.png",
+   "thumb": "frame/frame_ambrotype_2_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_glassneg_1",
+   "cat": "frame",
+   "name": "Glass Plate Negative",
+   "file": "frame/frame_glassneg_1.png",
+   "thumb": "frame/frame_glassneg_1_t.webp",
    "blend": "normal",
    "w": 3000,
    "h": 2000
@@ -889,7 +949,8 @@
    "thumb": "texture/tex_01_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_02",
@@ -899,7 +960,8 @@
    "thumb": "texture/tex_02_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_03",
@@ -909,7 +971,8 @@
    "thumb": "texture/tex_03_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_04",
@@ -919,7 +982,8 @@
    "thumb": "texture/tex_04_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_05",
@@ -929,7 +993,8 @@
    "thumb": "texture/tex_05_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_06",
@@ -939,7 +1004,8 @@
    "thumb": "texture/tex_06_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_07",
@@ -949,7 +1015,8 @@
    "thumb": "texture/tex_07_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
   },
   {
    "id": "tex_08",
@@ -959,7 +1026,52 @@
    "thumb": "texture/tex_08_t.webp",
    "blend": "overlay",
    "w": 2048,
-   "h": 2048
+   "h": 2048,
+   "tile": true
+  },
+  {
+   "id": "tex_collodion_1",
+   "cat": "texture",
+   "name": "Collodion Flow Lines",
+   "file": "texture/tex_collodion_1.webp",
+   "thumb": "texture/tex_collodion_1_t.webp",
+   "blend": "overlay",
+   "w": 2048,
+   "h": 2048,
+   "tile": false
+  },
+  {
+   "id": "tex_collodion_2",
+   "cat": "texture",
+   "name": "Silver Veil",
+   "file": "texture/tex_collodion_2.webp",
+   "thumb": "texture/tex_collodion_2_t.webp",
+   "blend": "overlay",
+   "w": 2048,
+   "h": 2048,
+   "tile": false
+  },
+  {
+   "id": "tex_collodion_3",
+   "cat": "texture",
+   "name": "Varnish And Prints",
+   "file": "texture/tex_collodion_3.webp",
+   "thumb": "texture/tex_collodion_3_t.webp",
+   "blend": "overlay",
+   "w": 2048,
+   "h": 2048,
+   "tile": false
+  },
+  {
+   "id": "tex_collodion_4",
+   "cat": "texture",
+   "name": "Comets And Pinholes",
+   "file": "texture/tex_collodion_4.webp",
+   "thumb": "texture/tex_collodion_4_t.webp",
+   "blend": "overlay",
+   "w": 2048,
+   "h": 2048,
+   "tile": false
   }
  ]
 }

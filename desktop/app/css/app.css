@@ -364,3 +364,30 @@ button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;w
 #stockGrid.on{background:#3d5a90;color:#fff}
 .selfDbl{grid-column:1/-1;padding:7px 8px;border-radius:4px;background:#24282f;border:1px solid #3a4150;color:#ccd;font:12px var(--sans);cursor:pointer;text-align:center}
 .selfDbl.on{background:#3d5a90;color:#fff;border-color:#5a7cc0}
+/* control points */
+#cpLayer{position:fixed;display:none;z-index:5;pointer-events:none}
+#cpLayer.on{display:block}
+#cpLayer.adding{cursor:crosshair}
+.cpm{position:absolute;width:0;height:0;pointer-events:auto}
+.cpm b{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;background:#000a;border:2px solid #fff;color:#fff;font:600 10px/14px var(--sans);text-align:center;cursor:move;box-shadow:0 0 0 1px #0008}
+.cpm.sel b{background:#ff8a1f;border-color:#fff}
+.cpm .ring{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;border:1px dashed #ffffffa0;box-shadow:0 0 0 1px #0006;display:none;cursor:nwse-resize}
+.cpm.sel .ring{display:block}
+.cpList{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 8px}
+.cpAdd.on{background:#ff8a1f;color:#000;border-color:#ff8a1f}
+#splitBar{position:fixed;width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px #0007;z-index:6;display:none;cursor:ew-resize}
+#splitBar.on{display:block}
+#splitBar::before{content:'';position:absolute;left:-12px;right:-12px;top:0;bottom:0}
+#splitBar i,#splitBar b{position:absolute;top:8px;font:600 10px var(--sans);letter-spacing:.06em;color:#fff;background:#000a;padding:2px 6px;border-radius:3px;font-style:normal;white-space:nowrap}
+#splitBar i{right:8px} #splitBar b{left:8px}
+.preset{position:relative}
+.pstar{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:12px;color:#555;opacity:0;cursor:pointer;font-weight:400}
+.preset:hover .pstar,.pstar.on{opacity:1}
+.pstar.on{color:#ffb21e}
+#presetList.gridmode .pstar{top:6px;transform:none;right:6px;text-shadow:0 0 3px #000}
+#presetList.gridmode .preset .iso{display:none}
+#stockCard{position:fixed;z-index:50;width:240px;padding:10px 12px;background:#202226;border:1px solid #3a3d44;border-radius:6px;box-shadow:0 8px 24px #0008;display:none;pointer-events:none}
+#stockCard.on{display:block}
+#stockCard h4{margin:0 0 4px;font:600 13px var(--sans);color:#fff}
+#stockCard .sc-meta{font:11px var(--sans);color:#ff9a3c;margin-bottom:6px}
+#stockCard p{margin:0;font:12px/1.45 var(--sans);color:#bbb}
