@@ -224,6 +224,11 @@ fi
 PLY="$(ls -t "$OUT"/*.ply 2>/dev/null | head -1 || true)"
 if [[ -n "$PLY" ]]; then
   [[ "$PLY" != "$OUT/${NAME}.ply" ]] && cp "$PLY" "$OUT/${NAME}.ply"
+  # the in-progress checkpoints (export_*.ply) are only for preview while training — about 1 GB per scan, so tidy them up
+  if [[ "${KEEP_CHECKPOINTS:-0}" != 1 && -s "$OUT/${NAME}.ply" ]]; then
+    n=$(find "$OUT" -maxdepth 1 -name 'export_*.ply' | wc -l | tr -d ' ')
+    [[ "$n" -gt 0 ]] && { find "$OUT" -maxdepth 1 -name 'export_*.ply' -delete; echo "  Cleaned up $n in-progress checkpoint files"; }
+  fi
   say "Done → $OUT/${NAME}.ply"
   echo "  Open Splat Darkroom → Scene → Load scan, then set Up axis to 'Y down' if it's upside-down."
 else

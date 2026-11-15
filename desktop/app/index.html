@@ -58,7 +58,7 @@
         <div class="body" id="presetList"></div>
       </section>
       <!-- history of the current photo / scan look -->
-      <section class="panel mod-develop mod-studio mod-scan" id="pHistory">
+      <section class="panel open mod-develop mod-studio mod-scan" id="pHistory">
         <h3><i></i>History<span class="hbtns"><button class="hbtn" id="histOrig" title="Back to the original (keeps this history)">Original</button></span></h3>
         <div class="body"><div id="histList"></div></div>
       </section>
@@ -116,13 +116,14 @@
           <button class="ibtn devonly" id="tbSync" title="⌘-click photos in the filmstrip, then sync settings to them" disabled>Sync…</button>
         </div>
         <div class="tgroup scanonly">
-          <span class="hint">drag orbit · ⇧-drag or arrows move · ⇧+arrows orbit · scroll or +/− dolly · click focus · double-click pivot</span>
+          <span class="hint" title="drag orbit · ⇧-drag, right-drag or arrows move · ⇧+arrows orbit · scroll or +/− dolly · click focus · double-click pivot">drag orbit · ⇧-drag move · scroll dolly · <b>?</b> all keys</span>
+          <button class="ibtn" id="tbSnap" title="Save a snapshot: camera, lens, film and every Develop/Studio setting, filed under this scan (⇧S)">◎ Snapshot</button>
           <button class="ibtn accent" id="tbExpose" title="Expose a frame into the library">● Expose</button>
           <button class="ibtn" id="tbSaveScan" title="Save this view as an image file (⌘E)">Save image…</button>
         </div>
         <div class="tgroup right"><span id="status"></span></div>
       </div>
-      <div id="filmstrip"><div id="stripBar" class="devonly"><select id="libFilter" title="Filter (rate 1–5 · P pick · X reject · U clear)"><option value="all">All photos</option><option value="picks">⚑ Picks</option><option value="1">★ 1+</option><option value="2">★★ 2+</option><option value="3">★★★ 3+</option><option value="4">★★★★ 4+</option><option value="5">★★★★★</option><option value="unrated">Unrated</option><option value="rejects">✕ Rejects</option></select></div><div id="strip"></div></div>
+      <div id="filmstrip"><div id="stripBar" class="devonly"><input id="libSearch" type="search" placeholder="Search  (4+ portra, picks…)" spellcheck="false" title="Search names and film stocks. 4+ = four stars or more · picks · rejects · unrated · edited · bw · -word excludes. ⌘F"><select id="libFilter" title="Filter (rate 1–5 · P pick · X reject · U clear)"><option value="all">All photos</option><option value="picks">⚑ Picks</option><option value="1">★ 1+</option><option value="2">★★ 2+</option><option value="3">★★★ 3+</option><option value="4">★★★★ 4+</option><option value="5">★★★★★</option><option value="unrated">Unrated</option><option value="rejects">✕ Rejects</option></select></div><div id="strip"></div></div>
 <div id="ctxMenu"></div>
     </section>
 
@@ -177,6 +178,7 @@
 <script src="js/tools.js"></script>
 <script src="js/studio.js"></script>
 <script src="js/tutorial.js"></script>
+<script src="js/lrimport.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
