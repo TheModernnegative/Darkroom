@@ -60,7 +60,12 @@ prog(){ echo "@@progress $1 $2 $3 $4"; }
 # stream a command's output, turning tool-specific counters into progress lines
 #   $1 stage  $2 total (or 0)  $3 label  $4 regex with one or two capture groups (done[/total])  then: command…
 track(){ local st="$1" tot="$2" lab="$3" re="$4"; shift 4
-  "$@" 2>&1 | perl -pe 'BEGIN{$|=1} s/\r/\n/g' | while IFS= read -r l; do
+  # tidy the stream: drop terminal redraw codes, repeat lines and progress-bar spam (Brush redraws ~10×/s);
+  # step counters pass at most once a second — keeps the log small and the app responsive
+  "$@" 2>&1 | perl -ne 'BEGIN{$|=1; $t=0; %seen=()} s/\e\[[0-9;?]*[A-Za-z]//g; s/\e\][^\a]*\a//g;
+      for my $l (split /\r/){ $l=~s/^\s+|\s+$//g; next if $l eq "";
+        if($l=~m{\d+\s*/\s*\d+}){ my $n=time; next if $n-$t<1; $t=$n; print "$l\n"; next; }
+        my $n=time; next if exists $seen{$l} && $n-$seen{$l}<60; $seen{$l}=$n; print "$l\n"; }' | while IFS= read -r l; do
     echo "$l"
     if [[ "$l" =~ $re ]]; then local d="${BASH_REMATCH[1]}" t="${BASH_REMATCH[2]:-}"; [[ "$t" =~ ^[0-9]+$ ]] || t="$tot"; [[ -n "$t" && "$t" != 0 ]] && prog "$st" "$d" "$t" "$lab"; fi
     :

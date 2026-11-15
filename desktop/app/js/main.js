@@ -649,14 +649,14 @@ const App = {
   async newScan(input){
     if(!Native.available){ this.toast('Building scans runs in the Mac app'); return; }
     if(!input){ const p=await Native.call('open',{files:true,dirs:true,multiple:false,title:'Choose an orbit video, or a folder of photos',dir:this.info&&this.info.splatDir+'/captures'}); if(!p||!p[0]) return; input=p[0]; }
-    $('#pipe').classList.add('on'); $('#pipeLog').textContent=''; $('#pipeTitle').textContent='Building scan from '+input.split('/').pop()+'…'; $('#pipeClose').disabled=true;
+    this._pipeBusy=true; $('#pipe').classList.add('on'); $('#pipeLog').textContent=''; $('#pipeTitle').textContent='Building scan from '+input.split('/').pop()+'…'; $('#pipeClose').disabled=true;
     this.pipeStart();
     const job=Native.call('runPipeline',{input});
     this._pipeJob=null;
-    try{ const r=await job; $('#pipeClose').disabled=false;
+    try{ const r=await job; this._pipeBusy=false; Engine.dirty=true; $('#pipeClose').disabled=false;
       clearInterval(this._pt); if(r&&r.ply){ this.pipeDone(true); $('#pipeTitle').textContent='Scan ready'; await this.loadScanPath(r.ply); $('#pipe').classList.remove('on'); this.toast('Scan loaded — orbit, focus, then Expose'); }
       else { this.pipeDone(false); $('#pipeTitle').textContent='Scan failed (exit '+(r?r.code:'?')+') — see Details'; $('#pipeDetails').open=true; } }
-    catch(e){ $('#pipeTitle').textContent='Error: '+e.message; $('#pipeClose').disabled=false; }
+    catch(e){ this._pipeBusy=false; $('#pipeTitle').textContent='Error: '+e.message; $('#pipeClose').disabled=false; }
   },
   // ---- scan build progress: splat.sh emits "@@progress <stage> <done> <total> <label>"
   PIPE_STAGES:[['Frames','Pull frames'],['Features','Find features'],['Matching','Match frames'],['Cameras','Solve cameras'],['Undistort','Undistort'],['Training','Train splats']],
@@ -673,7 +673,10 @@ const App = {
     for(const l of lines){ const m=l.match(/^@@progress (\d) (\d+) (\d+) (.*)$/);
       if(m){ const st=+m[1]; if(st!==P.stage){ P.stage=st; P.ts=Date.now(); } P.done=+m[2]; P.total=Math.max(1,+m[3]); P.label=m[4]; P.counts[st]=[P.done,P.total]; }
       else out+=l+'\n'; }
-    if(out){ const el=$('#pipeLog'); el.textContent+=out; if(el.textContent.length>200000) el.textContent=el.textContent.slice(-150000); el.scrollTop=el.scrollHeight; }
+    if(out){ P.log=(P.log||'')+out; if(P.log.length>60000) P.log=P.log.slice(-40000); }
+    // touch the page at most twice a second, and the log only when Details is open
+    const now=Date.now(); if(now-(P.lastDraw||0)<500) return; P.lastDraw=now;
+    if(P.log!==P.shown&&$('#pipeDetails').open){ const el=$('#pipeLog'); el.textContent=P.log; el.scrollTop=el.scrollHeight; P.shown=P.log; }
     this.pipeRender();
   },
   pipeRender(){
@@ -992,6 +995,8 @@ const App = {
   // ================================================================ main loop
   loop(){
     try{
+      // while a scan trains, leave the GPU to the trainer: no redraws behind the progress dialog
+      if(this._pipeBusy){ requestAnimationFrame(()=>this.loop()); return; }
       if(this.module==='scan'){
         if(!Splat.scene){ if(Engine.dirty){ Engine.dirty=false; const keep=Engine.src; Engine.src=null; Engine.render({}); Engine.src=keep; UI.drawHisto($('#histo'),null); $('#status').textContent=''; } }
         else if(Engine.dirty){ Engine.dirty=false; const [w,h]=this.scanLayoutSize(); Splat.maybeSort();
@@ -1038,6 +1043,7 @@ const App = {
     $('#presetExport').onclick=e=>{ e.stopPropagation(); this.exportPresets(); };
     $('#presetImport').onclick=e=>{ e.stopPropagation(); this.importPresets(); };
     $('#tbExpose').onclick=()=>this.exposeFrame();
+    $('#pipeDetails').addEventListener('toggle',()=>{ const P=this.pp; if(P&&$('#pipeDetails').open){ const el=$('#pipeLog'); el.textContent=P.log||''; el.scrollTop=el.scrollHeight; P.shown=P.log; } });
     $('#scanLookAdd').onclick=e=>{ e.stopPropagation(); this.saveCamPreset(); }; $('#scanResetLook').onclick=()=>this.resetScan(false); $('#scanResetAll').onclick=()=>this.resetScan(true);
     $('#histOrig').onclick=e=>{ e.stopPropagation(); if(this.cur) this.applySettings(withDefaults({})).then(()=>{ this.commit(); this.toast('Back to the original — History keeps every step'); }); };
     // camera moves in 3D Scan are history steps too (checked when you pause)
