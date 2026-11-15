@@ -15,7 +15,7 @@ const DEFAULTS = {
   sBright:0, sBrightHi:0, sBrightSh:0, sContrast:0, sAmpW:0, sAmpB:0, sSoft:0, sStructHi:0, sStructMid:0, sStructSh:0, sFine:0,
   lookUndo:null, sSens:[0,0,0,0,0,0], sFilmType:'', sVig:0, sVigSize:50, sVigX:0, sVigY:0, sBurnT:0, sBurnB:0, sBurnL:0, sBurnR:0, sToneBal:0,
   // Studio — Analog
-  dblId:'', dblMode:'add', dblAmt:60, dblEv:0, dblScale:1, dblX:0, dblY:0, dblRot:0, dblFlip:false, dblMask:0,
+  dblId:'', dblMode:'add', dblAmt:60, dblEv:0, dblScale:1, dblX:0, dblY:0, dblRot:0, dblFlip:false, dblMask:0, dblSmear:0, dblSmearAng:0, dblZoom:0, dblEchoes:1, dblEchoX:0.05, dblEchoY:0, dblEchoFade:40,
   dustOpacity:85, dustSize:100, dustSpread:'even', scratchDir:'vertical', leakAmt:0, leakColor:'warm', leakPos:1, leakSize:45, leakSeed:3,
   dustAmt:0, scratchAmt:0, hairAmt:0, dustSeed:7, dustKind:'scan',
   ttOn:false, ttPalette:'red-cyan', ttGhost:80, ttMono:85, ttDX:6, ttDY:-4, ttScale:100, ttBand:0, ttBandPos:45,
@@ -356,12 +356,14 @@ const Engine = {
     // Silver colour filter (a real filter in front of the lens: scales each channel's exposure)
     { const f = Engine.filterRGB(p.sFilterHue,p.silver?p.sFilterAmt/100:0); gl.uniform3f(u.uFilt,...f); gl.uniform1f(u.uSilverPre,p.silver?1:0); gl.uniform1fv(u.uSens,new Float32Array((p.silver&&p.sSens||[0,0,0,0,0,0]).map(v=>(v||0)/100))); }
     // double exposure: second photo added in exposure space, before the film
-    const s2 = p.dblId && this.dblSrc && this.dblSrc.id===p.dblId ? this.dblSrc : null;
+    const s2 = p.dblId==='__self' && s ? s : p.dblId && this.dblSrc && this.dblSrc.id===p.dblId ? this.dblSrc : null;
     gl.uniform1f(u.uDblOn, s2?1:0);
     if(s2){ gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,s2.tex); gl.uniform1i(u.uDbl,5);
       gl.uniformMatrix3fv(u.uDblM,true,new Float32Array(this.dblMatrix(p,ow/oh,s2.w/s2.h)));
       gl.uniform1i(u.uDblMode,{add:0,screen:1,lighten:2,multiply:3,silhouette:4,darken:5}[p.dblMode]||0);
       gl.uniform1f(u.uDblAmt,p.dblAmt/100); gl.uniform1f(u.uDblK,(s2.key?Math.min(16,Math.max(1/16,0.18*0.62/s2.key)):1)*Math.pow(2,p.dblEv||0)*Math.pow(2,p.ev));
+      { const sm=(p.dblSmear||0)/100*0.25, a=(p.dblSmearAng||0)*Math.PI/180, z=(p.dblZoom||0)/100*0.35, taps=(sm>0||Math.abs(z)>0)?10:1;
+        gl.uniform4f(u.uDblSm,Math.cos(a)*sm,-Math.sin(a)*sm,z,taps); gl.uniform4f(u.uDblEcho,p.dblEchoX??0.05,p.dblEchoY??0,Math.max(1,Math.min(6,Math.round(p.dblEchoes||1))),(p.dblEchoFade??40)/100); }
       gl.uniform1f(u.uDblEnc,s2.encoded?1:0); gl.uniform1f(u.uDblDisp,s2.dispRef?1:0); gl.uniform1f(u.uDblMask,(p.dblMask||0)/100); gl.uniform1f(u.uDblFlipY,s2.flipY?1:0); }
     else { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,this.borderTex); gl.uniform1i(u.uDbl,5); }
     gl.activeTexture(gl.TEXTURE0);
@@ -620,7 +622,7 @@ uniform vec3 uFilt; uniform float uSilverPre; uniform float uSens[6];
 float silverMono(vec3 c){ float m=dot(c,uFilt); float mx=max(c.r,max(c.g,c.b)), mn=min(c.r,min(c.g,c.b)); if(mx<=1e-6) return m; float sat=(mx-mn)/mx; if(sat<.02) return m;
   float d=mx-mn, h = mx==c.r ? mod((c.g-c.b)/d,6.) : mx==c.g ? (c.b-c.r)/d+2. : (c.r-c.g)/d+4.; float e=0.;
   for(int i=0;i<6;i++){ float dh=abs(h-float(i)); dh=min(dh,6.-dh); e+=uSens[i]*max(0.,1.-dh); }
-  return m*exp2(e*sat*1.6); } uniform sampler2D uDbl; uniform mat3 uDblM; uniform int uDblMode; uniform float uDblOn,uDblAmt,uDblK,uDblEnc,uDblDisp,uDblMask,uDblFlipY;
+  return m*exp2(e*sat*1.6); } uniform sampler2D uDbl; uniform mat3 uDblM; uniform int uDblMode; uniform float uDblOn,uDblAmt,uDblK,uDblEnc,uDblDisp,uDblMask,uDblFlipY; uniform vec4 uDblSm,uDblEcho;
 uniform float uTT; uniform vec3 uTTA,uTTB,uTTM; uniform vec4 uTTP;
 uniform float uLeakAmt,uLeakSize,uLeakSeed; uniform vec3 uLeakC1,uLeakC2; uniform vec2 uLeakP;
 uniform int uMType[4]; uniform vec4 uMA[4]; uniform vec4 uMB[4]; uniform vec4 uMC[4]; uniform mat3 uMWB[4]; uniform sampler2D uMTex[4];
@@ -637,6 +639,7 @@ float maskW(int i, vec2 s){
   return clamp(w*uMB[i].w,0.,1.);
 }
 vec3 dec(vec3 c){ return mix(c/12.92, pow((c+.055)/1.055,vec3(2.4)), step(.04045,c)); }
+vec3 dblTap(vec2 d){ if(d.x<0.||d.y<0.||d.x>1.||d.y>1.) return vec3(0.); vec3 c2=texture(uDbl,vec2(d.x,uDblFlipY>.5?1.-d.y:d.y)).rgb; return uDblEnc>.5?dec(max(c2,0.)):c2; }
 vec3 srcAt(vec2 s){
   if(s.x<0.||s.y<0.||s.x>1.||s.y>1.) return vec3(0.);
   vec3 c=texture(uSrc,vec2(s.x, uFlip>.5 ? 1.-s.y : s.y)).rgb;
@@ -669,7 +672,14 @@ void main(){
   vec2 fuv=vec2(u,vt);
   if(uDblOn>.5){
     vec2 d=(uDblM*vec3(fuv,1.)).xy; vec3 c2=vec3(0.);
-    if(d.x>=0.&&d.y>=0.&&d.x<=1.&&d.y<=1.){ c2=texture(uDbl,vec2(d.x,uDblFlipY>.5?1.-d.y:d.y)).rgb; if(uDblEnc>.5) c2=dec(max(c2,0.));
+    // ghosting: the second exposure can smear (camera moved while the shutter was open), zoom-pulse, and repeat as fading echoes
+    { float wsum=0.; int taps=int(uDblSm.w); int ne=int(uDblEcho.z);
+      for(int e=0;e<6;e++){ if(e>=ne) break; float we=pow(1.-uDblEcho.w,float(e)); vec2 eo=uDblEcho.xy*float(e);
+        vec2 de=(uDblM*vec3(fuv-eo,1.)).xy;
+        for(int t=0;t<12;t++){ if(t>=taps) break; float f=taps>1?float(t)/float(taps-1):0.; vec2 q=de+uDblSm.xy*f+(de-.5)*uDblSm.z*f;
+          float wt=we*(taps>1?(1.-f*.6):1.); c2+=dblTap(q)*wt; wsum+=wt; } }
+      c2/=max(wsum,1e-4); c2*=float(ne>1?min(2.,1.+.25*float(ne-1)):1.); }
+    if(dot(c2,vec3(1.))>0.){
       if(uDblDisp>.5){ float Y2=dot(c2,vec3(.2126,.7152,.0722)), y2=min(Y2,1.); c2*= (Y2<=1.? Y2/(1.-uHL*y2*y2) : Y2/(1.-uHL))/max(Y2,1e-6); }
       c2=uWB*c2*uDblK; if(uSilverPre>.5) c2=vec3(silverMono(c2)); }
     float a=uDblAmt; vec3 n1=c/(1.+c), n2=c2/(1.+c2);

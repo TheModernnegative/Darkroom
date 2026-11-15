@@ -124,12 +124,22 @@ const STUDIO_RECIPES = [
   ['Two-tone · Slit band', {ttOn:true,ttPalette:'red-cyan',ttGhost:90,ttMono:90,ttDX:-4,ttDY:-12,ttScale:104,ttBand:38,ttBandPos:48}],
   ['Two-tone · Pink / blue', {ttOn:true,ttPalette:'pink-blue',ttGhost:75,ttMono:70,ttDX:5,ttDY:3,ttScale:103,ttBand:0}],
   ['Two-tone · Purple / yellow drag', {ttOn:true,ttPalette:'purple-yellow',ttGhost:95,ttMono:80,ttDX:12,ttDY:0,ttScale:100,motionBlur:25,motionAngle:0}],
+  ['Ghost · Motion ghost', {dblId:'__self',dblMode:'screen',dblAmt:75,dblScale:1.05,dblX:0.06,dblSmear:55,dblSmearAng:0}],
+  ['Ghost · Rear-curtain drag', {dblId:'__self',dblMode:'add',dblAmt:75,dblEv:-0.6,dblSmear:65,dblSmearAng:0,contrast:15}],
+  ['Ghost · Zoom pulse', {dblId:'__self',dblMode:'add',dblAmt:50,dblScale:1.12,dblZoom:60}],
+  ['Ghost · Triple echo', {dblId:'__self',dblMode:'lighten',dblAmt:75,dblEchoes:3,dblEchoX:0.06,dblEchoY:0,dblEchoFade:40}],
+  ['Ghost · Vertical drag B&W', {dblId:'__self',dblMode:'screen',dblAmt:50,dblSmear:70,dblSmearAng:90,...SF('hp5'),sContrast:20}],
+  ['Ghost · Mirror twin', {dblId:'__self',dblMode:'lighten',dblAmt:70,dblFlip:true}],
+  ['Ghost · Dream bloom', {dblId:'__self',dblMode:'screen',dblAmt:60,dblScale:1.3,dblZoom:30,softEdges:30,glow:0.4,halation:1.2}],
+  ['Ghost · Stutter (5 echoes)', {dblId:'__self',dblMode:'lighten',dblAmt:80,dblEchoes:5,dblEchoX:0.025,dblEchoY:-0.01,dblEchoFade:30,dblSmear:15,...AM('16mm')}],
+  ['Ghost · Spirit photo', {dblId:'__self',dblMode:'screen',dblAmt:45,dblScale:1.6,dblX:0.12,dblY:-0.05,dblSmear:25,dblSmearAng:-70,...SF('ortho'),sTone:'sepia',sToneAmt:60,sVig:50,dustAmt:40,scratchAmt:20}],
+  ['Ghost · Neon double', {dblId:'__self',dblMode:'screen',dblAmt:65,dblX:-0.03,dblY:0.02,dblSmear:20,ttOn:true,ttPalette:'magenta-green',ttGhost:70,ttMono:60,ttDX:4,ttDY:0,ttScale:100}],
   ['Double · In-camera', {dblMode:'add',dblAmt:70}],
   ['Double · Silhouette', {dblMode:'silhouette',dblAmt:100,dblMask:0}],
   ['Double · Silver dream', {dblMode:'screen',dblAmt:80,...SF('hp5'),sSoft:25,sTone:'selenium',sToneAmt:40}],
 ];
 const STUDIO_KEYS = ['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','ttOn','ttPalette','ttGhost','ttMono','ttDX','ttDY','ttScale','ttBand','ttBandPos',
-  'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','leakAmt','leakColor','leakPos','leakSize','leakSeed',
+  'dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','dblSmear','dblSmearAng','dblZoom','dblEchoes','dblEchoX','dblEchoY','dblEchoFade','leakAmt','leakColor','leakPos','leakSize','leakSeed',
   'dustAmt','scratchAmt','hairAmt','dustSeed','dustKind','fx',...AN_KEYS,'flare','flareLen','flareGhost','flareColor','flareSens','zoomBlur','motionBlur','motionAngle','softEdges','tiltShift','tiltPos','tiltWidth','fringe','distort'].concat(SILVER_KEYS.filter(k=>!['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt'].includes(k)));
 
 const Studio = {
@@ -151,7 +161,7 @@ const Studio = {
     if(keepDbl&&(r.dblMode||r.dblId)){ o.dblId=keepDbl; Object.assign(o,keepPlace); }
     o.lookUndo={}; for(const k in r) if(!STUDIO_KEYS.includes(k)&&k!=='fx') o.lookUndo[k]=cloneParams(o[k]); if(r.fx){ r.fx=this.resolveFx(r.fx); if(r.border==='wetplate'&&r.fx.frame) delete r.border; } Object.assign(o,r);
     if(r.border==='wetplate'){ const t=this.assets('frame').find(a=>/tintype|wetplate|wet-plate/i.test(a.id+a.name)); if(t){ delete o.border; o.border=this.P().border; o.fx=Object.assign({},o.fx,{frame:{id:t.id,amt:100}}); } } if(r.border==='wetplate'&&!o.edgeText) o.edgeText='none'; return o; },
-  applyRecipe(r,name){ const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!Engine.p.dblId){ this._lastDbl=keep; Engine.setDouble(null); }
+  applyRecipe(r,name){ const keep=this.P().dblId; Object.assign(Engine.p,this.recipeParams(r)); if(keep&&!Engine.p.dblId){ this._lastDbl=keep; Engine.setDouble(null); } if(Engine.p.dblId&&Engine.p.dblId!=='__self'&&this.host.loadDouble) this.host.loadDouble();
     if(r.dblMode && !Engine.p.dblId) this.host.toast('Pick the second photo in Double Exposure'); this.host.changed(); this.host.commit(); UI.refresh(); this.refreshAssets();
     const dev=Object.keys(Engine.p.lookUndo||{}); const NM={contrast:'Contrast',saturation:'Saturation',vibrance:'Vibrance',falloff:'Vignette',grain:'Grain',grainSize:'Grain',border:'Frame',edgeText:'Frame',ev:'Exposure',highlights:'Highlights',shadows:'Shadows',temp:'White balance',tint:'White balance',halation:'Halation',glow:'Glow',stock:'Film',blacks:'Blacks',whites:'Whites'};
     this.host.toast('Applied '+name+(dev.length?' — also set in Develop: '+[...new Set(dev.map(k=>NM[k]||k))].join(', '):'')); this.host.openEdited&&this.host.openEdited(); },
@@ -210,7 +220,7 @@ const Studio = {
     }
     // ---------------------------------------------------------------- Double exposure
     if(want('sDouble')){
-    b=UI.panel(root,'sDouble','Double Exposure',false,()=>{ this.reset(['dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask']); Engine.setDouble(null); });
+    b=UI.panel(root,'sDouble','Double Exposure',false,()=>{ this.reset(['dblId','dblMode','dblAmt','dblEv','dblScale','dblX','dblY','dblRot','dblFlip','dblMask','dblSmear','dblSmearAng','dblZoom','dblEchoes','dblEchoX','dblEchoY','dblEchoFade']); Engine.setDouble(null); });
     if(H.doubleChooser) H.doubleChooser(b);
     this.sel(b,'dblMode','Blend',[['add','In-camera (add exposures)'],['screen','Screen'],['lighten','Lighten'],['darken','Darken'],['multiply','Multiply'],['silhouette','Silhouette (fill the brights)']]);
     this.S(b,'dblAmt','Amount',{min:0,max:100,step:1});
@@ -221,6 +231,12 @@ const Studio = {
     this.S(b,'dblRot','Rotate',{min:-180,max:180,step:0.5,fmt:x=>x.toFixed(1)+'°'});
     UI.check(b,'st_dflip','Flip second photo',()=>P().dblFlip,v=>{ P().dblFlip=v; H.changed(); H.commit(); });
     this.S(b,'dblMask','Silhouette threshold',{min:-60,max:60,step:1});
+    { const h=document.createElement('div'); h.className='ahead'; h.textContent='Ghosting'; b.appendChild(h); }
+    this.S(b,'dblSmear','Smear (camera moved)',{min:0,max:100,step:1}); this.S(b,'dblSmearAng','Smear direction',{min:-180,max:180,step:1,fmt:x=>Math.round(x)+'°'});
+    this.S(b,'dblZoom','Zoom smear',{min:-100,max:100,step:1});
+    this.S(b,'dblEchoes','Echoes',{min:1,max:6,step:1,fmt:x=>Math.round(x)===1?'Off':Math.round(x)+' copies'});
+    this.S(b,'dblEchoX','Echo spacing ←→',{min:-0.3,max:0.3,step:0.005,fmt:x=>(x*100).toFixed(0)}); this.S(b,'dblEchoY','Echo spacing ↑↓',{min:-0.3,max:0.3,step:0.005,fmt:x=>(x*100).toFixed(0)});
+    this.S(b,'dblEchoFade','Echo fade',{min:0,max:90,step:1});
     UI.note(b,'In-camera adds the two exposures before the film, exactly like shooting twice on one frame.');
     }
     // ---------------------------------------------------------------- Light leaks

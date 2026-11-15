@@ -163,11 +163,25 @@ const App = {
   buildPresets(){
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
       this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
-    $('#presetSearch').addEventListener('input',e=>UI.filterPresets(e.target.value));
+    $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
+    { const el=$('#presetList'), btn=$('#stockGrid'); const set=on=>{ el.classList.toggle('gridmode',on); btn.classList.toggle('on',on); try{ localStorage.stockGrid=on?'1':''; }catch(e){} if(on) this.stockThumbsSoon(true); };
+      btn.onclick=e=>{ e.stopPropagation(); set(!el.classList.contains('gridmode')); }; let v=''; try{ v=localStorage.stockGrid; }catch(e){} set(v==='1');
+      el.closest('.side').addEventListener('scroll',()=>this.stockThumbsSoon(),{passive:true}); }
     $('#presetSearch').addEventListener('click',e=>e.stopPropagation());
     $('#presetSearch').addEventListener('keydown',e=>e.stopPropagation());
   },
 
+  // ---- film stock previews: each visible film rendered on the current photo, a few at a time
+  stockThumbsSoon(force){ if(force) this._stKey=null; clearTimeout(this._stt); this._stt=setTimeout(()=>this.stockThumbs(),300); },
+  async stockThumbs(){ const el=$('#presetList'); if(!el||!el.classList.contains('gridmode')||!this.cur||!Engine.src||this.module==='scan') return;
+    const q=cloneParams(Engine.p); ['stock','paper','filmAmt','grain','grainSize','halation','falloff'].forEach(k=>delete q[k]); const key=this.cur.id+JSON.stringify(q);
+    if(key!==this._stKey){ this._stKey=key; this._stDone=new Set(); }
+    const job=this._stJob=(this._stJob||0)+1, vh=innerHeight;
+    const tiles=[...el.querySelectorAll('.preset')].filter(t=>t.offsetParent&&!this._stDone.has(t.dataset.id)&&(()=>{ const r=t.getBoundingClientRect(); return r.bottom>-200&&r.top<vh+400; })());
+    for(const t of tiles){ if(job!==this._stJob) return; const id=t.dataset.id;
+      try{ const p=Tools.stockParams(Engine.p,id,false); await Engine.ensureLuts(p); if(job!==this._stJob) return; const u=this.renderThumb(p,180); if(u){ t.querySelector('.pthumb').style.backgroundImage=`url(${u})`; this._stDone.add(id); } }catch(e){}
+      await new Promise(r=>setTimeout(r,16)); }
+    Engine.dirty=true; },
   // ---- hover preview (stocks and user presets): main view, histogram and navigator all show it
   async hover(params){
     Engine.hoverParams=params||null;
@@ -214,11 +228,18 @@ const App = {
   // ---- Studio: second photo for double exposure (any other photo in the library)
   doubleChooser(b){ this._dblEl=document.createElement('div'); this._dblEl.className='dblPick'; b.appendChild(this._dblEl); this.renderDoubleChooser(); },
   renderDoubleChooser(){ const el=this._dblEl; if(!el) return; el.innerHTML='';
-    const others=this.items.filter(i=>i!==this.cur); if(!others.length){ el.innerHTML='<div class="note" style="grid-column:1/-1">Import a second photo to blend it in.</div>'; return; }
+    const others=this.items.filter(i=>i!==this.cur);
+    // "this photo": a ghost of the same frame — smear it, echo it, zoom it
+    { const g=document.createElement('div'); g.className='selfDbl'+(Engine.p.dblId==='__self'?' on':''); g.textContent='This photo (ghost)'; g.title='Use the same photo as a second exposure — smear, echo and offset it';
+      g.onclick=async()=>{ if(Engine.p.dblId==='__self'){ Engine.p.dblId=''; Engine.setDouble(null); } else { Engine.p.dblId='__self'; if((Engine.p.dblSmear||0)===0&&(Engine.p.dblEchoes||1)===1&&!Engine.p.dblX){ Engine.p.dblSmear=35; Engine.p.dblMode='screen'; Engine.p.dblAmt=55; } await this.loadDouble(); } this.changed(); this.commit(); UI.refresh(); this.renderDoubleChooser(); };
+      el.appendChild(g); }
+    if(!others.length){ const n=document.createElement('div'); n.className='note'; n.style.gridColumn='1/-1'; n.textContent='Import another photo to blend two different pictures.'; el.appendChild(n); return; }
     others.forEach(it=>{ const im=document.createElement('img'); if(it.thumb) im.src=it.thumb; im.title=it.name; if(Engine.p.dblId===it.id) im.className='on';
       im.onclick=async()=>{ if(Engine.p.dblId===it.id){ Engine.p.dblId=''; Engine.setDouble(null); } else { Engine.p.dblId=it.id; await this.loadDouble(); } this.changed(); this.commit(); this.renderDoubleChooser(); };
       el.appendChild(im); }); },
-  async loadDouble(){ const id=Engine.p.dblId; if(!id){ Engine.setDouble(null); return; } if(Engine.dblSrc&&Engine.dblSrc.id===id) return;
+  async loadDouble(){ const id=Engine.p.dblId; if(!id){ Engine.setDouble(null); return; }
+    if(id==='__self'){ if(Engine.src) Engine.setDouble(Object.assign({},Engine.src,{own:false}),'__self'); return; }
+    if(Engine.dblSrc&&Engine.dblSrc.id===id) return;
     const it=this.items.find(i=>i.id===id); if(!it){ Engine.setDouble(null); return; }
     try{ const src=it.src&&it!==this.cur ? Object.assign({},it.src) : await this.decode(it,3072); if(!it.src) src.own=true; Engine.setDouble(src,id); }catch(e){ this.toast('Could not open the second photo'); } },
   // ---- versions: named snapshots of this photo's edit, comparable side by side
@@ -1014,7 +1035,7 @@ const App = {
       if(this.module==='scan'){
         if(!Splat.scene){ if(Engine.dirty){ Engine.dirty=false; const keep=Engine.src; Engine.src=null; Engine.render({}); Engine.src=keep; UI.drawHisto($('#histo'),null); $('#status').textContent=''; } }
         else if(Engine.dirty){ Engine.dirty=false; const [w,h]=this.scanLayoutSize(); Splat.maybeSort();
-          const src=this.renderScanSource(w,h); Engine.src=src; Engine.view={mode:'fit'};
+          const src=this.renderScanSource(w,h); Engine.src=src; Engine.view={mode:'fit'}; if(Engine.p.dblId==='__self') Engine.dblSrc=Object.assign({},src,{id:'__self',own:false});
           const p=this.scanParams(Engine.hoverParams||Engine.p);
           const L=Engine.layout(p); this._lastL=L;
           Engine.render({params:p,layout:L,borderTex:this.borderFor(L,p)}); this.scanThumb(); this.histo(); this.status(); }
@@ -1025,6 +1046,7 @@ const App = {
         if(this.compare && Engine.src && !Engine.cropMode){ const Ls=Engine.renderSplit(this.compare.settings,p,(L2,p2)=>this.borderFor(L2,p2)); document.body.classList.toggle('splitV',!!Engine.splitVertical); this._lastL=Object.assign({},Ls[1],{W:L.W,H:L.H}); }
         else Engine.render({params:p,borderTex:this.borderFor(L,p)});
         Tools.overlay(); this.placeBox(); this.histo(); this.status(); this.navPreview(p);
+        if(this.module==='develop'&&this.cur&&$('#presetList').classList.contains('gridmode')) this.stockThumbsSoon();
         if(this.module==='studio'&&this.cur){ clearTimeout(this._rt); this._rt=setTimeout(()=>{ const q=cloneParams(Engine.p); STUDIO_KEYS.forEach(k=>delete q[k]); Studio.refreshRecipeThumbs(this.cur.id+JSON.stringify(q)+Object.values(Engine.assetTexs).filter(t=>t.ready).length); },500); }
       }
     }catch(e){ console.error(e); }

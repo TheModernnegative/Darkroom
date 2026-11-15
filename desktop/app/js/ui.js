@@ -63,7 +63,7 @@ const UI = {
       groups[g].forEach(s=>{
         const it=document.createElement('div'); it.className='preset'; it.dataset.id=s.id; it.title=s.desc;
         const nm = s.maker==='CineStill' ? 'CineStill '+s.name : s.name; const mk = (s.maker==='Kodak'||s.maker==='CineStill'||(s.maker==='Fujifilm'&&g==='Fujifilm')) ? '' : s.maker;
-        it.innerHTML=`<span>${nm}</span><span class="mk">${mk}</span><span class="iso">${s.iso||""}</span>`;
+        it.innerHTML=`<i class="pthumb"></i><span>${nm}</span><span class="mk">${mk}</span><span class="iso">${s.iso||""}</span>`;
         it.onclick=()=>onPick(s.id); it.onmouseenter=()=>onHover(s.id); it.onmouseleave=()=>onHover(null);
         items.appendChild(it); });
       el.appendChild(G);
