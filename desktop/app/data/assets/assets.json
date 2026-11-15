@@ -512,16 +512,6 @@
    "h": 2000
   },
   {
-   "id": "frame_06",
-   "cat": "frame",
-   "name": "Peel-Apart Negative",
-   "file": "frame/frame_06.png",
-   "thumb": "frame/frame_06_t.webp",
-   "blend": "normal",
-   "w": 3000,
-   "h": 2000
-  },
-  {
    "id": "frame_07",
    "cat": "frame",
    "name": "Emulsion Lift",
@@ -607,6 +597,86 @@
    "name": "Image Transfer",
    "file": "frame/frame_15.png",
    "thumb": "frame/frame_15_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_fp100c",
+   "cat": "frame",
+   "name": "Peel-Apart Colour Print",
+   "file": "frame/frame_peel_fp100c.png",
+   "thumb": "frame/frame_peel_fp100c_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_fp100c_2",
+   "cat": "frame",
+   "name": "Peel-Apart Colour Print II",
+   "file": "frame/frame_peel_fp100c_2.png",
+   "thumb": "frame/frame_peel_fp100c_2_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_665neg",
+   "cat": "frame",
+   "name": "Sheet Negative Border",
+   "file": "frame/frame_peel_665neg.png",
+   "thumb": "frame/frame_peel_665neg_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_665neg_2",
+   "cat": "frame",
+   "name": "Sheet Negative Border II",
+   "file": "frame/frame_peel_665neg_2.png",
+   "thumb": "frame/frame_peel_665neg_2_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_fp3000b",
+   "cat": "frame",
+   "name": "Peel-Apart Mono Print",
+   "file": "frame/frame_peel_fp3000b.png",
+   "thumb": "frame/frame_peel_fp3000b_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_fp3000b_2",
+   "cat": "frame",
+   "name": "Peel-Apart Mono Print II",
+   "file": "frame/frame_peel_fp3000b_2.png",
+   "thumb": "frame/frame_peel_fp3000b_2_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_neg_scan",
+   "cat": "frame",
+   "name": "Reclaimed Negative",
+   "file": "frame/frame_peel_neg_scan.png",
+   "thumb": "frame/frame_peel_neg_scan_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "frame_peel_neg_scan_2",
+   "cat": "frame",
+   "name": "Reclaimed Negative II",
+   "file": "frame/frame_peel_neg_scan_2.png",
+   "thumb": "frame/frame_peel_neg_scan_2_t.webp",
    "blend": "normal",
    "w": 3000,
    "h": 2000
@@ -747,6 +817,66 @@
    "name": "Neglected Negative",
    "file": "dust/dust_10.png",
    "thumb": "dust/dust_10_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "dust_11",
+   "cat": "dust",
+   "name": "Fine Film Dust",
+   "file": "dust/dust_11.png",
+   "thumb": "dust/dust_11_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "dust_12",
+   "cat": "dust",
+   "name": "Tramline Scratches",
+   "file": "dust/dust_12.png",
+   "thumb": "dust/dust_12_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "dust_13",
+   "cat": "dust",
+   "name": "Carrier Lint",
+   "file": "dust/dust_13.png",
+   "thumb": "dust/dust_13_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "dust_14",
+   "cat": "dust",
+   "name": "Heavy Hair",
+   "file": "dust/dust_14.png",
+   "thumb": "dust/dust_14_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "dust_15",
+   "cat": "dust",
+   "name": "Water Spots",
+   "file": "dust/dust_15.png",
+   "thumb": "dust/dust_15_t.webp",
+   "blend": "normal",
+   "w": 3000,
+   "h": 2000
+  },
+  {
+   "id": "dust_16",
+   "cat": "dust",
+   "name": "Mixed Debris",
+   "file": "dust/dust_16.png",
+   "thumb": "dust/dust_16_t.webp",
    "blend": "normal",
    "w": 3000,
    "h": 2000
