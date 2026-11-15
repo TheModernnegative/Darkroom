@@ -473,6 +473,10 @@ const App = {
   },
   // ---- reset / duplicate (virtual copies share the original file)
   isEdited(set){ const d=withDefaults({}); return Object.keys(d).some(k=>k!=='off'&&JSON.stringify(set[k])!==JSON.stringify(d[k])); },
+  // save the whole current look (film + Develop + Studio, not crop) as a user preset
+  async saveLookPreset(){ const st=Engine.stock(Engine.p.stock); const name=await this.ask('Name this look',(st&&st.id!=='original'?st.name+' · ':'')+'my look'); if(!name) return false;
+    const o=cloneParams(Engine.p); ['crop','angle','rot','flip','aspect','masks','lookUndo'].forEach(k=>delete o[k]);
+    this.userPresets.push({id:'p'+Date.now().toString(36),name,settings:o,t:Date.now()}); this.renderUserPresets(); this.saveSoon(); this.toast('Saved look “'+name+'” — it’s in Presets'); return true; },
   async resetPhoto(keepVersion){ const it=this.cur; if(!it) return;
     if(!this.isEdited(Engine.p)){ this.toast('Already the original'); return; }
     if(keepVersion){ this.saveVersion(); }
@@ -496,9 +500,19 @@ const App = {
       b.onclick=e=>{ e.stopPropagation(); this.toggleStack(it); }; t.appendChild(b); if(!k.open) t.classList.add('stkShut'); } },
   photoMenuReset(x0,y0){ const m=$('#ctxMenu'); m.innerHTML='';
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
-    item('Reset to original',()=>this.resetPhoto(false),'⇧⌘R'); item('Save as version, then reset',()=>this.resetPhoto(true));
-    m.appendChild(document.createElement('hr'));
-    item('Duplicate with this edit',()=>this.duplicate(this.cur,false),'⌘D'); item('Duplicate as original',()=>this.duplicate(this.cur,true),'⇧⌘D');
+    const hr=()=>m.appendChild(document.createElement('hr'));
+    if(this.module==='scan'){
+      item('Reset look to original',()=>this.resetScan(false),'⇧⌘R'); item('Reset look and camera',()=>this.resetScan(true));
+      hr(); item('Save as scan look…',()=>this.saveCamPreset()); item('Save as scan look, then reset…',async()=>{ if(await this.saveCamPreset()!==false) this.resetScan(false); });
+    } else if(this.module==='studio'){
+      item('Reset Studio effects',()=>{ Studio.resetAll(); this.toast('Studio effects cleared — ⌘Z to undo'); }); item('Reset everything to original',()=>this.resetPhoto(false),'⇧⌘R');
+      hr(); item('Save as version, then reset',()=>this.resetPhoto(true)); item('Save as look (preset)…',()=>this.saveLookPreset()); item('Save as look, then reset…',async()=>{ if(await this.saveLookPreset()) this.resetPhoto(false); });
+      hr(); item('Duplicate with this edit',()=>this.duplicate(this.cur,false),'⌘D'); item('Duplicate as original',()=>this.duplicate(this.cur,true),'⇧⌘D');
+    } else {
+      item('Reset to original',()=>this.resetPhoto(false),'⇧⌘R'); item('Save as version, then reset',()=>this.resetPhoto(true));
+      item('Save as look (preset)…',()=>this.saveLookPreset()); item('Save as look, then reset…',async()=>{ if(await this.saveLookPreset()) this.resetPhoto(false); });
+      hr(); item('Duplicate with this edit',()=>this.duplicate(this.cur,false),'⌘D'); item('Duplicate as original',()=>this.duplicate(this.cur,true),'⇧⌘D');
+    }
     m.style.left=Math.min(innerWidth-230,x0)+'px'; m.classList.add('on'); m.style.top=Math.max(8,y0-m.offsetHeight-4)+'px';
     setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
   photoMenu(it,x0,y0){
@@ -755,7 +769,7 @@ const App = {
       el.appendChild(r); }); },
   async applyScanLook(x){ if(x.cam) this.applyCam(x.cam); if(x.look) await this.applySettings(cloneParams(x.look)); this.commit(); this.toast('Loaded “'+x.name+'”'); },
   async resetScan(all){ if(all&&this.camDefaults) this.applyCam(this.camDefaults); await this.applySettings(withDefaults({})); this.commit(); this.toast(all?'Camera and look back to the original — History has every step':'Look back to the original — History has every step'); },
-  async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this scan look (camera + lens + film + Studio)',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return;
+  async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this scan look (camera + lens + film + Studio)',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return false;
     this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap(),look:cloneParams(Engine.p)}; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
     this.saveSoon(); this.buildScanPanels(); this.renderScanLooks(); this.toast('Saved scan look “'+name+'”'); },
   async deleteCamPreset(){ const L=this.scanPresets||[]; if(!L.length){ this.toast('No camera presets yet'); return; }
@@ -1080,7 +1094,7 @@ const App = {
     if(meta&&k.toLowerCase()==='a'&&this.module!=='scan'){ e.preventDefault(); this.items.forEach(x=>x.sel=true); this.renderStrip(); this.renderGrid(); this.updateSync(); this.toast(this.items.length+' photos selected'); return; }
     if(meta&&k.toLowerCase()==='g'&&this.module!=='scan'){ e.preventDefault(); if(e.shiftKey){ if(this.cur) this.unstack(this.cur); } else this.stackSelected(); return; }
     if(meta&&k.toLowerCase()==='d'&&this.cur&&this.module!=='scan'){ e.preventDefault(); this.duplicate(this.cur,e.shiftKey); return; }
-    if(meta&&e.shiftKey&&k.toLowerCase()==='r'&&this.cur){ e.preventDefault(); this.resetPhoto(false); return; }
+    if(meta&&e.shiftKey&&k.toLowerCase()==='r'&&this.cur){ e.preventDefault(); if(this.module==='scan') this.resetScan(false); else this.resetPhoto(false); return; }
     if(meta&&k==="'"){ e.preventDefault(); this.saveVersion(); return; }
     if(meta&&k.toLowerCase()==='e'){ e.preventDefault(); this.exportDialog(); return; }
     if(meta&&k.toLowerCase()==='o'){ e.preventDefault(); this.importDialog(); return; }

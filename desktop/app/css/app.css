@@ -345,3 +345,11 @@ button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;w
 .hrow.on{background:#2b3140;color:#fff;cursor:default}
 .hrow .ht{color:#777;min-width:52px;font-variant-numeric:tabular-nums}
 .hrow .hl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* sliders moved away from their default glow orange */
+.sl.changed label,.sl.changed .val{color:#ff9a3c}
+.sl.changed input[type=range]::-webkit-slider-thumb{border-bottom-color:#ff8a1f}
+.sl.changed input[type=range]{--fillc:#ff8a1f}
+.seg button.on.moved{color:#ff9a3c}
+#toolbar .ibtn{white-space:nowrap;flex-shrink:0}
+#toolbar .tgroup{min-width:0}
+#toolbar .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
