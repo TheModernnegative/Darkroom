@@ -57,6 +57,17 @@
         <h3><i></i>Film Stocks<input id="presetSearch" placeholder="Search" spellcheck="false"></h3>
         <div class="body" id="presetList"></div>
       </section>
+      <!-- history of the current photo / scan look -->
+      <section class="panel mod-develop mod-studio mod-scan" id="pHistory">
+        <h3><i></i>History<span class="hbtns"><button class="hbtn" id="histOrig" title="Back to the original (keeps this history)">Original</button></span></h3>
+        <div class="body"><div id="histList"></div></div>
+      </section>
+      <!-- scan: saved looks (camera + film + Studio) -->
+      <section class="panel open mod-scan" id="pScanLooks">
+        <h3><i></i>Scan Looks<span class="hbtns"><button class="hbtn" id="scanLookAdd" title="Save the camera, lens and look as a scan look">+</button></span></h3>
+        <div class="body"><div id="scanLookList"></div>
+          <div class="btnrow"><button class="tbtn" id="scanResetLook">Reset look</button><button class="tbtn" id="scanResetAll">Reset everything</button></div></div>
+      </section>
       <!-- scan: camera -->
       <section class="panel open mod-scan" id="pScanSource">
         <h3><i></i>Scan</h3>

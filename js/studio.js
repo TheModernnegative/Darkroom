@@ -27,7 +27,7 @@ const SENS_BANDS=[['Red','#e33'],['Yellow','#ec3'],['Green','#3c4'],['Cyan','#3c
 const SILVER_KEYS=['silver','sFilterHue','sFilterAmt','structure','sBurn','sBurnSize','sTone','sToneAmt','sBright','sBrightHi','sBrightSh','sContrast','sAmpW','sAmpB','sSoft','sStructHi','sStructMid','sStructSh','sFine','sSens','sFilmType','sVig','sVigSize','sVigX','sVigY','sBurnT','sBurnB','sBurnL','sBurnR','sToneBal'];
 // Analog media: each is a full signal / display / gate recipe; extras touch grain & co. for the cine gauges
 const AN_KEYS=['anOn','anMedium','anRes','anLines','anChroma','anShift','anBleed','anSharp','anGhost','anGhostOff','anNoise','anCNoise','anSnow','anTrack','anTrackPos','anHead','anDrop','anJitter','anInterlace','anSat','anHue','anTint',
-  'anScan','anScanN','anMask','anMaskAmt','anCurve','anBloom','anVig','anCorner','anGate','anOverscan','anGateSoft','anWeave','anFlicker','anOSD','anOSDText'];
+  'anBlock','anScan','anScanN','anMask','anMaskAmt','anCurve','anBloom','anVig','anCorner','anGate','anOverscan','anGateSoft','anWeave','anFlicker','anOSD','anOSDText'];
 const ANALOG_MEDIA=[
   ['vhs','VHS · SP','Consumer tape at standard play: soft luma, smeared colour that bleeds right, sharpening halos, head-switching noise at the bottom, the PLAY overlay.',
     {anRes:45,anChroma:65,anShift:2,anBleed:40,anSharp:35,anNoise:15,anCNoise:30,anTrack:8,anTrackPos:80,anHead:55,anDrop:12,anJitter:12,anSat:-12,anOSD:'vhs'}],
@@ -48,6 +48,10 @@ const ANALOG_MEDIA=[
     {anRes:40,anGhost:45,anGhostOff:70,anNoise:45,anSnow:55,anCNoise:40,anJitter:25,anSat:-35,anScan:40,anScanN:480,anCurve:30,anVig:35,anCorner:40}],
   ['cctv','CCTV security','Monochrome surveillance: interlaced, noisy, timestamp burned in.',{anRes:40,anTint:'mono',anNoise:28,anInterlace:45,anJitter:10,anSharp:30,anOSD:'cctv'}],
   ['nightvision','Camcorder night vision','Infrared NightShot: green, grainy, blooming highlights.',{anTint:'green',anRes:35,anNoise:45,anBloom:35,anVig:60,anSharp:20,anOSD:'rec'}],
+  ['ccd','Early CCD digicam (2004)','3-megapixel point-and-shoot: crunchy sharpening, JPEG blocks, clipped highlights, purple fringing, the yellow date stamp.',
+    {anRes:8,anSharp:55,anCNoise:18,anNoise:6,anBlock:30,anSat:14,anOSD:'digicam'},{fringe:35,whites:20,highlights:15,contrast:15}],
+  ['flipphone','Flip-phone camera (2006)','VGA phone camera: soft, blocky, noisy, over-saturated.',{anRes:40,anChroma:45,anNoise:25,anCNoise:45,anBlock:65,anSat:25,anSharp:20},{fringe:20,whites:25,contrast:20}],
+  ['dvd','Over-compressed video','Early web / DVD rip: macro-blocking and colour banding.',{anRes:20,anChroma:40,anBlock:80,anSat:-5}],
   ['webcam','2008 webcam','Tiny sensor, heavy compression smear and colour noise.',{anRes:45,anChroma:55,anNoise:35,anCNoise:40,anSharp:30,anSat:-10}],
   ['super8','Super 8','Home-movie gauge: rounded gate, gate weave, flicker, coarse grain and glow.',
     {anGate:'super8',anGateSoft:45,anWeave:35,anFlicker:30},{grain:1.8,grainSize:1.6,halation:1.2,falloff:0.8,softEdges:20,saturation:12}],
@@ -105,6 +109,7 @@ const STUDIO_RECIPES = [
   ['Media · Bad reception', AM('offair')], ['Media · CCTV', AM('cctv')], ['Media · Night vision', AM('nightvision')], ['Media · 2008 webcam', AM('webcam')],
   ['Media · Super 8', {...AM('super8'),gShH:30,gShS:15,gHiH:45,gHiS:20}], ['Media · Super 8 scan', {...AM('super8scan'),gHiH:45,gHiS:20}], ['Media · Standard 8mm', AM('8mm')],
   ['Media · 16mm', AM('16mm')], ['Media · 16mm B&W scan', {...AM('16mmscan'),...SF('trix')}], ['Media · Super 16', AM('super16')], ['Media · 35mm print', AM('35cine')],
+  ['Media · CCD digicam 2004', AM('ccd')], ['Media · Flip phone 2006', AM('flipphone')], ['Media · Over-compressed', AM('dvd')],
   ['Media · Date-back point & shoot', {...AM('dateback'),contrast:10,saturation:10,falloff:0.5}],
   ['Cinema · Anamorphic night', {flare:70,flareColor:'blue',flareLen:75,flareGhost:40,flareSens:60,contrast:10,gShH:215,gShS:20,halation:1.2}],
   ['Cinema · Golden flare', {flare:60,flareColor:'amber',flareLen:55,flareGhost:55,flareSens:45,gHiH:40,gHiS:25,glow:0.2}],
@@ -274,7 +279,7 @@ const Studio = {
     A('anBleed','Colour bleed'); A('anSharp','Edge halos'); A('anGhost','Ghost / echo'); A('anGhostOff','Ghost distance',{min:0,max:100});
     A('anNoise','Luma noise'); A('anCNoise','Colour noise'); A('anSnow','Snow / static'); A('anDrop','Dropouts');
     A('anTrack','Tracking error'); A('anTrackPos','Tracking position'); A('anHead','Head-switching noise'); A('anJitter','Line jitter'); A('anInterlace','Interlace combing');
-    A('anSat','Saturation',{min:-100,max:100}); A('anHue','Hue drift',{min:-30,max:30,fmt:x=>Math.round(x)+'°'});
+    A('anBlock','Compression blocks'); A('anSat','Saturation',{min:-100,max:100}); A('anHue','Hue drift',{min:-30,max:30,fmt:x=>Math.round(x)+'°'});
     AS('anTint','Monochrome',[['none','Colour'],['mono','Black & white'],['blue','Blue-white phosphor'],['green','Green (night vision / P1)'],['amber','Amber monitor']]);
     sub('Screen');
     A('anScan','Scanlines'); A('anScanN','Scanline count',{min:120,max:1080,step:1,fmt:x=>Math.round(x)});
@@ -284,7 +289,7 @@ const Studio = {
     AS('anGate','Gauge',[['none','None'],['super8','Super 8'],['8mm','Standard 8mm'],['16mm','16mm'],['super16','Super 16'],['35cine','35mm cinema']]);
     A('anOverscan','Overscan (show perforations)'); A('anGateSoft','Gate softness'); A('anWeave','Gate weave'); A('anFlicker','Exposure flicker');
     sub('On-screen display');
-    AS('anOSD','Overlay',[['none','None'],['vhs','VCR · PLAY + date'],['pause','VCR · PAUSE'],['rec','Camcorder · REC + battery + date'],['cctv','CCTV · camera + timestamp'],['filmdate','Film date-back (orange LED)']]);
+    AS('anOSD','Overlay',[['none','None'],['vhs','VCR · PLAY + date'],['pause','VCR · PAUSE'],['rec','Camcorder · REC + battery + date'],['cctv','CCTV · camera + timestamp'],['filmdate','Film date-back (orange LED)'],['digicam','Digicam date stamp (yellow)']]);
     { const d=document.createElement('div'); d.className='sl'; d.innerHTML='<label>Custom text</label><input class="txt" placeholder="date / camera name" spellcheck="false">'; b.appendChild(d);
       const i=d.querySelector('input'); i.style.cssText='grid-column:2/4;background:#1c1c1c;border:1px solid #333;color:#ddd;border-radius:3px;padding:3px 6px;font:12px var(--sans)';
       i.value=P().anOSDText||''; i.addEventListener('keydown',e=>e.stopPropagation()); i.addEventListener('input',()=>{ P().anOSDText=i.value; P().anOn=true; H.changed(); }); i.addEventListener('change',()=>H.commit());

@@ -103,7 +103,7 @@ const App = {
     root.insertBefore($('#pGrain'),$('#pFilm').nextSibling);
   },
 
-  buildScanPanels(){
+  buildScanPanels(){ setTimeout(()=>this.renderScanLooks(),0);
     const c=Splat.cam, d=()=>{ Engine.dirty=true; };
     let b=$('#scanSourceBody'); b.innerHTML='';
     const row=document.createElement('div'); row.className='btnrow'; b.appendChild(row);
@@ -127,9 +127,9 @@ const App = {
     UI.button(vr,'Export orbit video…',()=>this.orbitDialog(),'tbtn accent');
     b=$('#cameraBody'); b.innerHTML='';
     { if(!this.camDefaults) this.camDefaults=this.camSnap();
-      UI.select(b,'camPreset','Presets',()=>[['','Choose a saved camera…']].concat((this.scanPresets||[]).map((x,i)=>[String(i),x.name])),()=>'',v=>{ if(v==='') return; this.applyCam(this.scanPresets[+v].cam); this.toast('Loaded '+this.scanPresets[+v].name); });
+      UI.select(b,'camPreset','Presets',()=>[['','Choose a saved scan look…']].concat((this.scanPresets||[]).map((x,i)=>[String(i),x.name])),()=>'',v=>{ if(v==='') return; this.applyScanLook(this.scanPresets[+v]); });
       const r=document.createElement('div'); r.className='btnrow'; b.appendChild(r);
-      UI.button(r,'Save preset…',()=>this.saveCamPreset()); UI.button(r,'Delete…',()=>this.deleteCamPreset()); UI.button(r,'Reset camera',()=>{ this.applyCam(this.camDefaults); this.toast('Camera reset to defaults'); }); }
+      UI.button(r,'Save look…',()=>this.saveCamPreset()); UI.button(r,'Delete…',()=>this.deleteCamPreset()); UI.button(r,'Reset camera',()=>{ this.applyCam(this.camDefaults); this.toast('Camera reset to defaults'); }); }
     UI.select(b,'lens','Lens',()=>[['','Custom']].concat(LENSES.map(l=>[l.id,l.name])),()=>c.lens||'',v=>this.setLens(v));
     UI.note(b,'','lensNote'); this.lensNote();
     UI.seg(b,'cfmt','Format',Object.keys(SCAN_FORMATS).map(k=>[k,k.replace('x','×')]),()=>c.format,v=>{ c.format=v; c.fmm=SCAN_FORMATS[v].f; UI.refresh(); d(); });
@@ -327,11 +327,30 @@ const App = {
   openEdited(){ this.dots(); for(const id in this.STUDIO_OWN){ const el=document.getElementById(id); if(el) el.classList.toggle('open',this.studioEdited(id)); }
     const first=Object.keys(this.STUDIO_OWN).map(id=>document.getElementById(id)).find(el=>el&&el.classList.contains('open')); if(first) first.scrollIntoView({block:'start',behavior:'smooth'}); },
   changed(){ Engine.dirty=true; Engine.histDirty=true; clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),120); if(this.cur){ this.cur.settings=Engine.p; this.thumbSoon(); this.saveSoon(); } },
-  commit(){ const it=this.cur; if(!it) return; const snap=JSON.stringify(Engine.p);
-    it.hist=it.hist||[]; it.fut=[]; if(it.hist[it.hist.length-1]!==snap) it.hist.push(snap); if(it.hist.length>200) it.hist.shift(); },
+  commit(){ const it=this.cur; if(!it) return; const snap=JSON.stringify(it.kind==='scanlook'&&Splat.scene?Object.assign({},Engine.p,{__cam:this.camSnap()}):Engine.p);
+    it.hist=it.hist||[]; it.histT=it.histT||[]; it.fut=[]; if(it.hist[it.hist.length-1]!==snap){ it.hist.push(snap); it.histT.push(Date.now()); }
+    while(it.hist.length>200){ it.hist.shift(); it.histT.shift(); } while(it.histT.length<it.hist.length) it.histT.unshift(0); this.renderHistorySoon(); },
+  // ---- history log: every committed step, newest first; click one to go back to it (that becomes a new step)
+  HNAMES:{stock:'Film',paper:'Paper',filmAmt:'Film strength',format:'Format',ev:'Exposure',contrast:'Contrast',highlights:'Highlights',shadows:'Shadows',whites:'Whites',blacks:'Blacks',temp:'White balance',tint:'White balance',
+    vibrance:'Vibrance',saturation:'Saturation',grain:'Grain',grainSize:'Grain size',halation:'Halation',glow:'Glow',falloff:'Vignette',crop:'Crop',angle:'Straighten',curve:'Tone curve',hsl:'Colour mixer',border:'Frame',
+    showFrame:'Frame',silver:'Black & white',structure:'Structure',sTone:'Toning',fx:'Overlays',flare:'Lens flare',anOn:'Analog media',ttOn:'Two-tone',dblId:'Double exposure',masks:'Masks',sharpen:'Sharpening',nr:'Noise reduction',push:'Push/pull',
+    leakAmt:'Light leak',dustAmt:'Dust',scratchAmt:'Scratches',softEdges:'Soft edges',fringe:'Fringing',distort:'Distortion',zoomBlur:'Zoom blur',motionBlur:'Motion blur',tiltShift:'Tilt-shift'},
+  histLabel(a,b){ if(!a) return 'Opened'; const A=JSON.parse(a), B=JSON.parse(b), out=new Set();
+    for(const k in B){ if(k==='__cam'||k==='lookUndo') continue; if(JSON.stringify(A[k])!==JSON.stringify(B[k])){ const n=this.HNAMES[k]||(/^g(Sh|Mid|Hi)/.test(k)?'Colour grading':/^s[A-Z]/.test(k)?'Silver':/^an[A-Z]/.test(k)?'Analog media':/^tt/.test(k)?'Two-tone':/^dbl/.test(k)?'Double exposure':/^leak/.test(k)?'Light leak':/^dust|^hair/.test(k)?'Dust':/^flare/.test(k)?'Lens flare':k); out.add(n); } }
+    if(A.__cam&&B.__cam){ const C={lens:'Lens',stop:'Aperture',focus:'Focus',fmm:'Focal length',format:'Camera format',portrait:'Orientation',tilt:'Tilt',post:'Lens character',swirl:'Swirl',catEye:'Cat\'s-eye',anam:'Anamorphic',bg:'Backdrop',dof:'Depth of field'};
+      for(const k in B.__cam) if(JSON.stringify(A.__cam[k])!==JSON.stringify(B.__cam[k])) out.add(C[k]||k); }
+    if(B.stock!==A.stock&&B.stock){ const st=Engine.stock&&Engine.stock(B.stock); out.delete('Film'); out.add('Film: '+(st?st.name:B.stock)); }
+    const l=[...out]; return l.length?l.slice(0,3).join(', ')+(l.length>3?' +'+(l.length-3):''):'(no change)'; },
+  renderHistorySoon(){ clearTimeout(this._hrs); this._hrs=setTimeout(()=>this.renderHistory(),250); },
+  renderHistory(){ const el=$('#histList'); if(!el) return; el.innerHTML=''; const it=this.cur; if(!it||!it.hist||!it.hist.length){ el.innerHTML='<div class="note">Edits will be listed here.</div>'; return; }
+    const n=it.hist.length, fmt=t=>t?new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+    for(let i=n-1;i>=Math.max(0,n-80);i--){ const r=document.createElement('div'); r.className='hrow'+(i===n-1?' on':'');
+      r.innerHTML='<span class="ht"></span><span class="hl"></span>'; r.querySelector('.ht').textContent=fmt((it.histT||[])[i]); r.querySelector('.hl').textContent=this.histLabel(it.hist[i-1],it.hist[i]);
+      if(i<n-1) r.onclick=()=>{ this.applySettings(JSON.parse(it.hist[i])).then(()=>{ this.commit(); this.toast('Went back to that step'); }); };
+      el.appendChild(r); } },
   undo(){ const it=this.cur; if(!it||!it.hist||it.hist.length<2) return; it.fut.push(it.hist.pop()); this.applySettings(JSON.parse(it.hist[it.hist.length-1])); this.toast('Undo'); },
   redo(){ const it=this.cur; if(!it||!it.fut||!it.fut.length) return; const s=it.fut.pop(); it.hist.push(s); this.applySettings(JSON.parse(s)); this.toast('Redo'); },
-  async applySettings(s){ Engine.p=withDefaults(s); setTimeout(()=>Tools.renderMasks(),0); if(this.cur) this.cur.settings=Engine.p; await Engine.ensureLuts(Engine.p); UI.refresh(); UI.markPreset(Engine.p.stock); this.updateStockNote(); Engine.dirty=true; this.thumbSoon(); this.saveSoon(); },
+  async applySettings(s){ if(s&&s.__cam){ const c=s.__cam; s=Object.assign({},s); delete s.__cam; if(this.module==='scan') this.applyCam(c); } Engine.p=withDefaults(s); setTimeout(()=>Tools.renderMasks(),0); if(this.cur) this.cur.settings=Engine.p; await Engine.ensureLuts(Engine.p); UI.refresh(); UI.markPreset(Engine.p.stock); this.updateStockNote(); Engine.dirty=true; this.thumbSoon(); this.saveSoon(); },
 
   // ================================================================ library
   newItem(o){ const it=Object.assign({id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), settings:withDefaults({}), thumb:null, hist:[], fut:[]},o);
@@ -363,7 +382,7 @@ const App = {
     if(Engine.cropMode) Tools.setCropMode(false);
     const it=this.items.find(x=>x.id===id); if(!it) return;
     this.cur=it; Engine.p=withDefaults(it.settings); it.settings=Engine.p;
-    this.renderStrip(); UI.refresh(); UI.markPreset(Engine.p.stock); this.updateStockNote(); this.dots(); Tools.renderMasks();
+    this.renderStrip(); UI.refresh(); UI.markPreset(Engine.p.stock); this.updateStockNote(); this.dots(); Tools.renderMasks(); this.renderHistory();
     await Engine.ensureLuts(Engine.p);
     if(it.kind==='scanframe' && it.src){ Engine.setSource(it.src); }
     else {
@@ -534,7 +553,7 @@ const App = {
       c.className+=(it.sel&&it!==this.cur?' sel':''); c.onclick=e=>{ if(e.metaKey||e.ctrlKey||e.shiftKey) this.stripClick(it,e); else { this.items.forEach(x=>x.sel=false); this.select(it.id); } }; c.ondblclick=()=>{ this.setModule('develop'); this.select(it.id); }; c.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); }; this.stackDecor(c,it);
       g.appendChild(c); });
   },
-  thumbSoon(ms=500){ clearTimeout(this._tt); this._tt=setTimeout(()=>this.makeThumb(),ms); },
+  thumbSoon(ms=500){ if(this.cur&&this.cur.kind==='scanlook') return; clearTimeout(this._tt); this._tt=setTimeout(()=>this.makeThumb(),ms); },
   makeThumb(){
     const it=this.cur; if(!it||!Engine.src||this.module==='scan') return;
     const [sw,sh]=Engine.dims(Engine.p), T=220, sc=T/Math.max(sw,sh), w=Math.max(2,Math.round(sw*sc)), h=Math.max(2,Math.round(sh*sc));
@@ -618,7 +637,15 @@ const App = {
     if((this._thumbWait=(this._thumbWait||0)+1)<20) return; this._thumbWait=0;
     const L=this._lastL, v=$('#view'); const c=document.createElement('canvas'); const s=160/Math.max(L.iw,L.ih); c.width=Math.round(L.iw*s); c.height=Math.round(L.ih*s);
     c.getContext('2d').drawImage(v,L.ix,L.H-L.iy-L.ih,L.iw,L.ih,0,0,c.width,c.height); sc.thumb=c.toDataURL('image/jpeg',.8); this.renderStrip(); this.saveSoon(); },
-  loadDemo(){ this.busy('Building demo scene…'); setTimeout(()=>{ Splat.load(demoScene()); this.scanName='Demo still life'; this.scanPath=null; this.scanKey=null; this.busy(); this.setModule('scan'); UI.refresh(); },30); },
+  // the demo is a real scan shipped with the app (data/demo.splat); the procedural scene is only a fallback
+  async loadDemo(){ this.busy('Loading demo scan…');
+    try{ const [b,j]=await Promise.all([fetch('data/demo.splat'),fetch('data/demo.json')]); if(!b.ok) throw 0; const buf=await b.arrayBuffer(), meta=j.ok?await j.json():{};
+      const s=parseSplat(buf); this._scanBytes=buf.byteLength; Splat.load(s); const v=meta.view||{};
+      Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); if(meta.cam) Object.assign(Splat.cam,meta.cam); Splat.frame();
+      // focus on whatever is in the middle of the frame
+      setTimeout(()=>{ const L=this._lastL; if(!L) return; const hit=Splat.pick(L.iw/2,L.ih/2,L.iw,L.ih); if(hit){ Splat.cam.focusLock=hit; Engine.dirty=true; } },400);
+      this.scanName=meta.name||'Demo scan'; this.scanPath=null; this.scanKey=null; this.busy(); this.setModule('scan'); UI.refresh(); setTimeout(()=>this.renderScanInfo(),50); }
+    catch(e){ setTimeout(()=>{ Splat.load(demoScene()); this.scanName='Demo still life'; this.scanPath=null; this.scanKey=null; this.busy(); this.setModule('scan'); UI.refresh(); },30); } },
   async newScan(input){
     if(!Native.available){ this.toast('Building scans runs in the Mac app'); return; }
     if(!input){ const p=await Native.call('open',{files:true,dirs:true,multiple:false,title:'Choose an orbit video, or a folder of photos',dir:this.info&&this.info.splatDir+'/captures'}); if(!p||!p[0]) return; input=p[0]; }
@@ -715,9 +742,19 @@ const App = {
   CAM_KEYS:['format','portrait','fmm','stop','tilt','tiltDir','dof','bg','lens','swirl','catEye','anam','post','focus'],
   camSnap(){ const c=Splat.cam, o={}; this.CAM_KEYS.forEach(k=>o[k]=JSON.parse(JSON.stringify(c[k]??null))); return o; },
   applyCam(o){ const c=Splat.cam; this.CAM_KEYS.forEach(k=>{ if(k in o) c[k]=JSON.parse(JSON.stringify(o[k])); }); c.focusLock=null; this.lensNote(); this.scanKey=null; Splat.lastSortView=null; Engine.dirty=true; UI.refresh(); },
-  async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this camera preset',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return;
-    this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap()}; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
-    this.saveSoon(); this.buildScanPanels(); this.toast('Saved camera preset “'+name+'”'); },
+  renderScanLooks(){ const el=$('#scanLookList'); if(!el) return; el.innerHTML=''; const L=this.scanPresets||[];
+    if(!L.length){ el.innerHTML='<div class="note">Found something you like? Press + to save the camera, lens, film and Studio look together.</div>'; return; }
+    L.forEach((x,i)=>{ const r=document.createElement('div'); r.className='upreset'; const lens=LENSES.find(l=>l.id===(x.cam||{}).lens), st=x.look&&Engine.stock(x.look.stock);
+      r.className='preset user'; r.innerHTML='<span class="pn"></span><span class="iso"></span><b class="pa del ux" title="Delete">×</b>'; r.querySelector('.pn').textContent=x.name;
+      r.querySelector('.iso').textContent=[lens?lens.name.split(' · ')[0]:'',st?st.name:'',x.look?'':'camera only'].filter(Boolean).join(' · ');
+      r.onclick=e=>{ if(e.target.classList.contains('ux')) return; this.applyScanLook(x); };
+      r.querySelector('.ux').onclick=async e=>{ e.stopPropagation(); if(!confirm('Delete the scan look “'+x.name+'”?')) return; L.splice(i,1); this.saveSoon(); this.renderScanLooks(); this.buildScanPanels(); };
+      el.appendChild(r); }); },
+  async applyScanLook(x){ if(x.cam) this.applyCam(x.cam); if(x.look) await this.applySettings(cloneParams(x.look)); this.commit(); this.toast('Loaded “'+x.name+'”'); },
+  async resetScan(all){ if(all&&this.camDefaults) this.applyCam(this.camDefaults); await this.applySettings(withDefaults({})); this.commit(); this.toast(all?'Camera and look back to the original — History has every step':'Look back to the original — History has every step'); },
+  async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this scan look (camera + lens + film + Studio)',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return;
+    this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap(),look:cloneParams(Engine.p)}; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
+    this.saveSoon(); this.buildScanPanels(); this.renderScanLooks(); this.toast('Saved scan look “'+name+'”'); },
   async deleteCamPreset(){ const L=this.scanPresets||[]; if(!L.length){ this.toast('No camera presets yet'); return; }
     const name=await this.ask('Delete which preset? ('+L.map(x=>x.name).join(', ')+')',L[L.length-1].name); const i=L.findIndex(x=>x.name===name); if(i<0) return; L.splice(i,1); this.saveSoon(); this.buildScanPanels(); this.toast('Deleted “'+name+'”'); },
   setLens(id){ const c=Splat.cam, L=LENSES.find(l=>l.id===id); c.lens=id; if(!L){ this.lensNote(); return; }
@@ -800,7 +837,7 @@ const App = {
     if(!this.cur && this.module!=='scan'){ this.toast('Nothing to export'); return; }
     const sel=this.module==='scan'?[]:this.selected();
     const body=$('#dlgBody'); body.innerHTML='';
-    const st=Object.assign({size:'full',fmt:Native.available?'tiff':'jpeg',q:0.95,space:'p3',meta:true,which:sel.length>1?'sel':'cur'},this._exportPrefs||{});
+    const st=Object.assign({size:'full',fmt:'jpeg',q:0.95,space:'p3',meta:true,which:sel.length>1?'sel':'cur'},this._exportPrefs||{});
     if(!Native.available && st.fmt==='tiff') st.fmt='jpeg';
     if(sel.length>1) UI.seg(body,'xwhich','Photos',[['cur','This photo'],['sel',sel.length+' selected']],()=>st.which,v=>st.which=v);
     UI.seg(body,'xsize','Size',[['full','Full'],['4096','4096'],['2048','2048']],()=>st.size,v=>st.size=v);
@@ -905,7 +942,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const data={v:1,presets:this.userPresets,scanPresets:this.scanPresets||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -913,13 +950,23 @@ const App = {
     let json='';
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
-    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this._scanLookSaved=d.scanLook||null; this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },
 
   // ================================================================ module / view
+  // ---- 3D Scan has its own look (not the selected photo's): its own history, reset and saved looks
+  enterScanLook(){ if(this.cur&&this.cur.kind==='scanlook') return;
+    if(!this.scanItem){ const base=this._scanLookSaved||{settings:cloneParams(this.cur?this.cur.settings:withDefaults({})),hist:[]};
+      this.scanItem={id:'__scan',name:'3D Scan look',kind:'scanlook',settings:withDefaults(base.settings),hist:base.hist||[],fut:[],versions:[]}; }
+    this._prevCur=this.cur; this.cur=this.scanItem; Engine.p=withDefaults(this.scanItem.settings); this.scanItem.settings=Engine.p;
+    if(!this.scanItem.hist.length) this.commit(); this.afterLookSwap(); },
+  leaveScanLook(){ if(!this.cur||this.cur.kind!=='scanlook') return; const it=this._prevCur&&this.items.includes(this._prevCur)?this._prevCur:null; this.cur=it;
+    Engine.p=it?withDefaults(it.settings):withDefaults({}); if(it) it.settings=Engine.p; this.afterLookSwap(); },
+  afterLookSwap(){ Engine.ensureLuts(Engine.p).then(()=>{ Engine.dirty=true; }); UI.refresh(); UI.markPreset(Engine.p.stock); this.updateStockNote(); this.dots(); Tools.renderMasks&&Tools.renderMasks(); this.renderHistory&&this.renderHistory(); },
   setModule(m){ $('#placeBox')&&$('#placeBox').classList.remove('on');
+    if(m==='scan'&&this.module!=='scan') this.enterScanLook(); else if(m!=='scan'&&this.module==='scan') this.leaveScanLook();
     if(Engine.cropMode && m!=='develop') Tools.setCropMode(false);
     if(m==='studio') this.renderDoubleChooser&&this.renderDoubleChooser();
     if(m!=='develop' && this.compare) this.setCompare(null);
@@ -991,6 +1038,12 @@ const App = {
     $('#presetExport').onclick=e=>{ e.stopPropagation(); this.exportPresets(); };
     $('#presetImport').onclick=e=>{ e.stopPropagation(); this.importPresets(); };
     $('#tbExpose').onclick=()=>this.exposeFrame();
+    $('#scanLookAdd').onclick=e=>{ e.stopPropagation(); this.saveCamPreset(); }; $('#scanResetLook').onclick=()=>this.resetScan(false); $('#scanResetAll').onclick=()=>this.resetScan(true);
+    $('#histOrig').onclick=e=>{ e.stopPropagation(); if(this.cur) this.applySettings(withDefaults({})).then(()=>{ this.commit(); this.toast('Back to the original — History keeps every step'); }); };
+    // camera moves in 3D Scan are history steps too (checked when you pause)
+    setInterval(()=>{ if(this.module!=='scan'||!this.cur||this.cur.kind!=='scanlook'||!Splat.scene||this._ptrDown) return; const h=this.cur.hist||[], last=h[h.length-1]; if(!last) return;
+      try{ if(JSON.stringify(JSON.parse(last).__cam)!==JSON.stringify(this.camSnap())) this.commit(); }catch(e){} },1500);
+    addEventListener('pointerdown',()=>this._ptrDown=true,true); addEventListener('pointerup',()=>this._ptrDown=false,true);
     $('#clipLo').onclick=$('#clipHi').onclick=()=>{ Engine.showClip=!Engine.showClip; Engine.dirty=true; };
     $('#fileIn').onchange=e=>{ const f=[...e.target.files]; e.target.value=''; this.addFiles(f); };
     $('#pipeClose').onclick=()=>$('#pipe').classList.remove('on');
@@ -1044,7 +1097,7 @@ const App = {
     else if((k==='l'||k==='L')&&this.module==='scan'){ this.levelScan(); }
     else if(k==='s'||k==='S'){ this.setModule('scan'); }
     else if(k===' '&&this.module==='scan'){ e.preventDefault(); this.exposeFrame(); }
-    else if(k==='ArrowRight'||k==='ArrowLeft'){ const i=this.items.indexOf(this.cur)+(k==='ArrowRight'?1:-1); if(this.items[i]){ e.preventDefault(); this.select(this.items[i].id); } }
+    else if((k==='ArrowRight'||k==='ArrowLeft')&&this.module!=='scan'){ const i=this.items.indexOf(this.cur)+(k==='ArrowRight'?1:-1); if(this.items[i]){ e.preventDefault(); this.select(this.items[i].id); } }
     else if((k==='Backspace'||k==='Delete')&&this.cur&&this.module!=='scan'){ this.remove(this.cur.id); }
   },
   // ---- Studio direct manipulation: the double exposure (or a light leak / burn / flare layer) follows the mouse

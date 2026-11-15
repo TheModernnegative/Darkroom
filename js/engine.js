@@ -22,7 +22,7 @@ const DEFAULTS = {
   // Analog media (tape, broadcast, CRT, small-gauge cine) — a post pass on the finished picture
   anOn:false, anMedium:'', anRes:0, anLines:0, anChroma:0, anShift:0, anBleed:0, anSharp:0, anGhost:0, anGhostOff:30, anNoise:0, anCNoise:0, anSnow:0,
   anTrack:0, anTrackPos:72, anHead:0, anDrop:0, anJitter:0, anInterlace:0, anSat:0, anHue:0, anTint:'none',
-  anScan:0, anScanN:480, anMask:'none', anMaskAmt:50, anCurve:0, anBloom:0, anVig:0, anCorner:0,
+  anBlock:0, anScan:0, anScanN:480, anMask:'none', anMaskAmt:50, anCurve:0, anBloom:0, anVig:0, anCorner:0,
   anGate:'none', anOverscan:0, anGateSoft:30, anWeave:0, anFlicker:0, anOSD:'none', anOSDText:'',
   flare:0, flareLen:60, flareGhost:35, flareColor:'blue', flareSens:50,
   fx:{}, softness:0, distort:0, zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
@@ -194,8 +194,10 @@ const Engine = {
   async loadAssets(){ try{ const r=await fetch('data/assets/assets.json'); if(r.ok){ const j=await r.json(); this.assetIndex={}; (j.assets||[]).forEach(a=>this.assetIndex[a.id]=a); this.assetList=j.assets||[]; } }catch(e){} return this.assetList||[]; },
   asset(id){ return this.assetIndex&&this.assetIndex[id]; },
   assetTex(id){ const a=this.asset(id); if(!a) return null; const c=this.assetTexs[id]; if(c) return c.ready?c:null;
-    const e=this.assetTexs[id]={ready:false}; const im=new Image(); im.onload=()=>{ const gl=this.gl, t=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im); gl.generateMipmap(gl.TEXTURE_2D);
+    const e=this.assetTexs[id]={ready:false}; const im=new Image(); im.onload=()=>{ const gl=this.gl, t=gl.createTexture();
+        let srcImg=im; if(a.cat==='frame'&&typeof Borders!=='undefined'){ const c=document.createElement('canvas'); c.width=im.naturalWidth; c.height=im.naturalHeight; const x=c.getContext('2d'); x.drawImage(im,0,0); Borders.sealEdges(x,c.width,c.height,0.012); srcImg=c; }
+        gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,srcImg); gl.generateMipmap(gl.TEXTURE_2D);
         const rep=a.cat==='texture'?gl.REPEAT:gl.CLAMP_TO_EDGE;
         for(const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,rep],[gl.TEXTURE_WRAP_T,rep]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
         Object.assign(e,{ready:true,tex:t,w:im.naturalWidth,h:im.naturalHeight}); this.dirty=true; };
@@ -528,7 +530,7 @@ const Engine = {
     gl.uniform4f(u.uSig4,k('anInterlace'),k('anSat'),(p.anHue||0)*Math.PI/180,k('anNoise'));
     gl.uniform4f(u.uDisp1,k('anScan'),p.anScanN||480,k('anCurve'),k('anBloom'));
     gl.uniform4f(u.uDisp2,k('anMaskAmt'),k('anDrop'),k('anSnow'),k('anCNoise'));
-    gl.uniform2f(u.uDispV,k('anVig'),k('anCorner'));
+    gl.uniform4f(u.uDispV,k('anVig'),k('anCorner'),k('anBlock'),0);
     gl.uniform4f(u.uGate,k('anOverscan'),k('anWeave'),k('anGateSoft'),k('anFlicker'));
     gl.uniform1i(u.uMaskT,{none:0,aperture:1,shadow:2,slot:3}[p.anMask]||0);
     gl.uniform1i(u.uGateT,{none:0,super8:1,'8mm':2,'16mm':3,super16:4,'35cine':5}[p.anGate]||0);
@@ -551,6 +553,8 @@ const Engine = {
       vcr(custom||(ampm),W*.07,H*.82,s); vcr(M+'. '+dd+' '+yy,W*.93,H*.82,s,'right'); }
     else if(p.anOSD==='cctv'){ const ss=s*.8; vcr('CAM 01',W*.05,H*.06,ss); vcr(custom||'ENTRANCE',W*.95,H*.06,ss,'right');
       vcr(`${yy}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}  ${String(hh).padStart(2,'0')}:${mi}:${String(d.getSeconds()).padStart(2,'0')}`,W*.05,H*.88,ss); }
+    else if(p.anOSD==='digicam'){ const t=custom||(`${yy}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(hh).padStart(2,'0')}:${mi}`); const sz=H*.045;
+      x.font=`600 ${sz}px "Arial Narrow","Helvetica Neue",Arial,sans-serif`; x.textAlign='right'; x.textBaseline='bottom'; x.lineWidth=sz*.12; x.strokeStyle='rgba(60,20,0,.6)'; x.strokeText(t,W*.95,H*.95); x.fillStyle='#ffb21e'; x.fillText(t,W*.95,H*.95); }
     else if(p.anOSD==='filmdate'){ // date-back LED stamp burned into the film: orange 7-segment digits, bottom right
       const t=custom||(`'${String(yy).slice(2)} ${String(d.getMonth()+1).padStart(2,' ')} ${dd}`); const sz=H*.042;
       // seven-segment LED digits, slanted, glowing into the emulsion
@@ -755,7 +759,7 @@ void main(){ vec3 c=max(texture(uTex,vUv).rgb,0.); float Y=dot(c,vec3(.27,.67,.0
   float k = uThr>0. ? smoothstep(uThr,uThr*2.5,Y) : 1.; o=vec4(min(c*k,vec3(40.)),1.); }`;
 const ANALOG_FS = `#version 300 es
 precision highp float; uniform sampler2D uTex,uOSD; uniform vec2 uRes; uniform vec4 uFrame; uniform float uSeed,uOSDOn;
-uniform vec4 uSig1,uSig2,uSig3,uSig4,uDisp1,uDisp2,uGate; uniform vec2 uDispV; uniform vec3 uTintC; uniform int uMaskT,uGateT;
+uniform vec4 uSig1,uSig2,uSig3,uSig4,uDisp1,uDisp2,uGate; uniform vec4 uDispV; uniform vec3 uTintC; uniform int uMaskT,uGateT;
 out vec4 o;
 float h1(vec2 p){ p=fract(p*vec2(443.897,441.423)); p+=dot(p,p.yx+19.19); return fract((p.x+p.y)*p.x); }
 float vnoise(float x){ float i=floor(x), f=fract(x); return mix(h1(vec2(i,uSeed)),h1(vec2(i+1.,uSeed)),f*f*(3.-2.*f)); }
@@ -820,6 +824,10 @@ void main(){
   if(uDisp2.z>0.){ float sn=h1(np*1.7+uSeed*5.); Y=mix(Y,sn,uDisp2.z*.5*step(.4,sn)); }
   { float dp=uDisp2.y; if(dp>0.){ float lr=h1(vec2(L,uSeed+11.)); if(lr<dp*.012){ float st=h1(vec2(L,uSeed+13.)), ln=.05+h1(vec2(L,uSeed+17.))*.3; if(q.x>st&&q.x<st+ln) Y=mix(Y,1.,.85); } } }
   vec3 c=clamp(RGB*vec3(Y,C),0.,1.);
+  // digital compression: 8×8 blocks (scaled to a small-sensor resolution) and colour banding
+  float blk=uDispV.z; if(blk>0.){ float bpx=8.*max(1.,fr.x/640.); vec2 bq=(floor(q*fr/bpx)+.5)*bpx/fr; vec2 o2=bpx*.3/fr;
+    vec3 avg=(at(bq+vec2(o2.x,o2.y))+at(bq-vec2(o2.x,o2.y))+at(bq+vec2(o2.x,-o2.y))+at(bq+vec2(-o2.x,o2.y)))*.25;
+    c=mix(c,avg+(c-avg)*(1.-blk*.75),blk); float lv=mix(48.,10.,blk); c=floor(c*lv+.5)/lv; }
   if(uTintC.x>=0.){ float y=dot(c,vec3(.299,.587,.114)); c=y*uTintC; }
   // cine flicker
   c*=1.+(h1(vec2(uSeed,3.7))-.5)*uGate.w*.25;

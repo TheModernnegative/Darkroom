@@ -339,3 +339,9 @@ button[data-m].edited::after{content:"";position:absolute;left:50%;bottom:-3px;w
 .ltab.on{background:#3d5a90;color:#fff;border-color:#5a7cc0}
 .ltab.add{background:none}
 .ltab:hover{color:#fff}
+#histList{max-height:260px;overflow-y:auto}
+.hrow{display:flex;gap:8px;padding:4px 6px;border-radius:3px;cursor:pointer;font:12px var(--sans);color:#bbb}
+.hrow:hover{background:#2a2f3a;color:#fff}
+.hrow.on{background:#2b3140;color:#fff;cursor:default}
+.hrow .ht{color:#777;min-width:52px;font-variant-numeric:tabular-nums}
+.hrow .hl{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

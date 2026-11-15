@@ -18,6 +18,12 @@ const Borders = {
     if(style!=='peel') return null; const id=stock&&stock.id||'';
     const want = /665|polaroid_55/.test(id) ? 'peel_neg' : /fp3000b/.test(id) ? 'peel_bw' : 'peel_color';
     const im=this.imgs[want]||this.imgs.peel_color; return im&&im.complete&&im.naturalWidth?im:null; },
+  // no see-through at the outer edge: fill transparent pixels in a thin outer ring with the border's own colour
+  sealEdges(x,W,H,frac){ const r=Math.max(2,Math.round(Math.min(W,H)*frac)), band=r*3;
+    let R=0,G=0,B=0,n=0; const take=(sx,sy,sw,sh)=>{ const d=x.getImageData(sx,sy,sw,sh).data; for(let i=0;i<d.length;i+=16) if(d[i+3]>200){ R+=d[i];G+=d[i+1];B+=d[i+2];n++; } };
+    take(0,0,W,band); take(0,H-band,W,band); take(0,0,band,H); take(W-band,0,band,H);
+    const col=n?`rgb(${R/n|0},${G/n|0},${B/n|0})`:'#0b0b0b';
+    x.save(); x.globalCompositeOperation='destination-over'; x.fillStyle=col; x.beginPath(); x.rect(0,0,W,H); x.rect(r,r,W-2*r,H-2*r); x.fill('evenodd'); x.restore(); },
   isInstant(style){ return !!(this.INSTANT[style]||style==='peel'); },
   margins(style,w,h){
     const land=w>=h, s=Math.min(w,h);
@@ -182,6 +188,7 @@ const Borders = {
     } else if(this.FILMS[style]){
       this.drawFilm(x,W,H,{ix,iy,iw,ih},style,stock,edge,fno,film);
     }
+    if(style!=='none') this.sealEdges(x,W,H,0.006);
     if(this.cache.tex) gl.deleteTexture(this.cache.tex);
     const t=gl.createTexture(); gl.activeTexture(gl.TEXTURE15); gl.bindTexture(gl.TEXTURE_2D,t);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
