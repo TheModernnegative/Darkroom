@@ -638,6 +638,9 @@ const App = {
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const sep=()=>{ const h=document.createElement('hr'); m.appendChild(h); };
     const open=async()=>{ if(it!==this.cur) await this.select(it.id); };
+    if(it.kind!=='scanlook'){ item('Copy all edits',async()=>{ await open(); this.copyAll(); },'⌘C'); item('Copy edits — choose which…',async()=>{ await open(); this.copyDialog(); },'⇧⌘C');
+      if(this.clip){ const sel=this.selected(), many=sel.length>1&&sel.includes(it); item(many?`Paste edits onto ${sel.length} selected photos`:'Paste edits',async()=>{ await open(); this.pasteSettings(); },many?'':'⌘V'); }
+      sep(); }
     if(it.inst){ item('Open in 3D — back to this exact view',()=>this.openInstOf(it)); item('Re-render from 3D at full quality',()=>this.rerender3D(it)); sep(); }
     if((it.tags||[]).length){ it.tags.slice(0,8).forEach(t=>item('🏷 '+t.replace(/</g,'&lt;'),()=>{ const q=$('#libSearch'); q.value=t.includes(' ')?t.split(' ')[0]:t; q.oninput(); this.toast('Showing photos tagged “'+t+'”'); })); sep(); }
     item('Print layout…',()=>this.printDialog(),'⌘P');
@@ -792,14 +795,16 @@ const App = {
     const boxes=this.COPY_GROUPS.map(g=>{ const l=document.createElement('label'); l.className='chk'; l.innerHTML='<input type="checkbox"><span></span>'; l.querySelector('span').textContent=g[1]; const c=l.querySelector('input'); c.checked=!!on[g[0]]; c.onchange=()=>on[g[0]]=c.checked; grid.appendChild(l); return c; });
     const row=document.createElement('div'); row.className='btnrow'; body.appendChild(row);
     UI.button(row,'All',()=>{ this.COPY_GROUPS.forEach((g,i)=>{ on[g[0]]=true; boxes[i].checked=true; }); }); UI.button(row,'None',()=>{ this.COPY_GROUPS.forEach((g,i)=>{ on[g[0]]=false; boxes[i].checked=false; }); }); UI.button(row,'Look only',()=>{ this.COPY_GROUPS.forEach((g,i)=>{ on[g[0]]=!['wb','tone','crop','masks'].includes(g[0]); boxes[i].checked=on[g[0]]; }); });
-    UI.note(body,'Paste with <b>⌘⇧V</b> — onto this photo, or onto every selected photo at once (⌘-click or ⇧-click thumbnails to select).');
+    UI.note(body,'Paste with <b>⌘V</b> (or right-click a photo → Paste edits) — onto this photo, or onto every selected photo at once (⌘-click or ⇧-click thumbnails to select).');
     $('#dlg').classList.add('on'); const go=await new Promise(r=>{ ok.onclick=()=>r(true); $('#dlgCancel').onclick=()=>r(false); }); $('#dlg').classList.remove('on'); h.textContent=keepH; ok.textContent=keepOk; if(!go) return;
-    this._copyOn=on; try{ localStorage.setItem('darkroom.copyGroups',JSON.stringify(on)); }catch(e){}
+    this._copyOn=on; try{ localStorage.setItem('darkroom.copyGroups',JSON.stringify(on)); }catch(e){} this.makeClip(on); },
+  copyAll(){ if(!this.cur) return; this.makeClip(Object.fromEntries(this.COPY_GROUPS.map(g=>[g[0],!['crop','masks'].includes(g[0])]))); },
+  makeClip(on){
     const keys=this.COPY_GROUPS.filter(g=>on[g[0]]).flatMap(g=>this.groupKeys(g[0])); if(!keys.length){ this.toast('Nothing ticked'); return; }
     const src=Engine.p, o={}; keys.forEach(k=>{ if(k in src) o[k]=cloneParams(src[k]); });
     const offs={}; for(const sec in SECTIONS) if(SECTIONS[sec].some(k=>keys.includes(k))) offs[sec]=!!(src.off||{})[sec]; if(on.studio) for(const k in (src.off||{})) if(!(k in SECTIONS)) offs[k]=!!src.off[k];
-    this.clip={o,offs,n:this.COPY_GROUPS.filter(g=>on[g[0]]).length}; this.toast(`Copied ${this.clip.n} part${this.clip.n>1?'s':''} of the edit — ⌘⇧V to paste`); },
-  async pasteSettings(){ const c=this.clip; if(!c){ this.toast('Copy settings first (⌘⇧C)'); return; } if(!this.cur) return;
+    this.clip={o,offs,n:this.COPY_GROUPS.filter(g=>on[g[0]]).length}; this.toast(`Copied ${this.clip.n} part${this.clip.n>1?'s':''} of the edit (crop and masks left out unless ticked) — ⌘V to paste, or right-click another photo → Paste edits`); },
+  async pasteSettings(){ const c=this.clip; if(!c){ this.toast('Copy edits first (⌘C, or right-click a photo → Copy all edits)'); return; } if(!this.cur) return;
     const fn=base=>{ Object.assign(base,cloneParams(c.o)); base.off=Object.assign({},base.off||{}); for(const k in c.offs){ if(c.offs[k]) base.off[k]=true; else delete base.off[k]; } return base; };
     const n=this.applyToOthers(b=>fn(b),'Paste settings'); await this.applySettings(fn(cloneParams(Engine.p))); this.commit(); this.toast(n?`Pasted onto ${n+1} photos`:'Settings pasted'); },
   // ---- print layout: several photos on one page with margins, gaps and captions, rendered at 300 dpi
@@ -840,7 +845,7 @@ const App = {
       if(dir) await Native.call('writeFile',{path:dir+'/'+name,base64:await this.blobB64(blob)}); else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); } }
     if(keep&&this.cur!==keep) await this.select(keep.id); this.busy(); this.toast('Saved '+pages+' print page'+(pages>1?'s':'')+' (300 dpi JPEG)'); },
   shortcutSheet(){ let el=$('#keysheet'); if(el){ el.remove(); return; } el=document.createElement('div'); el.id='keysheet'; el.className='modal on';
-    const S=[['Everywhere',[['G / D / T / S','Library · Develop · Studio · 3D Scan'],['⌘Z / ⇧⌘Z','Undo / redo'],['⌘E','Export'],['⌘P','Print layout'],['⌘O','Import'],['⇧⌘C / ⇧⌘V','Copy settings (choose parts) / paste'],['⇧⌘R','Reset to original'],['?','This sheet']]],
+    const S=[['Everywhere',[['G / D / T / S','Library · Develop · Studio · 3D Scan'],['⌘Z / ⇧⌘Z','Undo / redo'],['⌘E','Export'],['⌘P','Print layout'],['⌘O','Import'],['⌘C / ⌘V','Copy all edits / paste'],['⇧⌘C','Copy edits — choose which parts'],['⇧⌘R','Reset to original'],['?','This sheet']]],
       ['Photos',[['0–5','Star rating'],['P / X / U','Pick / reject / clear flag'],['← →','Previous / next photo'],['⌘A','Select all'],['⌘F','Search the library'],['⌘D / ⇧⌘D','Duplicate with edit / as original'],['⌘G / ⇧⌘G','Stack / unstack'],["⌘'",'Save as version'],['⌫','Remove from library']]],
       ['Develop',[['W','White-balance eyedropper'],['R','Crop & straighten'],['M','Masks'],['C','Compare'],['\\','Before / after'],['|','Split view'],['Z','Zoom 1:1'],['J','Clipping warning']]],
       ['3D Scan',[['drag','Orbit'],['⇧-drag / right-drag / arrows','Move the camera'],['⇧+arrows','Orbit'],['scroll / + −','Dolly in / out'],['click','Focus'],['double-click','Orbit pivot'],['L','Level'],['space','Expose a frame'],['⇧S','Save an instance (keyframes + camera + edits)']]]];
@@ -1591,6 +1596,8 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
       else c.dist=Math.max(0.05,c.dist*((k==='PageUp'||k==='+'||k==='=')?0.92:1.087));
       Splat.lastSortView=null; Engine.dirty=true; return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='c'){ e.preventDefault(); this.copyDialog(); return; }
+    if(meta&&!e.shiftKey&&!e.altKey&&k.toLowerCase()==='c'&&!window.getSelection().toString()&&this.module!=='scan'){ e.preventDefault(); this.copyAll(); return; }
+    if(meta&&!e.shiftKey&&!e.altKey&&k.toLowerCase()==='v'&&this.module!=='scan'&&this.clip){ e.preventDefault(); this.pasteSettings(); return; }
     if(meta&&e.shiftKey&&k.toLowerCase()==='v'){ e.preventDefault(); this.pasteSettings(); return; }
     if(meta&&k.toLowerCase()==='a'&&this.module!=='scan'){ e.preventDefault(); this.items.forEach(x=>x.sel=true); this.renderStrip(); this.renderGrid(); this.updateSync(); this.toast(this.items.length+' photos selected'); return; }
     if(meta&&k.toLowerCase()==='g'&&this.module!=='scan'){ e.preventDefault(); if(e.shiftKey){ if(this.cur) this.unstack(this.cur); } else this.stackSelected(); return; }
