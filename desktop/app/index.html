@@ -118,7 +118,7 @@
         <div class="tgroup scanonly">
           <span class="hint" title="drag orbit · ⇧-drag, right-drag or arrows move · ⇧+arrows orbit · scroll or +/− dolly · click focus · double-click pivot">drag orbit · ⇧-drag move · scroll dolly · <b>?</b> all keys</span>
           <button class="ibtn" id="tbSnap" title="Save an instance: keyframes, camera, lens, film and every Develop/Studio edit, kept next to this scan in the strip (⇧S)">◎ Save instance</button>
-          <button class="ibtn accent" id="tbExpose" title="Expose a frame into the library">● Expose</button>
+          <button class="ibtn accent" id="tbExpose" title="Add this view to the library as a finished image (Space). Right-click it there → Open in 3D to come back to this exact view.">● Add to library</button>
           <button class="ibtn" id="tbSaveScan" title="Save this view as an image file (⌘E)">Save image…</button>
         </div>
         <div class="tgroup right"><span id="status"></span></div>
@@ -136,6 +136,8 @@
           <div id="histoInfo"></div>
         </div>
       </section>
+      <div class="mod-scan" id="scanLinkBox"><div class="slHead">Apply edits from a photo <span class="slSrc"></span></div>
+        <div class="seg"><button data-v="off">Off</button><button data-v="studio">Studio effects</button><button data-v="all">Whole edit</button></div><div class="slNote"></div></div>
       <div class="mod-scan" id="scanFxSwitch"><button data-v="dev" class="on">Develop</button><button data-v="fx">Studio effects</button></div>
       <div id="devPanels"></div>
       <div id="fxPanels"></div>

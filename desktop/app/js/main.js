@@ -172,6 +172,7 @@ const App = {
   buildPresets(){ UI.favs=new Set(this.favStocks||[]); UI.onFav=f=>{ this.favStocks=f; this.saveSoon(); this.stockThumbsSoon(true); };
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
       this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
+    $('#scanLinkBox').querySelectorAll('.seg button').forEach(b=>b.onclick=()=>this.setScanLink(b.dataset.v));
     $('#scanFxSwitch').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; document.body.classList.toggle('scanFx',b.dataset.v==='fx'); $('#scanFxSwitch').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); UI.refresh(); };
     $('#stockSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'stocks'); }; $('#lookSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'looks'); };
     $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
@@ -622,6 +623,7 @@ const App = {
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const sep=()=>{ const h=document.createElement('hr'); m.appendChild(h); };
     const open=async()=>{ if(it!==this.cur) await this.select(it.id); };
+    if(it.inst){ item('Open in 3D — back to this exact view',()=>this.openInstOf(it)); sep(); }
     if(it.stack&&this.members(it.stack).length>1){ const top=this.cover(it.stack);
       if(it!==top) item('Make cover of stack',()=>this.makeCover(it)); else item(top.stackOpen?'Close stack':'Open stack',()=>this.toggleStack(it));
       if(it!==top) item(it.pinned?'Unpin':'Pin (show when stack is closed)',()=>this.pinItem(it));
@@ -797,10 +799,16 @@ const App = {
     const list=(this.scanSnaps=this.scanSnaps||{})[this.snapKey(this.scanPath)]=this.snapsFor(this.scanPath).slice(); let sn=update&&list.find(x=>x.id===update);
     if(!sn){ const st=Engine.stock(Engine.p.stock), L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this instance (keyframes, camera and every edit)',[(st&&st.id!=='original'?st.name:''),(L?L.name.split(' · ')[0]:'')].filter(Boolean).join(' · ')||'Instance '+(list.length+1)); if(!name) return;
       sn={id:'s'+Date.now().toString(36),name:name.slice(0,60)}; list.push(sn); }
-    { const c=Splat.cam; sn.view={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; } sn.keys=JSON.parse(JSON.stringify(this.scanKeys||[])); sn.fit=Splat.fit?JSON.parse(JSON.stringify(Splat.fit)):null; sn.cam=this.camSnap(); sn.look=cloneParams(Engine.p); delete sn.look.lookUndo; sn.t=Date.now(); sn.thumb=await this.grabView(220)||sn.thumb||null; this.curSnap=sn.id;
+    { const c=Splat.cam; sn.view={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; } sn.keys=JSON.parse(JSON.stringify(this.scanKeys||[])); sn.fit=Splat.fit?JSON.parse(JSON.stringify(Splat.fit)):null; sn.cam=this.camSnap(); sn.look=cloneParams(this.linkMerge(Engine.p)); delete sn.look.lookUndo; sn.t=Date.now(); sn.thumb=await this.grabView(220)||sn.thumb||null; this.curSnap=sn.id;
     const sc=this.scans.find(x=>x.path===this.scanPath); if(sc) sc.snapOpen=true; this.renderStrip(); this.saveSoon(); this.toast(update?'Updated “'+sn.name+'”':'Saved instance “'+sn.name+'” — it’s next to the scan in the strip'); },
+  instData(){ const c=Splat.cam; return {scanPath:this.scanPath,scanName:this.scanName,cam:this.camSnap(),view:{yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null},
+    look:(()=>{ const l=cloneParams(this.linkMerge(Engine.p)); delete l.lookUndo; return l; })(),keys:JSON.parse(JSON.stringify(this.scanKeys||[])),fit:Splat.fit?JSON.parse(JSON.stringify(Splat.fit)):null}; },
+  async openInstOf(it){ const d=it.inst; if(!d) return; const sc=this.scans.find(x=>x.path===d.scanPath)||(d.scanPath?{path:d.scanPath,name:d.scanName}:{path:null,demo:true});
+    if(d.scanPath&&!this.scans.some(x=>x.path===d.scanPath)){ try{ const st=await Native.call('stat',{paths:[d.scanPath]}); if(!st[0]||st[0].size<0){ this.toast('That scan file isn’t there any more ('+d.scanName+')'); return; } }catch(e){} }
+    await this.openSnap(sc,Object.assign({id:'lib_'+it.id,name:it.name},d)); },
   async openSnap(sc,sn){ if(this.module!=='scan') this.setModule('scan');
     if(sc.path!==this.scanPath||!Splat.scene){ if(sc.path) await this.loadScanPath(sc.path); else await this.loadDemo(); }
+    if(this.scanLink&&this.scanLink!=='off') this.setScanLink('off');
     this.applyCam(sn.cam||{}); if(sn.view){ const v=JSON.parse(JSON.stringify(sn.view)); Object.assign(Splat.cam,v); Splat.lastSortView=null; Engine.dirty=true; } await this.applySettings(cloneParams(sn.look||{})); this.commit(); if(sn.keys&&sn.keys.length){ this.scanKeys=JSON.parse(JSON.stringify(sn.keys)); this.keySel=-1; this.renderKeys(); } this.curSnap=sn.id; this.renderStrip(); this.toast('Back in “'+sn.name+'” — export it, or keep editing and choose ⋯ → Update'); },
   snapMenu(sc,sn,anchor){ const m=$('#ctxMenu'); m.innerHTML=''; const r=anchor.getBoundingClientRect();
     const item=(label,fn)=>{ const b=document.createElement('button'); b.textContent=label; b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
@@ -929,7 +937,7 @@ const App = {
     const rt=GLU.target(w,h,'rgba16f'); Splat.render(rt);
     const src={tex:rt.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1};
     const n=this.items.filter(i=>i.kind==='scanframe').length+1;
-    const it=this.newItem({name:(this.scanName||'Scan').replace(/\.(ply|splat)$/,'')+' — frame '+n,kind:'scanframe',src,settings:Object.assign(this.scanParams(cloneParams(Engine.p)),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'})});
+    const inst=this.instData(), it=this.newItem({inst,name:(this.scanName||'Scan').replace(/\.(ply|splat)$/,'')+' — frame '+n,kind:'scanframe',src,settings:Object.assign(this.scanParams(cloneParams(Engine.p)),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'})});
     it.hist=[JSON.stringify(it.settings)];
     // keep a copy on disk so the frame survives a restart
     if(Native.available && this.info){
@@ -942,7 +950,7 @@ const App = {
       try{ await Native.call('writeFile',{path,base64:b64}); it.path=path; }catch(e){}
     }
     this.renderStrip(); this.saveSoon();
-    this.flash(); this.toast('Frame exposed → filmstrip. Click it to develop.');
+    this.flash(); this.toast('Added to the library as “'+it.name+'” — right-click it later → Open in 3D to come back to this exact view');
   },
   flash(){ const v=$('#viewer'); v.animate([{background:'#fff'},{background:'#121212'}],{duration:250}); },
 
@@ -975,7 +983,17 @@ const App = {
     UI.refresh(); this.lensNote(); this.scanKey=null; Engine.dirty=true; this.toast(L.name); },
   lensNote(){ const el=$('#lensNote'); if(!el) return; const L=LENSES.find(l=>l.id===Splat.cam.lens); el.innerHTML=L?L.desc:'Pick a lens to load its focal length, widest aperture and rendering character — then adjust anything.'; },
   // the scan view renders with the photo look from Develop plus the lens's own traits
-  scanParams(base){ const post=Splat.cam.post||{}; const o=Object.assign({},base,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
+  linkSrc(){ const it=this._prevCur; return it&&this.items.includes(it)&&it.kind!=='scanlook'?it:null; },
+  linkMerge(base){ const m=this.scanLink, it=this.linkSrc(); if(!m||m==='off'||!it) return base; const o=Object.assign({},base), src=it.settings;
+    const skip=new Set(['crop','angle','rot','flip','aspect','masks','lookUndo']);
+    const keys=m==='all'?Object.keys(DEFAULTS).filter(k=>!skip.has(k)&&k!=='off'):STUDIO_KEYS; keys.forEach(k=>{ if(k in src) o[k]=cloneParams(src[k]); });
+    const off=Object.assign({},base.off||{}); const so=src.off||{}; for(const k in Object.assign({},off,so)){ const isStudio=!(k in SECTIONS); if(m==='all'||isStudio){ if(so[k]) off[k]=true; else delete off[k]; } } o.off=off; return o; },
+  renderScanLink(){ const el=$('#scanLinkBox'); if(!el) return; const it=this.linkSrc(), m=this.scanLink||'off';
+    el.querySelector('.slSrc').textContent=it?'from “'+it.name.replace(/\.[^.]+$/,'')+'”':'— open a photo in Develop or Studio first';
+    el.querySelectorAll('.seg button').forEach(b=>{ b.classList.toggle('on',b.dataset.v===m); b.disabled=!it&&b.dataset.v!=='off'; });
+    el.classList.toggle('active',m!=='off'&&!!it); el.querySelector('.slNote').textContent=m!=='off'&&it?(m==='studio'?'Studio effects come live from that photo — change them in Studio and they show here. The sliders below are the scan’s own edits.':'That photo’s whole edit (film, tone, grain and Studio) is used live on the scan.'):''; },
+  setScanLink(m){ this.scanLink=m; this.renderScanLink(); this.scanKey=null; Engine.dirty=true; this.saveSoon(); },
+  scanParams(base){ base=this.linkMerge(base); const post=Splat.cam.post||{}; const o=Object.assign({},base,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
     if('falloff' in post) o.falloff=post.falloff; if('glow' in post) o.glow=Math.max(o.glow||0,post.glow);
     for(const k of ['fringe','distort','softEdges','flare','flareLen','flareGhost','flareColor','flareSens']) if(k in post) o[k]=post[k];
     o.format={'35mm':'35mm','6x7':'6x7','4x5':'4x5','8x10':'8x10'}[Splat.cam.format]||o.format; return o; },
@@ -1225,7 +1243,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},scanLink:this.scanLink||'off',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -1233,7 +1251,7 @@ const App = {
     let json='';
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
-    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.keysBy=d.keysBy||{}; this.movesBy=d.movesBy||{}; if(this._keysFor!==undefined) this.keysToScan(); this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.scanLink=d.scanLink||'off'; this.keysBy=d.keysBy||{}; this.movesBy=d.movesBy||{}; if(this._keysFor!==undefined) this.keysToScan(); this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },
@@ -1243,7 +1261,7 @@ const App = {
   enterScanLook(){ if(this.cur&&this.cur.kind==='scanlook') return;
     if(!this.scanItem){ const base=this._scanLookSaved||{settings:cloneParams(this.cur?this.cur.settings:withDefaults({})),hist:[]};
       this.scanItem={id:'__scan',name:'3D Scan look',kind:'scanlook',settings:withDefaults(base.settings),hist:base.hist||[],fut:[],versions:[]}; }
-    this._prevCur=this.cur; this.cur=this.scanItem; Engine.p=withDefaults(this.scanItem.settings); this.scanItem.settings=Engine.p;
+    this._prevCur=this.cur; this.cur=this.scanItem; setTimeout(()=>this.renderScanLink(),0); Engine.p=withDefaults(this.scanItem.settings); this.scanItem.settings=Engine.p;
     if(!this.scanItem.hist.length) this.commit(); this.afterLookSwap(); },
   leaveScanLook(){ if(!this.cur||this.cur.kind!=='scanlook') return; const it=this._prevCur&&this.items.includes(this._prevCur)?this._prevCur:null; this.cur=it;
     Engine.p=it?withDefaults(it.settings):withDefaults({}); if(it) it.settings=Engine.p; this.afterLookSwap(); },

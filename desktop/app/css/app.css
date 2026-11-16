@@ -441,3 +441,16 @@ body:not(.m-studio):not(.m-scan) #pRecipes{display:none}
 #ctxMenu .mtitle{font:600 11px var(--sans);color:#9ab;padding:6px 12px 4px;text-transform:uppercase;letter-spacing:.05em}
 .preset.user{display:flex;align-items:center;gap:8px}
 .preset.user .lthumb{flex:none;width:44px;height:30px;border-radius:2px;background:#222 center/cover no-repeat}
+
+#scanLinkBox{margin:8px 10px 6px;padding:8px;border:1px solid #333;border-radius:6px;background:#1b1b1b}
+body:not(.m-scan) #scanLinkBox{display:none}
+#scanLinkBox.active{border-color:#d9573c;background:#241a17}
+#scanLinkBox .slHead{font:600 12px var(--sans);color:#ddd;margin-bottom:6px}
+#scanLinkBox .slSrc{font-weight:400;color:var(--faint)}
+#scanLinkBox .seg{display:flex;gap:2px;background:#111;border-radius:5px;padding:2px}
+#scanLinkBox .seg button{flex:1;background:none;border:0;color:#999;padding:5px 0;border-radius:4px;font:12px var(--sans);cursor:pointer}
+#scanLinkBox .seg button.on{background:#d9573c;color:#fff}
+#scanLinkBox .seg button[data-v=off].on{background:#333}
+#scanLinkBox .seg button:disabled{opacity:.35;cursor:default}
+#scanLinkBox .slNote{font:11px var(--sans);color:var(--faint);margin-top:6px}
+#scanLinkBox .slNote:empty{display:none}
