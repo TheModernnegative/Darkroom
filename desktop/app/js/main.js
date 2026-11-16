@@ -16,9 +16,13 @@ const App = {
     await Engine.ensureLuts(Engine.p);
     await this.restore();
     this.renderUserPresets();
-    this.setModule(this.items.length?'develop':'develop');
-    if(this.items.length) this.select(this.items[0].id);
+    this.setModule('develop');
+    if(this.items.length) await this.select(this.items[0].id);
     requestAnimationFrame(()=>this.loop());
+    await this.resumeSession();
+    // autosave: edits already save as you go; this also catches where you are (mode, photo, scan camera) every couple of seconds
+    setInterval(()=>{ const sig=JSON.stringify(this.sessionData()); if(sig!==this._sessSig){ this._sessSig=sig; this.saveSoon(); } },2000);
+    addEventListener('beforeunload',()=>this.save()); document.addEventListener('visibilitychange',()=>{ if(document.hidden) this.save(); });
     setTimeout(()=>this.checkUpdate(false),4000);
     setTimeout(()=>this.syncPresetsIn(),1500); window.addEventListener('focus',()=>{ clearTimeout(this._fs); this._fs=setTimeout(()=>this.syncPresetsIn(),400); });
   },
@@ -1439,10 +1443,21 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
   blobB64(blob){ return new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result.split(',')[1]); fr.readAsDataURL(blob); }); },
 
   // ================================================================ persistence
+  // ---- pick up where you left off: which mode, which photo, which scan and exactly where the camera was
+  sessionData(){ const c=Splat.cam, inScan=this.module==='scan'&&Splat.scene; const photo=this.module==='scan'?this._prevCur:this.cur;
+    return {module:this.module,photo:photo&&photo.kind!=='scanlook'?photo.id:null,scan:this.scanPath||(this.scanName&&Splat.scene?'__demo':null),snap:this.curSnap||null,
+      view:Splat.scene?{yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}:null,cam:Splat.scene?this.camSnap():null}; },
+  async resumeSession(){ const S=this._session; if(!S) return;
+    try{ if(S.photo){ const it=this.items.find(x=>x.id==S.photo); if(it&&it!==this.cur) await this.select(it.id); }
+      if(S.module==='scan'&&S.scan){ this.setModule('scan');
+        if(S.scan==='__demo') await this.loadDemo(); else { let ok=true; if(Native.available){ try{ const st=await Native.call('stat',{paths:[S.scan]}); ok=st[0]&&st[0].size>0; }catch(e){} } if(!ok){ this.toast('The scan you had open has moved or been deleted'); return; } this.busy('Re-opening '+S.scan.split('/').pop()+'…'); await this.loadScanPath(S.scan); this.busy(); }
+        if(S.cam) this.applyCam(S.cam); if(S.view){ Object.assign(Splat.cam,JSON.parse(JSON.stringify(S.view))); Splat.lastSortView=null; } this.curSnap=S.snap||null; this.renderStrip(); Engine.dirty=true; UI.refresh(); this.toast('Picked up where you left off'); }
+      else if(S.module&&S.module!=='develop') this.setModule(S.module);
+    }catch(e){ this.busy(); console.warn('resume',e); } },
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},cleanBy:this.cleanBy||{},scanLink:this.scanLink||'off',scanLinkFrom:this.scanLinkFrom||'auto',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,hdr:i.hdr||undefined,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},cleanBy:this.cleanBy||{},scanLink:this.scanLink||'off',scanLinkFrom:this.scanLinkFrom||'auto',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,session:this.sessionData(),scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,hdr:i.hdr||undefined,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -1451,6 +1466,7 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
     if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.cleanBy=d.cleanBy||{}; this.scanLink=d.scanLink||'off'; this.scanLinkFrom=d.scanLinkFrom||'auto'; this.keysBy=d.keysBy||{}; this.movesBy=d.movesBy||{}; if(this._keysFor!==undefined) this.keysToScan(); this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+      this._session=d.session||null;
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },
