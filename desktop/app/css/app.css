@@ -489,3 +489,10 @@ i.b3d{font-style:normal;font:700 9px var(--sans);background:#d9573c;color:#fff;b
 .btnrow .tbtn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #histOrig{width:auto;padding:0 7px;font-size:11px;line-height:18px}
 .preset.user .uf{opacity:.35;font-weight:400}.preset.user .uf.on{opacity:1;color:#ff8a6d}.preset.user:hover .uf{opacity:.8}
+
+#strip .thumb .badge b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#strip .thumb .badge i{display:block;font-style:normal;opacity:.7;font-size:.9em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vidPrev{position:fixed;inset:0;z-index:300;background:#000e;display:flex;flex-direction:column}
+#vidPrev .vpTop{display:flex;align-items:center;gap:8px;padding:12px 16px;color:#ddd;font:600 13px var(--sans)}
+#vidPrev .vpTop span{flex:1}
+#vidPrev img{flex:1;min-height:0;object-fit:contain;width:100%;padding:0 16px 16px;box-sizing:border-box}

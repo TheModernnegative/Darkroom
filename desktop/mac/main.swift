@@ -77,7 +77,8 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
         case "decode":
             guard let p = query(url, "path") else { throw err("no path") }
             let maxDim = Int(query(url, "max") ?? "0") ?? 0
-            return (try decode(path: p, maxDim: maxDim), "application/octet-stream")
+            let hdr = query(url, "hdr") == "1"
+            return (try decode(path: p, maxDim: maxDim, hdr: hdr), "application/octet-stream")
         default:
             throw err("unknown host")
         }
@@ -100,7 +101,7 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
 
     static let rawExts: Set<String> = ["dng","cr2","cr3","nef","nrw","arw","raf","orf","rw2","pef","srw","3fr","iiq","erf","rwl"]
 
-    private func decode(path: String, maxDim: Int) throws -> Data {
+    private func decode(path: String, maxDim: Int, hdr: Bool = false) throws -> Data {
         let u = URL(fileURLWithPath: path)
         var image: CIImage?
         var isRaw = false
@@ -114,7 +115,9 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
         }
         if image == nil {
             var opts: [CIImageOption: Any] = [.applyOrientationProperty: true]
-            if #available(macOS 14.0, *) { opts[.expandToHDR] = true }
+            // iPhone HEIC/JPEG carry an HDR gain map. Off by default so the photo matches how it looks on a normal screen;
+            // on request we expand it for extra highlight range (film looks can roll it off).
+            if hdr, #available(macOS 14.0, *) { opts[.expandToHDR] = true }
             image = CIImage(contentsOf: u, options: opts)
         }
         guard var img = image else { throw err("could not decode \(u.lastPathComponent)") }

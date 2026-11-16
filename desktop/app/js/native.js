@@ -15,6 +15,6 @@
     },
     on(ev, f){ (listeners[ev] = listeners[ev] || []).push(f); },
     fileURL(path){ return 'darkroom://file/?path=' + encodeURIComponent(path); },
-    decodeURL(path, max){ return 'darkroom://decode/?path=' + encodeURIComponent(path) + '&max=' + (max||0); },
+    decodeURL(path, max, hdr){ return 'darkroom://decode/?path=' + encodeURIComponent(path) + '&max=' + (max||0) + '&hdr=' + (hdr?1:0); },
   };
 })();

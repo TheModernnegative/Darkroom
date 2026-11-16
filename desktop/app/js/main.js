@@ -37,6 +37,7 @@ const App = {
     UI.seg(b,'format','Format',Object.entries(FORMATS).map(([k,f])=>[k,f.label]),()=>P().format,v=>{ P().format=v; this.changed(); this.commit(); });
     S(b,'filmAmt','Strength',{min:0,max:100,step:1,fmt:x=>Math.round(x)+'%'});
     { const fr=UI.check(b,'showFrame','Show frame / border',()=>P().border!=='none'&&!(P().off&&P().off.frame),v=>{ const p=P(); p.off=Object.assign({},p.off||{}); if(v){ delete p.off.frame; if(p.border==='none'){ const d=(Engine.stock(p.stock).defaults||{}).border; p.border=d||'film'; } } else p.off.frame=true; this.changed(); this.commit(); UI.refresh(); this.syncToggles(); }); }
+    S(b,'bypass','Skip bleach',{min:0,max:100,step:1,fmt:x=>x?Math.round(x)+'%':'Off'});
     S(b,'push','Push / pull',{min:-2,max:3,step:1/3,fmt:x=>Math.abs(x)<0.01?'Box':(x>0?'+':'−')+(Math.round(Math.abs(x)*3)/3).toFixed(1).replace('.0','')});
     UI.check(b,'autoExp','Auto exposure (lab metering)',()=>P().autoExp,v=>{ P().autoExp=v; this.changed(); this.commit(); });
     UI.note(b,'','stockNote');
@@ -44,6 +45,8 @@ const App = {
     Tools.buildMaskPanel(root);
     // Basic
     b=UI.panel(root,'pBasic','Basic',true,()=>{ ['temp','tint','ev','contrast','highlights','shadows','whites','blacks','vibrance','saturation','hlExpand'].forEach(k=>P()[k]=DEFAULTS[k]); this.changed(); this.commit(); UI.refresh(); });
+    { const hb=document.createElement('div'); b.appendChild(hb); UI.check(hb,'hdrIn','Use HDR highlights (iPhone / HEIC gain map)',()=>!!(this.cur&&this.cur.hdr),v=>this.setHDR(v));
+      UI.sliders.hdrVis=()=>{ const it=this.cur; hb.style.display=it&&it.path&&!/\.(dng|cr2|cr3|nef|nrw|arw|raf|orf|rw2|pef|srw|3fr|iiq|erf|rwl)$/i.test(it.path)?'':'none'; }; }
     UI.note(b,'<span class="sub">White balance</span>');
     S(b,'temp','Temp',{min:-100,max:100,step:1,track:'linear(90deg,#3c6bd6,#c9c9c9 50%,#e4c03a)'.replace('linear','linear-gradient')});
     S(b,'tint','Tint',{min:-100,max:100,step:1,track:'linear-gradient(90deg,#3fae4a,#c9c9c9 50%,#c446c0)'});
@@ -418,7 +421,7 @@ const App = {
       if(merge){ H[n-1]=snap; it.histT[n-1]=Date.now(); if(H[n-2]===snap){ H.pop(); it.histT.pop(); } } else { H.push(snap); it.histT.push(Date.now()); } }
     while(it.hist.length>200){ it.hist.shift(); it.histT.shift(); } while(it.histT.length<it.hist.length) it.histT.unshift(0); this.renderHistorySoon(); },
   // ---- history log: every committed step, newest first; click one to go back to it (that becomes a new step)
-  HNAMES:{stock:'Film',paper:'Paper',filmAmt:'Film strength',format:'Format',ev:'Exposure',contrast:'Contrast',highlights:'Highlights',shadows:'Shadows',whites:'Whites',blacks:'Blacks',temp:'White balance',tint:'White balance',
+  HNAMES:{stock:'Film',paper:'Paper',filmAmt:'Film strength',format:'Format',ev:'Exposure',contrast:'Contrast',bypass:'Skip bleach',highlights:'Highlights',shadows:'Shadows',whites:'Whites',blacks:'Blacks',temp:'White balance',tint:'White balance',
     vibrance:'Vibrance',saturation:'Saturation',grain:'Grain',grainSize:'Grain size',halation:'Halation',glow:'Glow',falloff:'Vignette',crop:'Crop',angle:'Straighten',curve:'Tone curve',hsl:'Colour mixer',border:'Frame',
     showFrame:'Frame',silver:'Black & white',structure:'Structure',sTone:'Toning',fx:'Overlays',flare:'Lens flare',anOn:'Analog media',ttOn:'Two-tone',dblId:'Double exposure',masks:'Masks',sharpen:'Sharpening',nr:'Noise reduction',push:'Push/pull',
     leakAmt:'Light leak',dustAmt:'Dust',scratchAmt:'Scratches',softEdges:'Soft edges',fringe:'Fringing',distort:'Distortion',zoomBlur:'Zoom blur',motionBlur:'Motion blur',tiltShift:'Tilt-shift'},
@@ -484,7 +487,7 @@ const App = {
   async decode(it,max){
     const gl=Engine.gl;
     if(it.path && Native.available){
-      const buf=await (await fetch(Native.decodeURL(it.path,max))).arrayBuffer();
+      const buf=await (await fetch(Native.decodeURL(it.path,max,!!it.hdr))).arrayBuffer();
       const hd=new Uint32Array(buf,0,4); if(hd[0]!==0x31465244) throw new Error(new TextDecoder().decode(new Uint8Array(buf).slice(0,200)));
       const w=hd[1],h=hd[2],isRaw=hd[3]===1;
       const half=new Uint16Array(buf,16,w*h*4);
@@ -576,7 +579,8 @@ const App = {
       return; }
     this.visible().forEach(it=>{ const t=document.createElement('div'); t.className='thumb'+(it===this.cur?' on':'')+(it.flag==='reject'?' rej':''); t.title=it.name;
       if(it.sel&&it!==this.cur) t.className+=' sel';
-      t.innerHTML=(it.thumb?`<img src="${it.thumb}">`:'')+`<span class="badge">${(Engine.stock(it.settings.stock).name||'').replace('Superia ','')}</span><span class="marks">${this.badge(it)}</span>`;
+      { const stn=Engine.stock(it.settings.stock), film=stn&&stn.id!=='original'?(stn.name||'').replace('Superia ',''):'', nm=(it.name||'').replace(/\.[^.]+$/,'').replace(/</g,'&lt;');
+        t.innerHTML=(it.thumb?`<img src="${it.thumb}">`:'<div class="scanIco">'+(it.inst?'3D':'')+'</div>')+`<span class="badge"><b>${nm}</b>${film?'<i>'+film+'</i>':''}</span><span class="marks">${this.badge(it)}</span>`; }
       t.onclick=e=>this.stripClick(it,e);
       t.oncontextmenu=e=>{ e.preventDefault(); this.photoMenu(it,e.clientX,e.clientY); };
       this.stackDecor(t,it);
@@ -775,7 +779,7 @@ const App = {
     setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0);
   },
   // ---- copy / paste settings: pick which parts travel (⌘⇧C), paste onto this photo and every selected one (⌘⇧V)
-  COPY_GROUPS:[['film','Film stock, print & format',['stock','paper','filmAmt','format','autoExp','push','hlExpand','edgeText','edgeCustom','frameNo','frameTone','border'],1],
+  COPY_GROUPS:[['film','Film stock, print & format',['stock','paper','filmAmt','format','autoExp','push','bypass','hlExpand','edgeText','edgeCustom','frameNo','frameTone','border'],1],
     ['wb','White balance',['temp','tint'],1],['tone','Exposure & tone',['ev','contrast','highlights','shadows','whites','blacks'],1],['presence','Vibrance & saturation',['vibrance','saturation'],1],
     ['curve','Tone curve',['curve'],1],['color','HSL & colour grading',['hslH','hslS','hslL','gShH','gShS','gShL','gMidH','gMidS','gMidL','gHiH','gHiS','gHiL','gBlend','gBalance'],1],
     ['detail','Sharpening & noise',['sharpen','sharpRadius','nr','nrColor'],1],['grain','Grain, halation & glow',['grain','grainSize','grainRough','halation','glow'],1],['lens','Lens falloff & softness',['falloff','softness'],1],
@@ -863,7 +867,7 @@ const App = {
     if(Native.available&&this.info){ try{ const rt8=GLU.target(w,h,'rgba8'); Splat.render(rt8); const gl=Engine.gl, px=new Uint8Array(w*h*4); gl.bindFramebuffer(gl.FRAMEBUFFER,rt8.f); gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px); GLU.free(rt8);
       const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'), id=x.createImageData(w,h); for(let y=0;y<h;y++) id.data.set(px.subarray((h-1-y)*w*4,(h-y)*w*4),y*w*4); x.putImageData(id,0,0);
       const path=this.info.splatDir+'/frames/'+it.name.replace(/[^\w\- ]+/g,'_')+'_'+Date.now()+'.png'; await Native.call('writeFile',{path,base64:await this.blobB64(await new Promise(r=>c.toBlob(r,'image/png')))}); it.path=path; }catch(e){} }
-    it.inst=this.instData(); this.busy(); this.setModule(back); await this.select(keepId); this.saveSoon(); this.toast('Re-rendered “'+it.name+'” — its own edits are kept'); },
+    it.inst=this.instData(); it.thumb=this.viewThumb(220)||it.thumb; it.thumbStale=false; this.busy(); this.setModule(back); await this.select(keepId); this.saveSoon(); this.toast('Re-rendered “'+it.name+'” — its own edits are kept'); },
   instKey(sn){ const v=sn.view, c=sn.cam||{}; return {yaw:v.yaw,pitch:v.pitch,dist:v.dist,target:v.target.slice(),focus:c.focus!=null?c.focus:Splat.cam.focus,fnum:STOPS[c.stop!=null?c.stop:Splat.cam.stop],fmm:c.fmm||Splat.cam.fmm,roll:v.roll||0}; },
   async exportInstances(sc){ const sns=this.snapsFor(sc.path); if(!sns.length) return; let dir=null;
     if(Native.available){ dir=await Native.call('pickFolder',{dir:this.info&&this.info.splatDir+'/exports'}); if(!dir) return; }
@@ -1015,7 +1019,7 @@ const App = {
     const rt=GLU.target(w,h,'rgba16f'); Splat.render(rt);
     const src={tex:rt.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1};
     const n=this.items.filter(i=>i.kind==='scanframe').length+1;
-    const inst=this.instData(), it=this.newItem({inst,name:(this.scanName||'Scan').replace(/\.(ply|splat)$/,'')+' — frame '+n,kind:'scanframe',src,settings:Object.assign(this.scanParams(cloneParams(Engine.p)),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'})});
+    const inst=this.instData(), thumb0=this.viewThumb(220), it=this.newItem({inst,thumb:thumb0,name:(this.scanName||'Scan').replace(/\.(ply|splat)$/,'')+' — frame '+n,kind:'scanframe',src,settings:Object.assign(this.scanParams(cloneParams(Engine.p)),{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false,aspect:'free'})});
     it.hist=[JSON.stringify(it.settings)];
     // keep a copy on disk so the frame survives a restart
     if(Native.available && this.info){
@@ -1123,6 +1127,7 @@ const App = {
     if(this.keySel>=K.length) this.keySel=K.length-1;
     if(ko&&this.keySel>=0&&K[this.keySel]){ const k=K[this.keySel];
       UI.slider(ko,'kHold','Hold here',{min:0,max:5,step:0.1,def:0,get:()=>k.hold||0,set:v=>k.hold=v,fmt:x=>x?x.toFixed(1)+' s':'No hold'});
+      UI.slider(ko,'kShut','Shutter here',{min:0,max:360,step:1,def:0,get:()=>k.shutter||0,set:v=>{ k.shutter=v<5?0:v; this.saveSoon(); },fmt:x=>x<5?'From export':Math.round(x)+'°'});
       UI.seg(ko,'kEase','Move to next',[['smooth','Smooth'],['in','Ease in'],['out','Ease out'],['linear','Linear']],()=>k.ease||'smooth',v=>k.ease=v);
       const r=document.createElement('div'); r.className='btnrow'; ko.appendChild(r); UI.button(r,'Update to current view',()=>{ Object.assign(k,this.keySnap()); this.toast('Keyframe '+(this.keySel+1)+' updated'); }); UI.button(r,'Delete',()=>{ K.splice(this.keySel,1); this.keySel--; this.renderKeys(); }); }
     K.forEach((k,i)=>{ const t=document.createElement('button'); t.className='ltab'+(i===this.keySel?' on':''); t.textContent=String(i+1); t.title='Jump to keyframe '+(i+1)+' · right-click to delete';
@@ -1177,7 +1182,7 @@ const App = {
     const keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,focusLock:c.focusLock,fmm:c.fmm,fnum:c.fnum,roll:c.roll}; const t0=performance.now(); this._kprev=true;
     this.toast('Previewing the move ('+tl.T.toFixed(1)+' s) — click ▶ Preview again to stop');
     const step=()=>{ const t=(performance.now()-t0)/1000; if(!this._kprev||t>tl.T+0.4){ this._kprev=false; Object.assign(c,keep); c.fnum=keep.fnum||null; Splat.lastSortView=null; Engine.dirty=true; return; }
-      this.keyCamAt(tl,Math.min(t,tl.T)); this.tlHead(t,tl.T); Splat.lastSortView=null; Engine.dirty=true; requestAnimationFrame(step); }; requestAnimationFrame(step); },
+      this.keyCamAt(tl,Math.min(t,tl.T)); this.applyWobble(t,(this._orbitPrefs||{}).wob); this.tlHead(t,tl.T); Splat.lastSortView=null; Engine.dirty=true; requestAnimationFrame(step); }; requestAnimationFrame(step); },
   async orbitDialog(){
     if(!Splat.scene){ this.toast('Load a scan first'); return; }
     if(!Native.available){ this.toast('Video export runs in the Mac app'); return; }
@@ -1199,8 +1204,18 @@ const App = {
     UI.slider(mbA,'oangle','Shutter angle',{min:11,max:360,step:1,def:180,get:()=>st.angle,set:v=>{ st.angle=v; mbNote(); },fmt:x=>Math.round(x)+'°'});
     const mbS=document.createElement('div'); mbIn.appendChild(mbS); mbS.style.display=st.mb==='speed'?'':'none';
     UI.seg(mbS,'ospeed','Shutter speed',[['30','1/30'],['48','1/48'],['50','1/50'],['60','1/60'],['125','1/125'],['250','1/250'],['500','1/500']],()=>String(st.speed),v=>{ st.speed=+v; mbNote(); });
+    UI.slider(mbIn,'ors','Rolling shutter',{min:0,max:100,step:1,def:0,get:()=>st.rs||0,set:v=>{ st.rs=v; mbNote(); },fmt:x=>x?Math.round(x)+'%':'Off — film'});
     UI.seg(mbIn,'ombq','Smoothness',[['4','Draft (4)'],['8','Good (8)'],['16','Best (16)'],['32','Silky (32)']],()=>String(st.mbq),v=>{ st.mbq=+v; mbNote(); });
     const mbN=document.createElement('div'); mbN.className='note'; mbIn.appendChild(mbN);
+    // camera feel: a little life in the move, like a person holding the camera
+    st.wob=Object.assign({style:'off',amt:50,seed:1},st.wob||{});
+    { const box=document.createElement('div'); box.className='dmgBox'; body.appendChild(box);
+      UI.seg(box,'owob','Camera feel',[['off','Locked off'],['tripod','Tripod drift'],['shoulder','Shoulder rig'],['handheld','Handheld']],()=>st.wob.style,v=>{ st.wob.style=v; wi.style.display=v==='off'?'none':''; });
+      const wi=document.createElement('div'); box.appendChild(wi); wi.style.display=st.wob.style==='off'?'none':'';
+      UI.slider(wi,'owamt','Amount',{min:0,max:100,step:1,def:50,get:()=>st.wob.amt,set:v=>st.wob.amt=v,fmt:x=>Math.round(x)});
+      const r=document.createElement('div'); r.className='btnrow'; wi.appendChild(r); UI.button(r,'New take (different wobble)',()=>{ st.wob.seed=1+Math.floor(Math.random()*1e6); this.toast('New take'); });
+      UI.note(wi,'Shoulder rig: slow sway, breathing and a little roll. Handheld: busier, with small corrections. Also used by ▶ Preview in the Scan panel.'); }
+    { const r=document.createElement('div'); r.className='btnrow'; body.appendChild(r); UI.button(r,'▶ Preview with blur, feel & dust (low-res)',()=>this.videoPreview(st),'tbtn accent'); }
     const mbNote=()=>{ if(!mbN) return; const fr=this.shutterFrac(st), sec=fr/st.fps, ang=Math.round(fr*360); mbN.innerHTML=st.mb==='off'?'':`= ${ang}° at ${st.fps} fps, 1/${Math.round(1/sec)} s open per frame${fr>=0.999&&st.mb==='speed'?' (can’t be longer than one frame)':''}. ${st.mbq} renders are blended per frame, so export takes about ${st.mbq}× longer. 180° is the classic film look.`; }; mbNote();
     UI.check(body,'ograin','Moving grain (new grain every frame, like real film)',()=>st.grain,v=>st.grain=v);
     st.dmg=Object.assign({},FilmDamage.DEFAULTS,st.dmg||{});
@@ -1222,14 +1237,32 @@ const App = {
     this._orbitPrefs=Object.assign({},st);
     try{ await this.renderOrbit(st); }catch(e){ console.error(e); this.busy(); this.toast('Video failed: '+e.message); }
   },
+  // smooth pseudo-random sway: a few sines per axis with seeded phases (different every take)
+  wobbleAt(t,w){ if(!w||w.style==='off'||!w.amt) return null; const A=w.amt/50, s0=(w.seed||1)*0.6180339;
+    const n=(f,k)=>{ const ph=(s0*(k+1)*7.31)%6.283, ph2=(s0*(k+3)*3.17)%6.283, ph3=(s0*(k+5)*1.93)%6.283; return Math.sin(6.283*f*t+ph)*0.6+Math.sin(6.283*f*2.31*t+ph2)*0.3+Math.sin(6.283*f*5.07*t+ph3)*0.1; };
+    const P={tripod:{f:0.07,yaw:0.0025,pitch:0.0018,roll:0.0008,dist:0.002},shoulder:{f:0.35,yaw:0.006,pitch:0.007,roll:0.009,dist:0.006,breath:0.25},handheld:{f:0.9,yaw:0.011,pitch:0.012,roll:0.014,dist:0.01,breath:0.3}}[w.style]||null; if(!P) return null;
+    const b=P.breath?Math.sin(6.283*P.breath*t+s0)*0.5:0;
+    return {yaw:n(P.f,1)*P.yaw*A, pitch:(n(P.f*1.13,2)+b)*P.pitch*A, roll:n(P.f*0.87,3)*P.roll*A, dist:n(P.f*0.6,4)*P.dist*A}; },
+  applyWobble(t,w){ const o=this.wobbleAt(t,w); if(!o) return; const c=Splat.cam; c.yaw+=o.yaw; c.pitch+=o.pitch; c.roll=(c.roll||0)+o.roll; c.dist*=1+o.dist; },
+  shutterAt(st,tl,tf){ const K=this.scanKeys||[]; if(st.move==='keys'&&tl&&K.some(k=>k.shutter>0)){ const base=this.shutterFrac(st)*360||180, ang=i=>K[i].shutter>0?K[i].shutter:base;
+      let sg=tl.segs.find(x=>tf>=x.t0&&tf<x.t1)||tl.segs[tl.segs.length-1]; if(!sg) return ang(0)/360; if(sg.hold) return ang(sg.i)/360; const u=(tf-sg.t0)/(sg.t1-sg.t0); return Math.min(1,(ang(sg.i)+(ang(sg.i+1)-ang(sg.i))*u)/360); }
+    return this.shutterFrac(st); },
+  // quick low-res render of the export with every effect on, played back in a window
+  async videoPreview(st){ const prev={frames:[]}; const s2=Object.assign({},st,{size:Math.min(540,st.size),mbq:Math.min(st.mbq||8,6),_preview:prev});
+    try{ await this.renderOrbit(s2); }catch(e){ this.busy(); if(e.message!=='cancelled') this.toast('Preview failed: '+e.message); prev.frames.forEach(u=>URL.revokeObjectURL(u)); return; }
+    if(!prev.frames.length) return; let el=document.createElement('div'); el.id='vidPrev'; el.innerHTML='<div class="vpTop"><span>Preview — low resolution, '+st.fps+' fps</span><button class="tbtn" data-a="close">Close  Esc</button></div><img>'; document.body.appendChild(el);
+    const img=el.querySelector('img'); let i=0, on=true; const tick=()=>{ if(!on) return; img.src=prev.frames[i]; i=(i+1)%prev.frames.length; setTimeout(tick,1000/st.fps); }; tick();
+    const close=()=>{ on=false; el.remove(); prev.frames.forEach(u=>URL.revokeObjectURL(u)); removeEventListener('keydown',kd,true); }, kd=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } }; addEventListener('keydown',kd,true); el.onclick=e=>{ if(e.target.dataset.a==='close'||e.target===el) close(); }; },
+  async setHDR(on){ const list=[...new Set([this.cur,...this.selected()])].filter(x=>x&&x.path&&x.kind!=='scanlook'); list.forEach(it=>{ it.hdr=!!on; if(it.src&&it.src.tex&&it!==this.cur) { try{ Engine.gl.deleteTexture(it.src.tex); }catch(e){} } it.src=null; it.thumbStale=true; });
+    this.saveSoon(); if(this.cur) await this.select(this.cur.id); this.thumbSoon(300); this.toast(on?'HDR highlights on — brighter-than-white detail from the iPhone’s gain map, for film looks to roll off':'HDR off — the photo as it looks on a normal screen'); },
   shutterFrac(st){ if(!st||st.mb==='off'||!st.mb) return 0; return Math.min(1,st.mb==='angle'?st.angle/360:st.fps/st.speed); },
   accProg(){ if(this._accP) return this._accP; this._accP=GLU.program(GLU.QUAD_VS,`#version 300 es
 precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out vec4 o; void main(){ o=texture(uT,vUv)*uW; }`); return this._accP; },
   async renderOrbit(st){
     const name=(this.scanName||'scan').replace(/\.(ply|splat)$/i,'')+' — orbit — '+Engine.stock().name+'.mov';
-    const path=await Native.call('pickSave',{name,dir:this.info&&this.info.splatDir+'/exports'}); if(!path) return;
+    const PV=st._preview; const path=PV?null:await Native.call('pickSave',{name,dir:this.info&&this.info.splatDir+'/exports'}); if(!PV&&!path) return;
     const [sw,sh]=Splat.sensor(); const long=st.size; let w=Math.round(sw>=sh?long:long*sw/sh), h=Math.round(sw>=sh?long*sh/sw:long); w-=w%2; h-=h%2;
-    const job=await Native.call('videoBegin',{path,w,h,fps:st.fps});
+    const job=PV?0:await Native.call('videoBegin',{path,w,h,fps:st.fps});
     const c=Splat.cam, keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,focusLock:c.focusLock,fmm:c.fmm,fnum:c.fnum,roll:c.roll}, keepSeed=Engine.grainSeed;
     const tl=st.move==='keys'?this.keyTimeline(st.secs/Math.max(1,(this.scanKeys||[]).length-1)):null; const frames=Math.round((tl?tl.T:st.secs)*st.fps), gl=Engine.gl;
     const tmp=GLU.target(w,h,'rgba16f'), out=GLU.target(w,h,'rgba8'), RT={};
@@ -1242,19 +1275,21 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
     try{
       for(let f=0;f<frames;f++){
         if(this._cancelVideo) throw new Error('cancelled');
-        const camAt=tf=>{ const t=tf*st.fps/frames;
+        const camAt=tf=>{ const t=tf*st.fps/frames; if(st.move!=='keys'){ c.pitch=keep.pitch; c.roll=keep.roll; c.dist=keep.dist; }
           if(st.move==='swing') c.yaw=keep.yaw+Math.sin(t*2*Math.PI)*st.arc/2*Math.PI/180;
           else if(st.move==='orbit') c.yaw=keep.yaw+t*2*Math.PI;
           else if(st.move==='keys'){ this.keyCamAt(tl,Math.max(0,Math.min(tl.T,tf))); }
-          else { const tt=Math.max(0,Math.min(1,t)), e=.5-.5*Math.cos(tt*Math.PI); c.dist=keep.dist*(1-.35*e); c.yaw=keep.yaw+(e-.5)*st.arc/3*Math.PI/180; } };
-        const fr=this.shutterFrac(st), S=fr>0?Math.max(2,st.mbq||8):1;
-        if(S===1){ camAt(f/st.fps); await this.sortSync(); Splat.render(tmp); }
-        else { // blend S renders spread over the time the shutter is open (centred on the frame)
+          else { const tt=Math.max(0,Math.min(1,t)), e=.5-.5*Math.cos(tt*Math.PI); c.dist=keep.dist*(1-.35*e); c.yaw=keep.yaw+(e-.5)*st.arc/3*Math.PI/180; }
+          this.applyWobble(tf,st.wob); };
+        const fr=this.shutterAt(st,tl,f/st.fps), S=fr>0?Math.max(2,st.mbq||8):1, rs=(st.rs||0)/100, B=rs>0?16:1;
+        if(S===1&&B===1){ camAt(f/st.fps); await this.sortSync(); Splat.render(tmp); }
+        else { // blend S renders spread over the time the shutter is open; with rolling shutter each band of rows is exposed a little later than the one above
           acc=acc||GLU.target(w,h,'rgba16f'); sub=sub||GLU.target(w,h,'rgba16f'); const A=this.accProg();
           gl.bindFramebuffer(gl.FRAMEBUFFER,acc.f); gl.viewport(0,0,w,h); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
-          for(let j=0;j<S;j++){ camAt((f+(j/(S-1)-0.5)*fr)/st.fps); if(j===0||j===S>>1) await this.sortSync(); Splat.render(sub);
+          for(let bd=0;bd<B;bd++){ const y0=Math.floor(bd*h/B), y1=Math.floor((bd+1)*h/B), toff=B>1?((bd+0.5)/B-0.5)*rs:0;
+           for(let j=0;j<S;j++){ camAt((f+toff+(S>1?(j/(S-1)-0.5)*fr:0))/st.fps); if(j===0&&bd%4===0||j===S>>1) await this.sortSync(); Splat.render(sub);
             gl.bindFramebuffer(gl.FRAMEBUFFER,acc.f); gl.viewport(0,0,w,h); gl.useProgram(A.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,sub.t); gl.uniform1i(A.u.uT,0); gl.uniform1f(A.u.uW,1/S);
-            gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); GLU.drawQuad(); gl.disable(gl.BLEND); }
+            if(B>1){ gl.enable(gl.SCISSOR_TEST); gl.scissor(0,h-y1,w,y1-y0); } gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); GLU.drawQuad(); gl.disable(gl.BLEND); gl.disable(gl.SCISSOR_TEST); } }
           gl.bindFramebuffer(gl.FRAMEBUFFER,tmp.f); gl.viewport(0,0,w,h); gl.useProgram(A.p); gl.bindTexture(gl.TEXTURE_2D,acc.t); gl.uniform1f(A.u.uW,1); GLU.drawQuad(); gl.bindFramebuffer(gl.FRAMEBUFFER,null); }
         if(st.grain) Engine.grainSeed=(keepSeed+f*2654435761)>>>0;
         const src={tex:tmp.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1};
@@ -1265,13 +1300,14 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
         for(let y=0;y<h;y++) id.data.set(px.subarray((h-1-y)*w*4,(h-y)*w*4),y*w*4); x.putImageData(id,0,0);
         if(dmg) FilmDamage.frame(x,dmg,cv);
         const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.92));
-        await Native.call('videoFrame',{job,base64:await this.blobB64(blob)});
+        if(PV) PV.frames.push(URL.createObjectURL(blob)); else await Native.call('videoFrame',{job,base64:await this.blobB64(blob)});
         const el=(performance.now()-t0)/1000, eta=el/(f+1)*(frames-f-1);
-        this.busy(`Rendering orbit video — frame ${f+1} / ${frames} · ${Math.ceil(eta)} s left  (Esc to cancel)`);
+        this.busy(`${PV?'Rendering preview':'Rendering video'} — frame ${f+1} / ${frames} · ${Math.ceil(eta)} s left  (Esc to cancel)`);
       }
+      if(PV){ this.busy(); return; }
       const done=await Native.call('videoEnd',{job}); this.busy(); this.toast(done?'Saved '+done.split('/').pop():'Video writer failed');
       if(done) Native.call('reveal',{path:done}).catch(()=>{});
-    } catch(e){ await Native.call('videoEnd',{job}).catch(()=>{}); throw e; }
+    } catch(e){ if(!PV) await Native.call('videoEnd',{job}).catch(()=>{}); throw e; }
     finally{ Object.assign(c,keep); c.fnum=keep.fnum||null; Engine.grainSeed=keepSeed; GLU.free(tmp); GLU.free(out); GLU.free(acc); GLU.free(sub); for(const k in RT) GLU.free(RT[k]); Splat.lastSortView=null; Engine.dirty=true; }
   },
   // ================================================================ export
@@ -1309,7 +1345,7 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
   EXT:{tiff:'.tif',jpeg:'.jpg',heic:'.heic',png:'.png'},
   exportName(st,it,n){ const base=(this.module==='scan'?(this.scanName||'scan'):(it?it.name:'image')).replace(/\.[^.]+$/,''), p=(it&&it!==this.cur&&it.settings)||Engine.p, s=Engine.stock(p.stock);
     const d=new Date(), L=this.module==='scan'&&LENSES.find(l=>l.id===Splat.cam.lens), sn=this.module==='scan'&&this.curSnap&&this.snapsFor(this.scanPath).find(x=>x.id===this.curSnap);
-    const T={name:base,film:s.id==='original'?'Original':s.name,n:String(n||1).padStart(3,'0'),date:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
+    const T={name:base,film:s.id==='original'?'':s.name,n:String(n||1).padStart(3,'0'),date:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),
       stars:it&&it.rating?it.rating+'★':'',look:(sn&&sn.name)||p.lookName||'',lens:L?L.name.split(' · ')[0]:''};
     let out=(st.tpl||'{name} — {film}').replace(/\{(\w+)\}/g,(m,k)=>k in T?T[k]:m).replace(/[\/:]/g,'-').replace(/\s*—\s*(—\s*)+/g,' — ').replace(/^[\s—-]+|[\s—-]+$/g,'').trim()||base;
     return out+this.EXT[st.fmt]; },
@@ -1397,7 +1433,7 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},cleanBy:this.cleanBy||{},scanLink:this.scanLink||'off',scanLinkFrom:this.scanLinkFrom||'auto',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},cleanBy:this.cleanBy||{},scanLink:this.scanLink||'off',scanLinkFrom:this.scanLinkFrom||'auto',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,hdr:i.hdr||undefined,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },

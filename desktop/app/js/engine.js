@@ -24,7 +24,7 @@ const DEFAULTS = {
   anTrack:0, anTrackPos:72, anHead:0, anDrop:0, anJitter:0, anInterlace:0, anSat:0, anHue:0, anTint:'none',
   anBlock:0, anScan:0, anScanN:480, anMask:'none', anMaskAmt:50, anCurve:0, anBloom:0, anVig:0, anCorner:0,
   anGate:'none', anOverscan:0, anGateSoft:30, anWeave:0, anFlicker:0, anOSD:'none', anOSDText:'',
-  cps:[], negMode:'none',   // control points (U-point style): {x,y,r,col,b,c,s,st,w}
+  cps:[], negMode:'none', bypass:0,   // control points (U-point style): {x,y,r,col,b,c,s,st,w}
   flare:0, flareLen:60, flareGhost:35, flareColor:'blue', flareSens:50,
   fx:{}, softness:0, distort:0, zoomBlur:0, motionBlur:0, motionAngle:0, softEdges:0, tiltShift:0, tiltPos:50, tiltWidth:20, fringe:0,
   sharpen:0, sharpRadius:1, nr:0, nrColor:0, push:0, masks:[],
@@ -456,7 +456,7 @@ const Engine = {
     if(p.silver) gl.uniform4f(u.uStructB,(p.structure||0)/100,(p.sStructHi||0)/100,(p.sStructMid||0)/100,(p.sStructSh||0)/100); else gl.uniform4f(u.uStructB,0,0,0,0);
     { const P=new Float32Array(32), C=new Float32Array(24), A=new Float32Array(32);
       cps.forEach((c,i)=>{ P.set([c.x,c.y,Math.max(0.01,c.r||0.15),(c.w||0)/100],i*4); C.set(c.col||[.18,.18,.18],i*3); A.set([(c.b||0)/100,(c.c||0)/100,(c.s||0)/100,(c.st||0)/100],i*4); });
-      gl.uniform1f(u.uCPShow,this.cpShow??-1); gl.uniform1f(u.uNeg,{bw:1,colour:2}[p.negMode]||0);
+      gl.uniform1f(u.uCPShow,this.cpShow??-1); gl.uniform1f(u.uNeg,{bw:1,colour:2}[p.negMode]||0); gl.uniform1f(u.uBypass,(p.bypass||0)/100);
       gl.uniform1i(u.uCPn,cps.length); gl.uniform4fv(u.uCP,P); gl.uniform3fv(u.uCPc,C); gl.uniform4fv(u.uCPa,A); }
     gl.uniform4f(u.uSB,(p.sBright||0)/100,(p.sBrightHi||0)/100,(p.sBrightSh||0)/100,(p.sContrast||0)/100);
     gl.uniform3f(u.uSAmp,(p.sAmpW||0)/100,(p.sAmpB||0)/100,doStruct?(p.sSoft||0)/100:0);
@@ -880,7 +880,7 @@ uniform vec4 uPaperG; uniform vec3 uPaperT;
 uniform float uSplit; uniform float uOrig,uFilmAmt,uHasLut,uN,uHalAmt,uGlow,uBefore,uFlip,uEncoded,uContrast,uHighlights,uShadows,uWhites,uBlacks,uVibrance,uSat;
 uniform sampler2D uA[6]; uniform float uAPost[6],uAMono[6],uAOn[6],uAAmt[6],uAInv[6]; uniform int uAMode[6]; uniform mat3 uAM[6]; uniform vec3 uAHue[6];
 uniform sampler2D uStructTex,uDust; uniform sampler2D uFineTex; uniform float uFine,uToneBal; uniform vec4 uStructB,uSB,uSVig,uBurnS; uniform vec3 uSAmp; uniform vec2 uZones;
-uniform float uCPShow,uNeg; uniform int uCPn; uniform vec4 uCP[8],uCPa[8]; uniform vec3 uCPc[8];
+uniform float uCPShow,uNeg,uBypass; uniform int uCPn; uniform vec4 uCP[8],uCPa[8]; uniform vec3 uCPc[8];
 uniform float uStruct,uDustOn,uDustDark,uSilver,uToneAmt; uniform vec2 uBurn; uniform vec3 uToneLo,uToneHi;
 uniform float uGrain,uGrainCell,uGrainSoft,uClip,uBorderOn,uCurveOn,uHslOn,uGradeOn,uToSRGB,uSrcToP3; uniform int uMono; uniform uint uSeed;
 uniform float uHslH[8]; uniform float uHslS[8]; uniform float uHslL[8];
@@ -1054,6 +1054,7 @@ void main(){
                c-=(lum*.8+ch*.3)*k; }
       }
       // shown as a negative: B&W (plain inversion) or colour (inverted with the orange mask of C-41 film)
+      if(uBypass>0.){ float bl=dot(c,vec3(.2126,.7152,.0722)); vec3 ov=mix(2.*c*bl,1.-2.*(1.-c)*(1.-bl),step(.5,bl)); c=mix(c,mix(vec3(bl),ov,.6),uBypass); } // skip bleach: silver left in, desaturated and contrasty
       if(uNeg>.5){ c=1.-c; if(uNeg>1.5) c=c*vec3(1.,.62,.36)+vec3(.04,.02,0.); }
       if(uCPShow>-.5) c=mix(c,vec3(1.,.12,.08),cpShowW*.6);   // control point's reach, while you adjust it
       // dust and frames sit on top of everything, like the scan of a real print/negative
