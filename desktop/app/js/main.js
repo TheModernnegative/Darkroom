@@ -110,7 +110,7 @@ const App = {
     UI.button(row,'Open scan…',()=>this.openScan());
     UI.button(row,'Demo',()=>this.loadDemo());
     const row2=document.createElement('div'); row2.className='btnrow'; b.appendChild(row2);
-    const nb=UI.button(row2,'New scan from video / photos…',()=>this.newScan());
+    const nb=UI.button(row2,'New scan…',()=>this.newScan()); nb.title='Make a new 3D scan from a video or a set of photos';
     UI.button(row2,'▶ How to film',()=>Tutorial.open());
     if(!Native.available){ nb.disabled=true; nb.title='Available in the Mac app'; }
     UI.seg(b,'up','Up axis',[['Y-up','Y up'],['Y-down','Y down'],['Z-up','Z up']],()=>c.model?'':c.up,v=>{ c.up=v; c.model=null; c.roll=0; if(Splat.scene&&!Splat.scene.demo) Splat.frame(); Splat.lastSortView=null; this.scanKey=null; this.saveScanView(); d(); });
@@ -1042,7 +1042,8 @@ const App = {
       r.onclick=e=>{ if(e.target.classList.contains('ux')) return; this.applyScanLook(x); };
       r.querySelector('.ux').onclick=async e=>{ e.stopPropagation(); if(!confirm('Delete the scan look “'+x.name+'”?')) return; L.splice(i,1); this.saveSoon(); this.renderScanLooks(); this.buildScanPanels(); };
       el.appendChild(r); }); },
-  async applyScanLook(x){ if(x.cam) this.applyCam(x.cam); if(x.look) await this.applySettings(cloneParams(x.look)); this.commit(); this.toast('Loaded “'+x.name+'”'); },
+  async applyScanLook(x){ const c=Splat.cam, keepF={focus:c.focus,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; // a look never moves your focus point
+    if(x.cam) this.applyCam(x.cam); if(x.look){ const l=cloneParams(x.look); delete l.__cam; await this.applySettings(l); } Object.assign(c,keepF); Engine.dirty=true; UI.refresh(); this.commit(); this.toast('Loaded “'+x.name+'”'); },
   async resetScanFull(){ const nk=(this.scanKeys||[]).length;
     if(!confirm('Start over from the original scan?\n\nCamera, lens, film, Develop and Studio edits'+(nk?' and your '+nk+' keyframes':'')+' go back to the start.\nYour saved instances and looks are kept, and ⌘Z undoes the edits.')) return;
     if(this.camDefaults) this.applyCam(this.camDefaults); Splat.frame(); Splat.lastSortView=null; this.scanKeys=[]; this.keySel=-1; this.renderKeys(); this.curSnap=null;
