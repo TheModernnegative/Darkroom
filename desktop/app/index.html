@@ -41,8 +41,8 @@
         <div class="body"><div id="verList"></div></div>
       </section>
       <!-- develop: user presets -->
-      <section class="panel open mod-develop mod-library mod-scan" id="pUserPresets">
-        <h3><i></i>Presets<span class="hbtns"><button class="hbtn" id="presetImport" title="Import presets (.json)">↓</button><button class="hbtn" id="presetExport" title="Export presets to share with the phone app">↑</button><button class="hbtn" id="presetAdd" title="Create preset from current settings">+</button></span></h3>
+      <section class="panel open mod-develop mod-library mod-scan mod-studio" id="pUserPresets">
+        <h3><i></i>My looks<span class="hbtns"><button class="hbtn" id="presetImport" title="Import presets (.json)">↓</button><button class="hbtn" id="presetExport" title="Export presets to share with the phone app">↑</button><button class="hbtn" id="presetAdd" title="Create preset from current settings">+</button></span></h3>
         <div class="body">
           <div id="presetNew" class="pnew">
             <div class="row"><input id="presetName" placeholder="Preset name" spellcheck="false"><button class="tbtn accent" id="presetSave">Save</button></div>
@@ -66,7 +66,7 @@
       <section class="panel open mod-scan" id="pScanLooks">
         <h3><i></i>Scan Looks<span class="hbtns"><button class="hbtn" id="scanLookAdd" title="Save the camera, lens and look as a scan look">+</button></span></h3>
         <div class="body"><div id="scanLookList"></div>
-          <div class="btnrow"><button class="tbtn" id="scanResetLook">Reset look</button><button class="tbtn" id="scanResetAll">Reset everything</button></div></div>
+          <div class="btnrow"><button class="tbtn" id="scanResetLook" title="Edits back to the original; camera and keyframes stay">Reset edits</button><button class="tbtn accent" id="scanResetAll" title="Camera, lens, edits and keyframes back to the original scan (your instances and looks are kept)">Start over</button></div></div>
       </section>
       <!-- scan: camera -->
       <section class="panel open mod-scan" id="pScanSource">
@@ -117,7 +117,7 @@
         </div>
         <div class="tgroup scanonly">
           <span class="hint" title="drag orbit · ⇧-drag, right-drag or arrows move · ⇧+arrows orbit · scroll or +/− dolly · click focus · double-click pivot">drag orbit · ⇧-drag move · scroll dolly · <b>?</b> all keys</span>
-          <button class="ibtn" id="tbSnap" title="Save a snapshot: camera, lens, film and every Develop/Studio setting, filed under this scan (⇧S)">◎ Snapshot</button>
+          <button class="ibtn" id="tbSnap" title="Save an instance: keyframes, camera, lens, film and every Develop/Studio edit, kept next to this scan in the strip (⇧S)">◎ Save instance</button>
           <button class="ibtn accent" id="tbExpose" title="Expose a frame into the library">● Expose</button>
           <button class="ibtn" id="tbSaveScan" title="Save this view as an image file (⌘E)">Save image…</button>
         </div>

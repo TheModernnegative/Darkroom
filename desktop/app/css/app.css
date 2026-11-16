@@ -428,3 +428,16 @@ body.m-scan #pRecipes,body.m-scan #pUserPresets{order:10}
 #toolbar .tgroup.scanonly{min-width:0;flex:1 1 auto;overflow:hidden}
 body:not(.m-studio):not(.m-scan) #pRecipes{display:none}
 #moveRow{display:flex;gap:6px;margin-top:6px}#moveRow .moveSel{flex:1;min-width:0;background:#1c1c1c;color:var(--text);border:1px solid #3a3a3a;border-radius:3px;font:12px var(--sans);height:28px}
+
+#scanFxSwitch{position:sticky;top:0;z-index:6;box-shadow:0 2px 6px #0008}
+#keyTL{margin:8px 0 4px}
+#keyTL .tlBar{position:relative;height:30px;background:#151515;border:1px solid #333;border-radius:4px;cursor:pointer;margin:0 9px}
+#keyTL .tlSeg{position:absolute;top:12px;height:6px;background:#4a6fa8;border-radius:3px}
+#keyTL .tlSeg.hold{background:repeating-linear-gradient(45deg,#666 0 3px,#444 3px 6px)}
+#keyTL .tlKey{position:absolute;top:5px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:#2c2c2c;border:1px solid #888;color:#ddd;font:600 10px/16px var(--sans);text-align:center;cursor:ew-resize;touch-action:none;z-index:2}
+#keyTL .tlKey.on{background:#d9573c;border-color:#f08;border-color:#ff9a7f;color:#fff}
+#keyTL .tlHead{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#ff5d3d;z-index:3;pointer-events:none}
+#keyTL .tlTime{font:11px var(--sans);color:var(--faint);margin-top:4px}
+#ctxMenu .mtitle{font:600 11px var(--sans);color:#9ab;padding:6px 12px 4px;text-transform:uppercase;letter-spacing:.05em}
+.preset.user{display:flex;align-items:center;gap:8px}
+.preset.user .lthumb{flex:none;width:44px;height:30px;border-radius:2px;background:#222 center/cover no-repeat}

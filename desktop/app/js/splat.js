@@ -366,6 +366,7 @@ onmessage=e=>{const d=e.data;
     const ctr=[med(xs),med(ys),med(zs)];
     const ds=xs.map((x,i)=>Math.hypot(x-ctr[0],ys[i]-ctr[1],zs[i]-ctr[2])).sort((p,q)=>p-q);
     const r=ds[Math.floor(ds.length*0.5)]||1;
+    this.fit={ctr:ctr.slice(),r};
     Object.assign(c,{target:ctr,dist:r*1.6,yaw:0,pitch:0.1,focusLock:ctr.slice()});
   },
   requestSort(){ if(!this.scene) return; if(this.sortBusy){ this.sortWant=true; return; } this.sortWant=false; this.sortBusy=true;

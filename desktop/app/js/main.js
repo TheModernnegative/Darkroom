@@ -129,8 +129,8 @@ const App = {
     { const h=document.createElement('div'); h.className='ahead'; h.textContent='Camera move (keyframes)'; b.appendChild(h);
       const kl=document.createElement('div'); kl.className='cpList'; kl.id='keyList'; b.appendChild(kl);
       const kr=document.createElement('div'); kr.className='btnrow'; b.appendChild(kr);
-      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'▶ Preview',()=>this.previewKeys()); UI.button(kr,'Clear',()=>{ if((this.scanKeys||[]).length>1&&!confirm('Clear all '+this.scanKeys.length+' keyframes? (saved moves stay)')) return; this.scanKeys=[]; this.keySel=-1; this.renderKeys(); });
-      const mr=document.createElement('div'); mr.className='btnrow'; mr.id='moveRow'; b.appendChild(mr);
+      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'▶ Preview',()=>this.previewKeys()); UI.button(kr,'Clear',()=>{ if((this.scanKeys||[]).length>1&&!confirm('Clear all '+this.scanKeys.length+' keyframes? (instances you saved keep theirs)')) return; this.scanKeys=[]; this.keySel=-1; this.renderKeys(); });
+      const tl=document.createElement('div'); tl.id='keyTL'; b.appendChild(tl);
       const ko=document.createElement('div'); ko.id='keyOpts'; b.appendChild(ko);
       UI.note(b,'Frame a shot, press + Keyframe; move, refocus or change aperture / focal length, add another. Export video → “Keyframes” glides between them (dolly, rack focus, aperture pull).');
       setTimeout(()=>this.renderKeys(),0); }
@@ -329,6 +329,14 @@ const App = {
     else { this.userPresets.push({id:'p'+Date.now().toString(36),name,settings,t:Date.now()}); this.toast('Saved preset “'+name+'”'); }
     this.renderUserPresets(); this.saveSoon();
   },
+  // "My looks" thumbnails: each saved look rendered on whatever is open (photo or scan view)
+  lookThumbsSoon(){ clearTimeout(this._ltt); this._ltt=setTimeout(()=>this.lookThumbs(),700); },
+  async lookThumbs(){ const el=$('#userPresetList'); if(!el||!el.offsetParent||!this.cur||!Engine.src||this._pipeBusy||!(this.userPresets||[]).length) return;
+    const key=(this.module==='scan'?'scan'+this.scanPath+this.scanKey:this.cur.id)+'|'+this.userPresets.map(p=>p.name+JSON.stringify(p.settings).length).join(',');
+    if(key===this._ltKey) return; this._ltKey=key; const job=this._ltJob=(this._ltJob||0)+1, tiles=[...el.querySelectorAll('.preset.user')];
+    for(let i=0;i<tiles.length&&i<this.userPresets.length;i++){ if(job!==this._ltJob) return; const ps=this.userPresets[i];
+      try{ const p=this.module==='scan'?this.scanParams(this.presetParams(ps)):this.presetParams(ps); await Engine.ensureLuts(p); if(job!==this._ltJob) return; const u=this.renderThumb(p,120); const t=tiles[i].querySelector('.lthumb'); if(u&&t) t.style.backgroundImage=`url(${u})`; }catch(e){}
+      await new Promise(r=>setTimeout(r,16)); } Engine.dirty=true; },
   presetParams(ps){ return Object.assign(cloneParams(Engine.p),cloneParams(ps.settings)); },
   // batch: a look or preset applied while several photos are selected (⌘-click) goes onto all of them
   applyToOthers(fn,name){ if(this.module==='scan') return 0; const others=this.selected().filter(x=>x!==this.cur&&x.kind!=='scanlook'); if(!others.length) return 0;
@@ -344,11 +352,12 @@ const App = {
       commit:()=>this.commit(),fmt:x=>Math.round(x)+'%'}); },
   renderUserPresets(){
     const el=$('#userPresetList'); if(!el) return; el.innerHTML='';
-    if(!this.userPresets.length){ el.innerHTML='<div class="note">No presets yet. Dial in a look, then press <b>+</b>.</div>'; return; }
+    this._ltKey=null; this.lookThumbsSoon();
+    if(!this.userPresets.length){ el.innerHTML='<div class="note">No looks yet. Make an edit, then press <b>+</b> (or Reset ▾ → Save look). Looks work on photos and scans.</div>'; return; }
     this.userPresets.forEach(ps=>{
       const d=document.createElement('div'); d.className='preset user'; d.title='Click to apply · hover to preview';
       const st=Engine.stock(ps.settings.stock);
-      d.innerHTML=`<span class="pn">${ps.name.replace(/</g,'&lt;')}</span><span class="iso">${ps.settings.stock?st.name:''}</span><b class="pa up" title="Update with current settings">↻</b><b class="pa del" title="Delete preset">×</b>`;
+      d.innerHTML=`<span class="lthumb"></span><span class="pn">${ps.name.replace(/</g,'&lt;')}</span><span class="iso">${ps.settings.stock?st.name:''}</span><b class="pa up" title="Update with current settings">↻</b><b class="pa del" title="Delete preset">×</b>`;
       d.onmouseenter=()=>this.hover(this.presetParams(ps)); d.onmouseleave=()=>this.hover(null);
       d.onclick=e=>{
         if(e.target.classList.contains('del')){ if(e.target.dataset.armed){ this.userPresets=this.userPresets.filter(x=>x!==ps); this.hover(null); this.renderUserPresets(); this.saveSoon(); this.toast('Deleted “'+ps.name+'”'); }
@@ -544,11 +553,11 @@ const App = {
         t.innerHTML=(sc.thumb?`<img src="${sc.thumb}">`:'<div class="scanIco">3D</div>')+`<span class="badge">${sc.name}${sc.size>0?' · '+this.fmtBytes(sc.size):''}</span>`;
         t.onclick=()=>sc.demo?this.loadDemo():this.loadScanPath(sc.path);
         const mb=document.createElement('button'); mb.className='tmore'; mb.textContent='⋯'; mb.title='Rename · Show in Finder · Remove';
-        mb.onclick=e=>{ e.stopPropagation(); this.scanMenu(sc,mb); }; t.appendChild(mb);
-        const snaps=this.snapsFor(sc.path); if(snaps.length){ const b=document.createElement('button'); b.className='stkBtn'; b.innerHTML=(sc.snapOpen?'−':'+')+'<b>'+snaps.length+'</b>'; b.title=sc.snapOpen?'Hide snapshots':'Show the '+snaps.length+' snapshot'+(snaps.length>1?'s':'')+' saved from this scan';
+        mb.onclick=e=>{ e.stopPropagation(); this.scanMenu(sc,mb); }; t.appendChild(mb); t.oncontextmenu=e=>{ e.preventDefault(); this.scanMenu(sc,t,e.clientX,e.clientY); };
+        const snaps=this.snapsFor(sc.path); if(snaps.length){ const b=document.createElement('button'); b.className='stkBtn'; b.innerHTML=(sc.snapOpen?'−':'+')+'<b>'+snaps.length+'</b>'; b.title=sc.snapOpen?'Collapse instances':'Show the '+snaps.length+' instance'+(snaps.length>1?'s':'')+' saved from this scan';
           b.onclick=e=>{ e.stopPropagation(); sc.snapOpen=!sc.snapOpen; this.renderStrip(); this.saveSoon(); }; t.appendChild(b); t.classList.add('stk'); if(sc.snapOpen) t.classList.add('stkOpen','stkFirst'); else t.classList.add('stkShut'); }
         el.appendChild(t);
-        if(sc.snapOpen) snaps.forEach((sn,j)=>{ const d=document.createElement('div'); d.className='thumb snap stk stkOpen'+(j===snaps.length-1?' stkLast':'')+(this.curSnap===sn.id?' on':''); d.title=sn.name+' — click to go back to this snapshot';
+        if(sc.snapOpen) snaps.forEach((sn,j)=>{ const d=document.createElement('div'); d.className='thumb snap stk stkOpen'+(j===snaps.length-1?' stkLast':'')+(this.curSnap===sn.id?' on':''); d.title=sn.name+' — click to go back to this instance · right-click for more';
           d.innerHTML=(sn.thumb?`<img src="${sn.thumb}">`:'<div class="scanIco">◎</div>')+'<span class="badge"></span>'; d.querySelector('.badge').textContent=sn.name;
           d.onclick=()=>this.openSnap(sc,sn); d.oncontextmenu=e=>{ e.preventDefault(); this.snapMenu(sc,sn,d); };
           const m2=document.createElement('button'); m2.className='tmore'; m2.textContent='⋯'; m2.title='Update · Rename · Export · Delete'; m2.onclick=e=>{ e.stopPropagation(); this.snapMenu(sc,sn,m2); }; d.appendChild(m2); el.appendChild(d); }); });
@@ -594,8 +603,9 @@ const App = {
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const hr=()=>m.appendChild(document.createElement('hr'));
     if(this.module==='scan'){
-      item('Reset look to original',()=>this.resetScan(false),'⇧⌘R'); item('Reset look and camera',()=>this.resetScan(true));
-      hr(); item('Save as scan look…',()=>this.saveCamPreset()); item('Save as scan look, then reset…',async()=>{ if(await this.saveCamPreset()!==false) this.resetScan(false); });
+      item('Start over from the original scan…',()=>this.resetScanFull()); item('Reset just the edits (keep camera &amp; keyframes)',()=>this.resetScan(false),'⇧⌘R'); item('Reset edits and camera (keep keyframes)',()=>this.resetScan(true));
+      hr(); item('Save instance — keyframes, camera &amp; edits…',()=>this.saveSnap(),'⇧S'); item('Save look — just the edits…',()=>this.saveLookPreset()); item('Save instance, then start over…',async()=>{ await this.saveSnap(); this.resetScanFull(); });
+      hr(); item('Save as scan look (camera + lens + edits)…',()=>this.saveCamPreset()); item('Save as scan look, then reset…',async()=>{ if(await this.saveCamPreset()!==false) this.resetScan(false); });
     } else if(this.module==='studio'){
       item('Reset Studio effects',()=>{ Studio.resetAll(); this.toast('Studio effects cleared — ⌘Z to undo'); }); item('Reset everything to original',()=>this.resetPhoto(false),'⇧⌘R');
       hr(); item('Save as version, then reset',()=>this.resetPhoto(true)); item('Save as look (preset)…',()=>this.saveLookPreset()); item('Save as look, then reset…',async()=>{ if(await this.saveLookPreset()) this.resetPhoto(false); });
@@ -729,14 +739,21 @@ const App = {
       const b=document.createElement('button'); b.className='tbtn'; b.style.marginTop='6px'; b.textContent=`Move ${cps.length} training checkpoints to Trash (${this.fmtBytes(tot)})`;
       b.onclick=async()=>{ const n2=await Native.call('trash',{paths:cps.map(x=>x.path)}); this.toast(`Moved ${n2} checkpoint files to the Trash`); this.statScans(); };
       el.appendChild(document.createElement('br')); el.appendChild(b); } },
-  scanMenu(sc,anchor){
-    const m=$('#ctxMenu'); m.innerHTML=''; const r=anchor.getBoundingClientRect();
-    const item=(label,fn)=>{ const b=document.createElement('button'); b.textContent=label; b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
+  scanMenu(sc,anchor,cx,cy){
+    const m=$('#ctxMenu'); m.innerHTML=''; const r=cx!=null?{left:cx,top:cy}:anchor.getBoundingClientRect();
+    const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
+    const here=async()=>{ if(sc.path!==this.scanPath||!Splat.scene){ if(sc.demo) await this.loadDemo(); else await this.loadScanPath(sc.path); } };
+    const live=sc.path===this.scanPath&&Splat.scene;
+    if(live){ item('Save instance — keyframes, camera &amp; edits…',()=>this.saveSnap(),'⇧S'); item('Save look — just the edits, for any photo or scan…',()=>this.saveLookPreset()); m.appendChild(document.createElement('hr'));
+      item('Start over from the original scan…',()=>this.resetScanFull()); }
+    else item('Open',()=>here());
+    m.appendChild(document.createElement('hr'));
+    if(sc.demo){ m.style.left=Math.min(innerWidth-330,r.left)+'px'; m.classList.add('on'); m.style.top=Math.max(8,r.top-4-m.offsetHeight)+'px'; setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); return; }
     item('Rename…',async()=>{ const n=await this.ask('Rename scan',sc.name); if(n){ sc.name=n.slice(0,60); this.renderStrip(); this.saveSoon(); } });
     item('Show in Finder',()=>Native.call('reveal',{path:sc.path}).catch(()=>{}));
     item('Rebuild thumbnail',()=>{ sc.thumb=null; if(this.scanPath===sc.path){ Engine.dirty=true; } else this.loadScanPath(sc.path); });
     item('Remove from library',()=>{ this.scans=this.scans.filter(x=>x!==sc); (this.hiddenScans=this.hiddenScans||[]).push(sc.path); this.renderStrip(); this.saveSoon(); this.toast('Removed from the strip — the files stay in Documents/Splat/scans'); });
-    m.style.left=Math.min(innerWidth-190,r.left)+'px'; m.style.top=(r.top-4-m.childElementCount*30)+'px'; m.classList.add('on');
+    m.style.left=Math.min(innerWidth-330,r.left)+'px'; m.classList.add('on'); m.style.top=Math.max(8,r.top-4-m.offsetHeight)+'px';
     setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0);
   },
   // ---- copy / paste settings: pick which parts travel (⌘⇧C), paste onto this photo and every selected one (⌘⇧V)
@@ -767,7 +784,7 @@ const App = {
     const S=[['Everywhere',[['G / D / T / S','Library · Develop · Studio · 3D Scan'],['⌘Z / ⇧⌘Z','Undo / redo'],['⌘E','Export'],['⌘O','Import'],['⇧⌘C / ⇧⌘V','Copy settings (choose parts) / paste'],['⇧⌘R','Reset to original'],['?','This sheet']]],
       ['Photos',[['0–5','Star rating'],['P / X / U','Pick / reject / clear flag'],['← →','Previous / next photo'],['⌘A','Select all'],['⌘F','Search the library'],['⌘D / ⇧⌘D','Duplicate with edit / as original'],['⌘G / ⇧⌘G','Stack / unstack'],["⌘'",'Save as version'],['⌫','Remove from library']]],
       ['Develop',[['W','White-balance eyedropper'],['R','Crop & straighten'],['M','Masks'],['C','Compare'],['\\','Before / after'],['|','Split view'],['Z','Zoom 1:1'],['J','Clipping warning']]],
-      ['3D Scan',[['drag','Orbit'],['⇧-drag / right-drag / arrows','Move the camera'],['⇧+arrows','Orbit'],['scroll / + −','Dolly in / out'],['click','Focus'],['double-click','Orbit pivot'],['L','Level'],['space','Expose a frame'],['⇧S','Save a snapshot']]]];
+      ['3D Scan',[['drag','Orbit'],['⇧-drag / right-drag / arrows','Move the camera'],['⇧+arrows','Orbit'],['scroll / + −','Dolly in / out'],['click','Focus'],['double-click','Orbit pivot'],['L','Level'],['space','Expose a frame'],['⇧S','Save an instance (keyframes + camera + edits)']]]];
     el.innerHTML='<div class="sheet keysheet"><h2>Keyboard shortcuts</h2><div class="kcols">'+S.map(([t,r])=>'<div><h4>'+t+'</h4>'+r.map(([k,d])=>'<div class="krow"><kbd>'+k+'</kbd><span>'+d+'</span></div>').join('')+'</div>').join('')+'</div><div class="dlgBtns"><button class="tbtn accent">Close</button></div></div>';
     el.onclick=e=>{ if(e.target===el||e.target.tagName==='BUTTON') el.remove(); }; document.body.appendChild(el); },
   // ---- scan snapshots: camera + lens + film + Develop + Studio, saved under the scan they came from
@@ -778,10 +795,10 @@ const App = {
   grabView(size){ return new Promise(r=>{ this._snapCb=()=>r(this.viewThumb(size)); Engine.dirty=true; setTimeout(()=>{ if(this._snapCb){ this._snapCb=null; r(null); } },3000); }); },
   async saveSnap(update){ if(!Splat.scene){ this.toast('Open a scan first'); return; }
     const list=(this.scanSnaps=this.scanSnaps||{})[this.snapKey(this.scanPath)]=this.snapsFor(this.scanPath).slice(); let sn=update&&list.find(x=>x.id===update);
-    if(!sn){ const st=Engine.stock(Engine.p.stock), L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this snapshot',[(st&&st.id!=='original'?st.name:''),(L?L.name.split(' · ')[0]:'')].filter(Boolean).join(' · ')||'Snapshot '+(list.length+1)); if(!name) return;
+    if(!sn){ const st=Engine.stock(Engine.p.stock), L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this instance (keyframes, camera and every edit)',[(st&&st.id!=='original'?st.name:''),(L?L.name.split(' · ')[0]:'')].filter(Boolean).join(' · ')||'Instance '+(list.length+1)); if(!name) return;
       sn={id:'s'+Date.now().toString(36),name:name.slice(0,60)}; list.push(sn); }
-    { const c=Splat.cam; sn.view={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; } sn.keys=JSON.parse(JSON.stringify(this.scanKeys||[])); sn.cam=this.camSnap(); sn.look=cloneParams(Engine.p); delete sn.look.lookUndo; sn.t=Date.now(); sn.thumb=await this.grabView(220)||sn.thumb||null; this.curSnap=sn.id;
-    const sc=this.scans.find(x=>x.path===this.scanPath); if(sc) sc.snapOpen=true; this.renderStrip(); this.saveSoon(); this.toast(update?'Updated “'+sn.name+'”':'Saved snapshot “'+sn.name+'” — it’s under the scan in the strip'); },
+    { const c=Splat.cam; sn.view={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; } sn.keys=JSON.parse(JSON.stringify(this.scanKeys||[])); sn.fit=Splat.fit?JSON.parse(JSON.stringify(Splat.fit)):null; sn.cam=this.camSnap(); sn.look=cloneParams(Engine.p); delete sn.look.lookUndo; sn.t=Date.now(); sn.thumb=await this.grabView(220)||sn.thumb||null; this.curSnap=sn.id;
+    const sc=this.scans.find(x=>x.path===this.scanPath); if(sc) sc.snapOpen=true; this.renderStrip(); this.saveSoon(); this.toast(update?'Updated “'+sn.name+'”':'Saved instance “'+sn.name+'” — it’s next to the scan in the strip'); },
   async openSnap(sc,sn){ if(this.module!=='scan') this.setModule('scan');
     if(sc.path!==this.scanPath||!Splat.scene){ if(sc.path) await this.loadScanPath(sc.path); else await this.loadDemo(); }
     this.applyCam(sn.cam||{}); if(sn.view){ const v=JSON.parse(JSON.stringify(sn.view)); Object.assign(Splat.cam,v); Splat.lastSortView=null; Engine.dirty=true; } await this.applySettings(cloneParams(sn.look||{})); this.commit(); if(sn.keys&&sn.keys.length){ this.scanKeys=JSON.parse(JSON.stringify(sn.keys)); this.keySel=-1; this.renderKeys(); } this.curSnap=sn.id; this.renderStrip(); this.toast('Back in “'+sn.name+'” — export it, or keep editing and choose ⋯ → Update'); },
@@ -791,10 +808,20 @@ const App = {
     item('Open',()=>this.openSnap(sc,sn));
     item('Update with the current view',async()=>{ if(!here()) await this.openSnap(sc,sn).then(()=>{}); if(here()) this.saveSnap(sn.id); });
     item('Save image…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.exportDialog(); });
-    item('Rename…',async()=>{ const n=await this.ask('Rename snapshot',sn.name); if(n){ sn.name=n.slice(0,60); this.renderStrip(); this.saveSoon(); } });
-    item('Delete',()=>{ if(!confirm('Delete the snapshot “'+sn.name+'”? (the scan itself stays)')) return; const k=this.snapKey(sc.path); this.scanSnaps[k]=this.snapsFor(sc.path).filter(x=>x!==sn); if(this.curSnap===sn.id) this.curSnap=null; this.renderStrip(); this.saveSoon(); });
-    m.style.left=Math.min(innerWidth-220,r.left)+'px'; m.style.top=(r.top-4-m.childElementCount*30)+'px'; m.classList.add('on');
+    if((sn.keys||[]).length>1) item('Export its video…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.orbitDialog(); });
+    item('Save its edits as a look…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.saveLookPreset(); });
+    if((sn.keys||[]).length>1&&this.scans.filter(x=>x.path!==sc.path).length) item('Use this move on another scan…',()=>this.pickScan('Use “'+sn.name+'” camera move on…',sc.path,t=>this.useMoveOn(sc,sn,t)));
+    item('Rename…',async()=>{ const n=await this.ask('Rename instance',sn.name); if(n){ sn.name=n.slice(0,60); this.renderStrip(); this.saveSoon(); } });
+    item('Delete',()=>{ if(!confirm('Delete the instance “'+sn.name+'”? (the scan itself stays)')) return; const k=this.snapKey(sc.path); this.scanSnaps[k]=this.snapsFor(sc.path).filter(x=>x!==sn); if(this.curSnap===sn.id) this.curSnap=null; this.renderStrip(); this.saveSoon(); });
+    m.style.left=Math.min(innerWidth-260,r.left)+'px'; m.classList.add('on'); m.style.top=Math.max(8,r.top-4-m.offsetHeight)+'px';
     setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
+  pickScan(title,exclude,fn){ const m=$('#ctxMenu'); m.innerHTML='<div class="mtitle"></div>'; m.firstChild.textContent=title;
+    this.scans.filter(x=>x.path!==exclude).forEach(sc=>{ const b=document.createElement('button'); b.textContent=sc.name; b.onclick=()=>{ m.classList.remove('on'); fn(sc); }; m.appendChild(b); });
+    m.classList.add('on'); setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
+  async useMoveOn(srcSc,sn,dst){ const f1=sn.fit; await this.loadScanPath(dst.path); const f2=Splat.fit;
+    const K=JSON.parse(JSON.stringify(sn.keys)); if(f1&&f2){ const k=f2.r/f1.r; K.forEach(q=>{ q.target=q.target.map((v,j)=>f2.ctr[j]+(v-f1.ctr[j])*k); q.dist*=k; q.focus*=k; }); }
+    this.scanKeys=K; this.keySel=-1; this.renderKeys(); this.keyCamAt(this.keyTimeline(1),0); Splat.lastSortView=null; Engine.dirty=true;
+    this.toast('“'+sn.name+'” move fitted to '+dst.name+(f1?'':' (not rescaled: update that instance once so it records its scan size)')+' — ▶ Preview, then save an instance here'); },
   scanThumb(){ const sc=this.scans.find(x=>x.path===this.scanPath); if(!sc||sc.thumb||!Splat.sortedCount) return;
     if((this._thumbWait=(this._thumbWait||0)+1)<20) return; this._thumbWait=0;
     const L=this._lastL, v=$('#view'); const c=document.createElement('canvas'); const s=160/Math.max(L.iw,L.ih); c.width=Math.round(L.iw*s); c.height=Math.round(L.ih*s);
@@ -932,6 +959,10 @@ const App = {
       r.querySelector('.ux').onclick=async e=>{ e.stopPropagation(); if(!confirm('Delete the scan look “'+x.name+'”?')) return; L.splice(i,1); this.saveSoon(); this.renderScanLooks(); this.buildScanPanels(); };
       el.appendChild(r); }); },
   async applyScanLook(x){ if(x.cam) this.applyCam(x.cam); if(x.look) await this.applySettings(cloneParams(x.look)); this.commit(); this.toast('Loaded “'+x.name+'”'); },
+  async resetScanFull(){ const nk=(this.scanKeys||[]).length;
+    if(!confirm('Start over from the original scan?\n\nCamera, lens, film, Develop and Studio edits'+(nk?' and your '+nk+' keyframes':'')+' go back to the start.\nYour saved instances and looks are kept, and ⌘Z undoes the edits.')) return;
+    if(this.camDefaults) this.applyCam(this.camDefaults); Splat.frame(); Splat.lastSortView=null; this.scanKeys=[]; this.keySel=-1; this.renderKeys(); this.curSnap=null;
+    await this.applySettings(withDefaults({})); this.commit(); this.renderStrip(); Engine.dirty=true; this.toast('Back to the original scan — a clean start'); },
   async resetScan(all){ if(all&&this.camDefaults) this.applyCam(this.camDefaults); await this.applySettings(withDefaults({})); this.commit(); this.toast(all?'Camera and look back to the original — History has every step':'Look back to the original — History has every step'); },
   async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this scan look (camera + lens + film + Studio)',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return false;
     this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap(),look:cloneParams(Engine.p)}; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
@@ -969,7 +1000,7 @@ const App = {
     s.onchange=async()=>{ const v=s.value; s.value=''; if(v==='del'){ const n=await this.ask('Delete which move? ('+M.map(m=>m.name).join(', ')+')',''); const i=M.findIndex(m=>m.name===n); if(i>=0){ M.splice(i,1); this.movesBy[this.snapKey(this.scanPath)]=M; this.renderMoves(); this.saveSoon(); } return; }
       if(v==='') return; const m=M[+v]; if((this.scanKeys||[]).length>1&&!confirm('Replace your current '+this.scanKeys.length+' keyframes with “'+m.name+'”?')) return; this.scanKeys=JSON.parse(JSON.stringify(m.keys)); this.keySel=-1; this.renderKeys(); this.toast('Loaded “'+m.name+'” — ▶ Preview or Export video'); };
     mr.appendChild(s); UI.button(mr,'Save move…',()=>this.saveMove()); },
-  renderKeys(){ if(this._keysFor!==undefined){ (this.keysBy=this.keysBy||{})[this._keysFor]=JSON.parse(JSON.stringify(this.scanKeys||[])); this.saveSoon(); } this.renderMoves();
+  renderKeys(){ if(this._keysFor!==undefined){ (this.keysBy=this.keysBy||{})[this._keysFor]=JSON.parse(JSON.stringify(this.scanKeys||[])); this.saveSoon(); } this.renderTimeline();
     const el=$('#keyList'), ko=$('#keyOpts'); if(!el) return; el.innerHTML=''; if(ko) ko.innerHTML=''; const K=this.scanKeys||[];
     if(!K.length){ el.innerHTML='<span class="note">No keyframes yet.</span>'; return; }
     if(this.keySel>=K.length) this.keySel=K.length-1;
@@ -982,7 +1013,23 @@ const App = {
       t.oncontextmenu=e=>{ e.preventDefault(); K.splice(i,1); this.renderKeys(); }; el.appendChild(t); }); },
   // keyframe timeline: hold at each key, then move to the next over moveDur seconds with that key's easing
   keyTimeline(moveDur){ const K=this.scanKeys||[], segs=[]; let t=0;
-    K.forEach((k,i)=>{ const h=k.hold||0; if(h>0){ segs.push({hold:true,i,t0:t,t1:t+h}); t+=h; } if(i<K.length-1){ segs.push({i,t0:t,t1:t+moveDur}); t+=moveDur; } }); return {segs,T:t}; },
+    K.forEach((k,i)=>{ const h=k.hold||0; k._t=t; if(h>0){ segs.push({hold:true,i,t0:t,t1:t+h}); t+=h; } if(i<K.length-1){ const d=k.dur>0?k.dur:moveDur; segs.push({i,t0:t,t1:t+d}); t+=d; } }); return {segs,T:t}; },
+  defMove(){ const K=this.scanKeys||[]; return ((this._orbitPrefs&&this._orbitPrefs.secs)||6)/Math.max(1,K.length-1); },
+  // timeline strip: keyframe markers on a time ruler — drag a marker to change how long the move into it takes; click the ruler to scrub
+  renderTimeline(){ const el=$('#keyTL'); if(!el) return; const K=this.scanKeys||[]; if(K.length<2){ el.innerHTML=''; el.style.display='none'; return; } el.style.display='';
+    const tl=this.keyTimeline(this.defMove()), T=Math.max(tl.T,0.5); el.innerHTML='<div class="tlBar"></div><div class="tlTime"></div>'; const bar=el.firstChild;
+    el.querySelector('.tlTime').textContent=tl.T.toFixed(1)+' s · drag a number to retime · click the bar to scrub';
+    tl.segs.forEach(sg=>{ const d=document.createElement('div'); d.className='tlSeg'+(sg.hold?' hold':''); d.style.left=(sg.t0/T*100)+'%'; d.style.width=((sg.t1-sg.t0)/T*100)+'%'; if(!sg.hold) d.title=(sg.t1-sg.t0).toFixed(1)+' s to keyframe '+(sg.i+2); else d.title='hold '+(sg.t1-sg.t0).toFixed(1)+' s'; bar.appendChild(d); });
+    const ph=document.createElement('div'); ph.className='tlHead'; ph.style.display='none'; bar.appendChild(ph); this._tlHead=ph;
+    K.forEach((k,i)=>{ const m=document.createElement('div'); m.className='tlKey'+(i===this.keySel?' on':''); m.textContent=i+1; m.style.left=(k._t/T*100)+'%'; m.title=i?'Drag to change how long the move into keyframe '+(i+1)+' takes':'Start';
+      m.onpointerdown=e=>{ e.preventDefault(); e.stopPropagation(); this.keySel=i; if(!i){ this.renderKeys(); this.scrubKeys(0); return; }
+        K.forEach(q=>{ if(!(q.dur>0)) q.dur=this.defMove(); }); const w=bar.getBoundingClientRect().width, x0=e.clientX, prev=K[i-1], d0=prev.dur, scale=T/w; m.setPointerCapture(e.pointerId);
+        m.onpointermove=ev=>{ prev.dur=Math.max(0.2,Math.round((d0+(ev.clientX-x0)*scale)*10)/10); const t2=this.keyTimeline(this.defMove()); m.style.left=Math.min(100,(K[i]._t/T*100))+'%'; el.querySelector('.tlTime').textContent=t2.T.toFixed(1)+' s · move into '+(i+1)+': '+prev.dur.toFixed(1)+' s'; };
+        m.onpointerup=()=>{ m.onpointermove=null; this.renderKeys(); this.scrubKeys(K[i]._t); }; };
+      bar.appendChild(m); });
+    bar.onpointerdown=e=>{ if(e.target.classList.contains('tlKey')) return; const r=bar.getBoundingClientRect(); const go=ev=>this.scrubKeys(Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width))*T); go(e); bar.setPointerCapture(e.pointerId); bar.onpointermove=go; bar.onpointerup=()=>{ bar.onpointermove=null; }; }; },
+  scrubKeys(t){ const tl=this.keyTimeline(this.defMove()); this.keyCamAt(tl,Math.min(t,tl.T)); Splat.lastSortView=null; Engine.dirty=true; this.tlHead(t,tl.T); },
+  tlHead(t,T){ const h=this._tlHead; if(!h||!h.isConnected) return; h.style.display=''; h.style.left=(Math.min(t,T)/Math.max(T,0.5)*100)+'%'; },
   keyCamAt(tl,time){ const K=this.scanKeys, c=Splat.cam; let sg=tl.segs.find(s=>time>=s.t0&&time<s.t1)||tl.segs[tl.segs.length-1]; if(!sg) return;
     const A=K[sg.i], B=sg.hold?A:K[sg.i+1]; let u=sg.hold?0:Math.min(1,(time-sg.t0)/(sg.t1-sg.t0)); if(time>=tl.T&&!sg.hold) u=1;
     const ez={linear:u,in:u*u*u,out:1-Math.pow(1-u,3)}[A.ease]; const e=ez!==undefined?ez:u*u*(3-2*u);
@@ -990,11 +1037,11 @@ const App = {
     c.yaw=A.yaw+dy*e; c.pitch=L(A.pitch,B.pitch); c.dist=Math.exp(L(Math.log(A.dist),Math.log(B.dist))); c.target=A.target.map((v,j)=>L(v,B.target[j]));
     c.focusLock=null; c.focus=Math.exp(L(Math.log(Math.max(1e-3,A.focus)),Math.log(Math.max(1e-3,B.focus)))); c.fnum=Math.exp(L(Math.log(A.fnum),Math.log(B.fnum))); c.fmm=Math.exp(L(Math.log(A.fmm),Math.log(B.fmm))); c.roll=L(A.roll||0,B.roll||0); },
   previewKeys(){ const K=this.scanKeys||[]; if(K.length<2){ this.toast('Add at least two keyframes'); return; }
-    if(this._kprev){ this._kprev=false; return; } const secs=(this._orbitPrefs&&this._orbitPrefs.secs)||6, tl=this.keyTimeline(secs/(K.length-1)), c=Splat.cam;
+    if(this._kprev){ this._kprev=false; return; } const tl=this.keyTimeline(this.defMove()), c=Splat.cam;
     const keep={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,focusLock:c.focusLock,fmm:c.fmm,fnum:c.fnum,roll:c.roll}; const t0=performance.now(); this._kprev=true;
     this.toast('Previewing the move ('+tl.T.toFixed(1)+' s) — click ▶ Preview again to stop');
     const step=()=>{ const t=(performance.now()-t0)/1000; if(!this._kprev||t>tl.T+0.4){ this._kprev=false; Object.assign(c,keep); c.fnum=keep.fnum||null; Splat.lastSortView=null; Engine.dirty=true; return; }
-      this.keyCamAt(tl,Math.min(t,tl.T)); Splat.lastSortView=null; Engine.dirty=true; requestAnimationFrame(step); }; requestAnimationFrame(step); },
+      this.keyCamAt(tl,Math.min(t,tl.T)); this.tlHead(t,tl.T); Splat.lastSortView=null; Engine.dirty=true; requestAnimationFrame(step); }; requestAnimationFrame(step); },
   async orbitDialog(){
     if(!Splat.scene){ this.toast('Load a scan first'); return; }
     if(!Native.available){ this.toast('Video export runs in the Mac app'); return; }
@@ -1245,6 +1292,7 @@ const App = {
         else Engine.render({params:p,borderTex:this.borderFor(L,p)});
         Tools.overlay(); this.placeBox(); this.cpOverlay(); this.splitBar(); this.histo(); this.status(); this.navPreview(p);
         if(this.module==='develop'&&this.cur&&$('#presetList').classList.contains('gridmode')) this.stockThumbsSoon();
+        if(this.cur&&!this._ptrDown) this.lookThumbsSoon();
         if((this.module==='studio'||(this.module==='scan'&&Splat.scene&&!this._pipeBusy&&!this._ptrDown))&&this.cur){ clearTimeout(this._rt); this._rt=setTimeout(()=>{ const q=cloneParams(Engine.p); STUDIO_KEYS.forEach(k=>delete q[k]); Studio.refreshRecipeThumbs(this.cur.id+JSON.stringify(q)+Object.values(Engine.assetTexs).filter(t=>t.ready).length); },500); }
       }
     }catch(e){ console.error(e); }
@@ -1282,7 +1330,7 @@ const App = {
     $('#presetImport').onclick=e=>{ e.stopPropagation(); this.importPresets(); };
     $('#tbExpose').onclick=()=>this.exposeFrame(); $('#tbSnap').onclick=()=>this.saveSnap();
     $('#pipeDetails').addEventListener('toggle',()=>{ const P=this.pp; if(P&&$('#pipeDetails').open){ const el=$('#pipeLog'); el.textContent=P.log||''; el.scrollTop=el.scrollHeight; P.shown=P.log; } });
-    $('#scanLookAdd').onclick=e=>{ e.stopPropagation(); this.saveCamPreset(); }; $('#scanResetLook').onclick=()=>this.resetScan(false); $('#scanResetAll').onclick=()=>this.resetScan(true);
+    $('#scanLookAdd').onclick=e=>{ e.stopPropagation(); this.saveCamPreset(); }; $('#scanResetLook').onclick=()=>this.resetScan(false); $('#scanResetAll').onclick=()=>this.resetScanFull();
     $('#histOrig').onclick=e=>{ e.stopPropagation(); if(this.cur) this.applySettings(withDefaults({})).then(()=>{ this.commit(); this.toast('Back to the original — History keeps every step'); }); };
     // camera moves in 3D Scan are history steps too (checked when you pause)
     setInterval(()=>{ if(this.module!=='scan'||!this.cur||this.cur.kind!=='scanlook'||!Splat.scene||this._ptrDown) return; const h=this.cur.hist||[], last=h[h.length-1]; if(!last) return;
