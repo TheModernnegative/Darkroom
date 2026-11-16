@@ -1189,7 +1189,19 @@ const App = {
     UI.slider(body,'oarc','Swing arc',{min:5,max:120,step:1,def:40,get:()=>st.arc,set:v=>st.arc=v,fmt:x=>Math.round(x)+'°'});
     UI.slider(body,'osecs','Length',{min:2,max:20,step:1,def:6,get:()=>st.secs,set:v=>st.secs=v,fmt:x=>Math.round(x)+' s'});
     UI.seg(body,'osize','Size',[['1080','1080p'],['1920','1920'],['3840','4K']],()=>String(st.size),v=>st.size=+v);
-    UI.seg(body,'ofps','Frame rate',[['24','24'],['30','30'],['60','60']],()=>String(st.fps),v=>st.fps=+v);
+    UI.seg(body,'ofps','Frame rate',[['24','24'],['25','25'],['30','30'],['60','60']],()=>String(st.fps),v=>{ st.fps=+v; mbNote(); });
+    // motion blur: the shutter stays open for part of each frame, so anything moving smears like real film
+    st.mb=st.mb||'off'; st.angle=st.angle||180; st.speed=st.speed||50; st.mbq=st.mbq||8;
+    const mbBox=document.createElement('div'); mbBox.className='dmgBox'; body.appendChild(mbBox);
+    UI.seg(mbBox,'omb','Motion blur',[['off','Off'],['angle','Shutter angle'],['speed','Shutter speed']],()=>st.mb,v=>{ st.mb=v; mbIn.style.display=v==='off'?'none':''; mbA.style.display=v==='angle'?'':'none'; mbS.style.display=v==='speed'?'':'none'; mbNote(); });
+    const mbIn=document.createElement('div'); mbBox.appendChild(mbIn); mbIn.style.display=st.mb==='off'?'none':'';
+    const mbA=document.createElement('div'); mbIn.appendChild(mbA); mbA.style.display=st.mb==='angle'?'':'none';
+    UI.slider(mbA,'oangle','Shutter angle',{min:11,max:360,step:1,def:180,get:()=>st.angle,set:v=>{ st.angle=v; mbNote(); },fmt:x=>Math.round(x)+'°'});
+    const mbS=document.createElement('div'); mbIn.appendChild(mbS); mbS.style.display=st.mb==='speed'?'':'none';
+    UI.seg(mbS,'ospeed','Shutter speed',[['30','1/30'],['48','1/48'],['50','1/50'],['60','1/60'],['125','1/125'],['250','1/250'],['500','1/500']],()=>String(st.speed),v=>{ st.speed=+v; mbNote(); });
+    UI.seg(mbIn,'ombq','Smoothness',[['4','Draft (4)'],['8','Good (8)'],['16','Best (16)'],['32','Silky (32)']],()=>String(st.mbq),v=>{ st.mbq=+v; mbNote(); });
+    const mbN=document.createElement('div'); mbN.className='note'; mbIn.appendChild(mbN);
+    const mbNote=()=>{ if(!mbN) return; const fr=this.shutterFrac(st), sec=fr/st.fps, ang=Math.round(fr*360); mbN.innerHTML=st.mb==='off'?'':`= ${ang}° at ${st.fps} fps, 1/${Math.round(1/sec)} s open per frame${fr>=0.999&&st.mb==='speed'?' (can’t be longer than one frame)':''}. ${st.mbq} renders are blended per frame, so export takes about ${st.mbq}× longer. 180° is the classic film look.`; }; mbNote();
     UI.check(body,'ograin','Moving grain (new grain every frame, like real film)',()=>st.grain,v=>st.grain=v);
     st.dmg=Object.assign({},FilmDamage.DEFAULTS,st.dmg||{});
     { const D=st.dmg, box=document.createElement('div'); box.className='dmgBox'; body.appendChild(box);
@@ -1210,6 +1222,9 @@ const App = {
     this._orbitPrefs=Object.assign({},st);
     try{ await this.renderOrbit(st); }catch(e){ console.error(e); this.busy(); this.toast('Video failed: '+e.message); }
   },
+  shutterFrac(st){ if(!st||st.mb==='off'||!st.mb) return 0; return Math.min(1,st.mb==='angle'?st.angle/360:st.fps/st.speed); },
+  accProg(){ if(this._accP) return this._accP; this._accP=GLU.program(GLU.QUAD_VS,`#version 300 es
+precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out vec4 o; void main(){ o=texture(uT,vUv)*uW; }`); return this._accP; },
   async renderOrbit(st){
     const name=(this.scanName||'scan').replace(/\.(ply|splat)$/i,'')+' — orbit — '+Engine.stock().name+'.mov';
     const path=await Native.call('pickSave',{name,dir:this.info&&this.info.splatDir+'/exports'}); if(!path) return;
@@ -1223,16 +1238,24 @@ const App = {
     const id=p3?x.createImageData(w,h,{colorSpace:'display-p3'}):x.createImageData(w,h), px=new Uint8Array(w*h*4);
     const EP=Object.assign(this.scanParams(cloneParams(Engine.p)),{border:'none'});
     const L={W:w,H:h,dpr:1,scale:1,fx:0,fy:0,fw:w,fh:h,ix:0,iy:0,iw:w,ih:h,win:[0,0,1,1],b:{l:0,r:0,t:0,b:0}};
-    this._cancelVideo=false; const t0=performance.now(), dmg=st.dmg&&st.dmg.on?FilmDamage.make(st.dmg,w,h):null;
+    this._cancelVideo=false; const t0=performance.now(), dmg=st.dmg&&st.dmg.on?FilmDamage.make(st.dmg,w,h):null; let acc=null, sub=null;
     try{
       for(let f=0;f<frames;f++){
         if(this._cancelVideo) throw new Error('cancelled');
-        const t=f/frames;
-        if(st.move==='swing') c.yaw=keep.yaw+Math.sin(t*2*Math.PI)*st.arc/2*Math.PI/180;
-        else if(st.move==='orbit') c.yaw=keep.yaw+t*2*Math.PI;
-        else if(st.move==='keys'){ this.keyCamAt(tl,f/st.fps); }
-        else { const e=.5-.5*Math.cos(t*Math.PI); c.dist=keep.dist*(1-.35*e); c.yaw=keep.yaw+(e-.5)*st.arc/3*Math.PI/180; }
-        await this.sortSync(); Splat.render(tmp);
+        const camAt=tf=>{ const t=tf*st.fps/frames;
+          if(st.move==='swing') c.yaw=keep.yaw+Math.sin(t*2*Math.PI)*st.arc/2*Math.PI/180;
+          else if(st.move==='orbit') c.yaw=keep.yaw+t*2*Math.PI;
+          else if(st.move==='keys'){ this.keyCamAt(tl,Math.max(0,Math.min(tl.T,tf))); }
+          else { const tt=Math.max(0,Math.min(1,t)), e=.5-.5*Math.cos(tt*Math.PI); c.dist=keep.dist*(1-.35*e); c.yaw=keep.yaw+(e-.5)*st.arc/3*Math.PI/180; } };
+        const fr=this.shutterFrac(st), S=fr>0?Math.max(2,st.mbq||8):1;
+        if(S===1){ camAt(f/st.fps); await this.sortSync(); Splat.render(tmp); }
+        else { // blend S renders spread over the time the shutter is open (centred on the frame)
+          acc=acc||GLU.target(w,h,'rgba16f'); sub=sub||GLU.target(w,h,'rgba16f'); const A=this.accProg();
+          gl.bindFramebuffer(gl.FRAMEBUFFER,acc.f); gl.viewport(0,0,w,h); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+          for(let j=0;j<S;j++){ camAt((f+(j/(S-1)-0.5)*fr)/st.fps); if(j===0||j===S>>1) await this.sortSync(); Splat.render(sub);
+            gl.bindFramebuffer(gl.FRAMEBUFFER,acc.f); gl.viewport(0,0,w,h); gl.useProgram(A.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,sub.t); gl.uniform1i(A.u.uT,0); gl.uniform1f(A.u.uW,1/S);
+            gl.enable(gl.BLEND); gl.blendFunc(gl.ONE,gl.ONE); GLU.drawQuad(); gl.disable(gl.BLEND); }
+          gl.bindFramebuffer(gl.FRAMEBUFFER,tmp.f); gl.viewport(0,0,w,h); gl.useProgram(A.p); gl.bindTexture(gl.TEXTURE_2D,acc.t); gl.uniform1f(A.u.uW,1); GLU.drawQuad(); gl.bindFramebuffer(gl.FRAMEBUFFER,null); }
         if(st.grain) Engine.grainSeed=(keepSeed+f*2654435761)>>>0;
         const src={tex:tmp.t,w,h,dispRef:true,encoded:true,flipY:true,key:this.scanKey||0.1};
         const ks=Engine.src, kb=Engine.before, kc=Engine.cropMode; Engine.src=src; Engine.before=false; Engine.cropMode=false;
@@ -1249,7 +1272,7 @@ const App = {
       const done=await Native.call('videoEnd',{job}); this.busy(); this.toast(done?'Saved '+done.split('/').pop():'Video writer failed');
       if(done) Native.call('reveal',{path:done}).catch(()=>{});
     } catch(e){ await Native.call('videoEnd',{job}).catch(()=>{}); throw e; }
-    finally{ Object.assign(c,keep); c.fnum=keep.fnum||null; Engine.grainSeed=keepSeed; GLU.free(tmp); GLU.free(out); for(const k in RT) GLU.free(RT[k]); Splat.lastSortView=null; Engine.dirty=true; }
+    finally{ Object.assign(c,keep); c.fnum=keep.fnum||null; Engine.grainSeed=keepSeed; GLU.free(tmp); GLU.free(out); GLU.free(acc); GLU.free(sub); for(const k in RT) GLU.free(RT[k]); Splat.lastSortView=null; Engine.dirty=true; }
   },
   // ================================================================ export
   async exportDialog(){
