@@ -413,7 +413,9 @@ const App = {
     const first=Object.keys(this.STUDIO_OWN).map(id=>document.getElementById(id)).find(el=>el&&el.classList.contains('open')); if(first) first.scrollIntoView({block:'start',behavior:'smooth'}); },
   changed(){ Engine.dirty=true; Engine.histDirty=true; clearTimeout(this._dt); this._dt=setTimeout(()=>this.dots(),120); if(this.cur){ this.cur.settings=Engine.p; this.thumbSoon(); this.saveSoon(); } },
   commit(){ const it=this.cur; if(!it) return; const snap=JSON.stringify(it.kind==='scanlook'&&Splat.scene?Object.assign({},Engine.p,{__cam:this.camSnap()}):Engine.p);
-    it.hist=it.hist||[]; it.histT=it.histT||[]; it.fut=[]; if(it.hist[it.hist.length-1]!==snap){ it.hist.push(snap); it.histT.push(Date.now()); }
+    it.hist=it.hist||[]; it.histT=it.histT||[]; it.fut=[]; const H=it.hist, n=H.length;
+    if(H[n-1]!==snap){ let merge=false; try{ if(n>=2&&Date.now()-(it.histT[n-1]||0)<6000) merge=this.histLabel(H[n-2],H[n-1])===this.histLabel(H[n-1],snap); }catch(e){}
+      if(merge){ H[n-1]=snap; it.histT[n-1]=Date.now(); if(H[n-2]===snap){ H.pop(); it.histT.pop(); } } else { H.push(snap); it.histT.push(Date.now()); } }
     while(it.hist.length>200){ it.hist.shift(); it.histT.shift(); } while(it.histT.length<it.hist.length) it.histT.unshift(0); this.renderHistorySoon(); },
   // ---- history log: every committed step, newest first; click one to go back to it (that becomes a new step)
   HNAMES:{stock:'Film',paper:'Paper',filmAmt:'Film strength',format:'Format',ev:'Exposure',contrast:'Contrast',highlights:'Highlights',shadows:'Shadows',whites:'Whites',blacks:'Blacks',temp:'White balance',tint:'White balance',
@@ -1037,20 +1039,21 @@ const App = {
   renderScanLooks(){ const el=$('#scanLookList'); if(!el) return; el.innerHTML=''; const L=this.scanPresets||[];
     if(!L.length){ el.innerHTML='<div class="note">Found something you like? Press + to save the camera, lens, film and Studio look together.</div>'; return; }
     L.forEach((x,i)=>{ const r=document.createElement('div'); r.className='upreset'; const lens=LENSES.find(l=>l.id===(x.cam||{}).lens), st=x.look&&Engine.stock(x.look.stock);
-      r.className='preset user'; r.innerHTML='<span class="pn"></span><span class="iso"></span><b class="pa del ux" title="Delete">×</b>'; r.querySelector('.pn').textContent=x.name;
+      r.className='preset user'; r.innerHTML='<span class="pn"></span><span class="iso"></span><b class="pa uf'+(x.keepFocus?' on':'')+'" title="'+(x.keepFocus?'This look brings back its own focus point — click to leave your focus alone':(x.focusLock?'Click so this look also brings back the focus point it was saved with':'Re-save this look (+ with the same name) to store its focus point'))+'">◎</b><b class="pa del ux" title="Delete">×</b>'; r.querySelector('.pn').textContent=x.name;
+      r.querySelector('.uf').onclick=e=>{ e.stopPropagation(); if(!x.focusLock&&!x.keepFocus){ this.toast('This look was saved before focus points were stored — set your focus, then press + and use the same name'); return; } x.keepFocus=!x.keepFocus; this.saveSoon(); this.renderScanLooks(); this.toast(x.keepFocus?'“'+x.name+'” now brings back its focus point too':'“'+x.name+'” leaves your focus alone'); };
       r.querySelector('.iso').textContent=[lens?lens.name.split(' · ')[0]:'',st?st.name:'',x.look?'':'camera only'].filter(Boolean).join(' · ');
-      r.onclick=e=>{ if(e.target.classList.contains('ux')) return; this.applyScanLook(x); };
+      r.onclick=e=>{ if(e.target.classList.contains('ux')||e.target.classList.contains('uf')) return; this.applyScanLook(x); };
       r.querySelector('.ux').onclick=async e=>{ e.stopPropagation(); if(!confirm('Delete the scan look “'+x.name+'”?')) return; L.splice(i,1); this.saveSoon(); this.renderScanLooks(); this.buildScanPanels(); };
       el.appendChild(r); }); },
   async applyScanLook(x){ const c=Splat.cam, keepF={focus:c.focus,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; // a look never moves your focus point
-    if(x.cam) this.applyCam(x.cam); if(x.look){ const l=cloneParams(x.look); delete l.__cam; await this.applySettings(l); } Object.assign(c,keepF); Engine.dirty=true; UI.refresh(); this.commit(); this.toast('Loaded “'+x.name+'”'); },
+    if(x.cam) this.applyCam(x.cam); if(x.look){ const l=cloneParams(x.look); delete l.__cam; await this.applySettings(l); } Object.assign(c,x.keepFocus&&x.focusLock?{focus:x.focus,focusLock:JSON.parse(JSON.stringify(x.focusLock))}:keepF); Engine.dirty=true; UI.refresh(); this.commit(); this.toast('Loaded “'+x.name+'”'); },
   async resetScanFull(){ const nk=(this.scanKeys||[]).length;
     if(!confirm('Start over from the original scan?\n\nCamera, lens, film, Develop and Studio edits'+(nk?' and your '+nk+' keyframes':'')+' go back to the start.\nYour saved instances and looks are kept, and ⌘Z undoes the edits.')) return;
     if(this.camDefaults) this.applyCam(this.camDefaults); Splat.frame(); Splat.lastSortView=null; this.scanKeys=[]; this.keySel=-1; this.renderKeys(); this.curSnap=null;
     await this.applySettings(withDefaults({})); this.commit(); this.renderStrip(); Engine.dirty=true; this.toast('Back to the original scan — a clean start'); },
   async resetScan(all){ if(all&&this.camDefaults) this.applyCam(this.camDefaults); await this.applySettings(withDefaults({})); this.commit(); this.toast(all?'Camera and look back to the original — History has every step':'Look back to the original — History has every step'); },
   async saveCamPreset(){ const L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this scan look (camera + lens + film + Studio)',(L?L.name.split(' · ')[0]:'My camera')+' · ƒ/'+STOPS[Splat.cam.stop]); if(!name) return false;
-    this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap(),look:cloneParams(Engine.p)}; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
+    this.scanPresets=this.scanPresets||[]; const i=this.scanPresets.findIndex(x=>x.name===name); const e={name,cam:this.camSnap(),look:cloneParams(Engine.p),focus:Splat.cam.focus,focusLock:Splat.cam.focusLock?JSON.parse(JSON.stringify(Splat.cam.focusLock)):null,keepFocus:false}; if(i>=0&&this.scanPresets[i].keepFocus) e.keepFocus=true; if(i>=0) this.scanPresets[i]=e; else this.scanPresets.push(e);
     this.saveSoon(); this.buildScanPanels(); this.renderScanLooks(); this.toast('Saved scan look “'+name+'”'); },
   async deleteCamPreset(){ const L=this.scanPresets||[]; if(!L.length){ this.toast('No camera presets yet'); return; }
     const name=await this.ask('Delete which preset? ('+L.map(x=>x.name).join(', ')+')',L[L.length-1].name); const i=L.findIndex(x=>x.name===name); if(i<0) return; L.splice(i,1); this.saveSoon(); this.buildScanPanels(); this.toast('Deleted “'+name+'”'); },
@@ -1456,6 +1459,7 @@ const App = {
   bindEvents(){
     document.querySelectorAll('#modules button').forEach(b=>b.onclick=()=>this.setModule(b.dataset.m));
     document.querySelectorAll('#left .panel>h3, #right>.panel>h3').forEach(h=>h.addEventListener('click',e=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON') return; h.parentElement.classList.toggle('open'); }));
+    UI.restorePanels(document);
     $('#btnImport').onclick=e=>this.importMenu(e.currentTarget); $('#emptyImport').onclick=()=>this.importDialog(); $('#seOpen').onclick=()=>this.openScan(); $('#seHow').onclick=()=>Tutorial.open(); $('#seNew').onclick=()=>this.newScan(); $('#seDemo').onclick=()=>this.loadDemo();
     $('#btnExport').onclick=()=>this.exportDialog(); { const sb=$('#tbSaveScan'); if(sb) sb.onclick=()=>this.exportDialog(); }
     $('#presetAdd').onclick=e=>{ e.stopPropagation(); $('#pUserPresets').classList.add('open'); $('#presetNew').classList.toggle('on'); if($('#presetNew').classList.contains('on')){ const n=$('#presetName'); n.value=Engine.stock().name+' — '; n.focus(); n.setSelectionRange(n.value.length,n.value.length); } };

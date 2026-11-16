@@ -1,10 +1,15 @@
 // UI building blocks: Lightroom-style panels, sliders, presets, histogram.
 const UI = {
   sliders:{},
+  // which panels are open is remembered between launches
+  panelState(){ if(!this._ps){ try{ this._ps=JSON.parse(localStorage.getItem('darkroom.panels')||'{}'); }catch(e){ this._ps={}; } } return this._ps; },
+  restorePanels(root){ const S=this.panelState(); root.querySelectorAll('section.panel[id]').forEach(p=>{ if(S[p.id]!==undefined) p.classList.toggle('open',S[p.id]); });
+    if(!this._psBound){ this._psBound=true; document.addEventListener('click',e=>{ const h=e.target.closest&&e.target.closest('section.panel>h3'); if(!h) return; setTimeout(()=>{ const p=h.parentElement; if(!p.id) return; S[p.id]=p.classList.contains('open'); try{ localStorage.setItem('darkroom.panels',JSON.stringify(S)); }catch(e){} },0); },true); } },
   panel(parent, id, title, open=true, resetFn){
     const s=document.createElement('section'); s.className='panel'+(open?' open':''); s.id=id;
     s.innerHTML=`<h3><i></i>${title}${resetFn?'<span class="reset">RESET</span>':''}</h3><div class="body"></div>`;
     s.querySelector('h3').addEventListener('click',e=>{ if(e.target.classList.contains('reset')){ resetFn(); return; } s.classList.toggle('open'); });
+    const st=this.panelState()[id]; if(st!==undefined) s.classList.toggle('open',st);
     parent.appendChild(s); return s.querySelector('.body');
   },
   // opts: {min,max,step,def,fmt,track,get,set,commit}

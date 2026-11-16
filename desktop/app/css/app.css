@@ -488,3 +488,4 @@ i.b3d{font-style:normal;font:700 9px var(--sans);background:#d9573c;color:#fff;b
 
 .btnrow .tbtn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #histOrig{width:auto;padding:0 7px;font-size:11px;line-height:18px}
+.preset.user .uf{opacity:.35;font-weight:400}.preset.user .uf.on{opacity:1;color:#ff8a6d}.preset.user:hover .uf{opacity:.8}
