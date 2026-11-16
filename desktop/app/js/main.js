@@ -886,10 +886,18 @@ const App = {
     item('Save its edits as a look…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.saveLookPreset(); });
     if(sc.path===this.scanPath&&Splat.scene&&sn.view) item('Add its view as a keyframe',()=>{ this.scanKeys=this.scanKeys||[]; this.scanKeys.push(this.instKey(sn)); this.renderKeys(); this.toast('Keyframe '+this.scanKeys.length+' from “'+sn.name+'”'); });
     if((sn.keys||[]).length>1&&this.scans.filter(x=>x.path!==sc.path).length) item('Use this move on another scan…',()=>this.pickScan('Use “'+sn.name+'” camera move on…',sc.path,t=>this.useMoveOn(sc,sn,t)));
+    { const others=this.snapsFor(sc.path).filter(x=>x!==sn); if(others.length) item('Compare side by side with…',()=>{ const m2=$('#ctxMenu'); m2.innerHTML='<div class="mtitle">Compare “'+sn.name.replace(/</g,'&lt;')+'” with…</div>'; others.forEach(o=>{ const b=document.createElement('button'); b.textContent=o.name; b.onclick=()=>{ m2.classList.remove('on'); this.compareInstances(sc,sn,o); }; m2.appendChild(b); }); m2.classList.add('on'); setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m2.contains(e.target)){ m2.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); }); }
     item('Rename…',async()=>{ const n=await this.ask('Rename instance',sn.name); if(n){ sn.name=n.slice(0,60); this.renderStrip(); this.saveSoon(); } });
     item('Delete',()=>{ if(!confirm('Delete the instance “'+sn.name+'”? (the scan itself stays)')) return; const k=this.snapKey(sc.path); this.scanSnaps[k]=this.snapsFor(sc.path).filter(x=>x!==sn); if(this.curSnap===sn.id) this.curSnap=null; this.renderStrip(); this.saveSoon(); });
     m.style.left=Math.min(innerWidth-260,r.left)+'px'; m.classList.add('on'); m.style.top=Math.max(8,r.top-4-m.offsetHeight)+'px';
     setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
+  async compareInstances(sc,a,b){ const shots=[]; for(const sn of [a,b]){ this.busy('Rendering “'+sn.name+'”…'); await this.openSnap(sc,sn); await new Promise(r=>setTimeout(r,500)); shots.push(await this.grabView(1400)); } this.busy();
+    let el=$('#cmpOverlay'); if(el) el.remove(); el=document.createElement('div'); el.id='cmpOverlay'; const esc=t=>t.replace(/</g,'&lt;');
+    el.innerHTML=`<div class="cmpTop"><span>Compare instances</span><button class="tbtn" data-a="wipe">Wipe</button><button class="tbtn" data-a="close">Close  Esc</button></div><div class="cmpBody"><figure><img src="${shots[0]||''}"><figcaption>${esc(a.name)} <button class="tbtn" data-a="0">Open</button></figcaption></figure><figure><img src="${shots[1]||''}"><figcaption>${esc(b.name)} <button class="tbtn" data-a="1">Open</button></figcaption></figure></div>`;
+    document.body.appendChild(el); const close=()=>{ el.remove(); removeEventListener('keydown',kd,true); }, kd=e=>{ if(e.key==='Escape'){ e.stopPropagation(); close(); } }; addEventListener('keydown',kd,true);
+    el.onclick=async e=>{ const t=e.target.dataset.a; if(t==='close'||e.target===el) close(); else if(t==='0'||t==='1'){ close(); await this.openSnap(sc,[a,b][+t]); }
+      else if(t==='wipe'){ el.classList.toggle('wipe'); e.target.textContent=el.classList.contains('wipe')?'Side by side':'Wipe'; } };
+    el.querySelector('.cmpBody').onpointermove=e=>{ if(!el.classList.contains('wipe')) return; const r=e.currentTarget.getBoundingClientRect(); el.style.setProperty('--wx',((e.clientX-r.left)/r.width*100)+'%'); }; },
   pickScan(title,exclude,fn){ const m=$('#ctxMenu'); m.innerHTML='<div class="mtitle"></div>'; m.firstChild.textContent=title;
     this.scans.filter(x=>x.path!==exclude).forEach(sc=>{ const b=document.createElement('button'); b.textContent=sc.name; b.onclick=()=>{ m.classList.remove('on'); fn(sc); }; m.appendChild(b); });
     m.classList.add('on'); setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); },
@@ -919,8 +927,8 @@ const App = {
     const job=Native.call('runPipeline',{input});
     this._pipeJob=null;
     try{ const r=await job; this._pipeBusy=false; this._pipeState=null; this.pipeMini(); Engine.dirty=true; $('#pipeClose').disabled=false; $('#pipe').classList.add('on');
-      clearInterval(this._pt); if(r&&r.ply){ this.pipeDone(true); $('#pipeTitle').textContent='Scan ready'; await this.loadScanPath(r.ply); $('#pipe').classList.remove('on'); this.toast('Scan loaded — orbit, focus, then Expose'); }
-      else { this.pipeDone(false); $('#pipeTitle').textContent='Scan failed (exit '+(r?r.code:'?')+') — see Details'; $('#pipeDetails').open=true; } }
+      clearInterval(this._pt); if(r&&r.ply){ this.pipeDone(true); $('#pipeTitle').textContent='Scan ready'; await this.loadScanPath(r.ply); $('#pipe').classList.remove('on'); this.toast('Scan loaded — orbit, focus, then Add to library'); if(this._quitAfterScan){ this.saveNow&&this.saveNow(); setTimeout(()=>Native.call('quit').catch(()=>{}),1500); } }
+      else { this._quitAfterScan=false; this.pipeDone(false); $('#pipeTitle').textContent='Scan failed (exit '+(r?r.code:'?')+') — see Details'; $('#pipeDetails').open=true; } }
     catch(e){ this._pipeBusy=false; $('#pipeTitle').textContent='Error: '+e.message; $('#pipeClose').disabled=false; }
   },
   // ---- scan build progress: splat.sh emits "@@progress <stage> <done> <total> <label>"
@@ -949,6 +957,7 @@ const App = {
   pipeCtl(cmd){ if(!this._pipeOut) return; Native.call('writeFile',{path:this._pipeOut+'/.control',base64:btoa(cmd)}).catch(e=>this.toast('Could not reach the trainer: '+e.message));
     const P=this.pp; if(cmd==='pause'&&P&&!P.pausedAt) P.pausedAt=Date.now(); this._pipeState=cmd==='pause'?'paused':cmd==='finish'?'finishing':'running';
     this._pipeBusy=cmd!=='pause'&&$('#pipe').classList.contains('on'); this.pipeMini(); },
+  finishThenQuit(){ this._quitAfterScan=true; this.pipeCtl('finish'); this.toast('Finishing the scan with its newest checkpoint — the app will quit when it’s saved'); },
   async previewCheckpoint(){ let files=[]; try{ files=await Native.call('listDir',{path:this._pipeOut}); }catch(e){}
     const ck=files.filter(f=>/^export_\d+\.ply$/.test(f)).sort(); if(!ck.length){ this.toast('No checkpoint yet — the first one is saved at step 2,500'); return; }
     const f=ck[ck.length-1]; $('#pipe').classList.remove('on'); this._pipeBusy=false; this.pipeMini(); this.setModule('scan');
@@ -1131,7 +1140,26 @@ const App = {
         m.onpointermove=ev=>{ prev.dur=Math.max(0.2,Math.round((d0+(ev.clientX-x0)*scale)*10)/10); const t2=this.keyTimeline(this.defMove()); m.style.left=Math.min(100,(K[i]._t/T*100))+'%'; el.querySelector('.tlTime').textContent=t2.T.toFixed(1)+' s · move into '+(i+1)+': '+prev.dur.toFixed(1)+' s'; };
         m.onpointerup=()=>{ m.onpointermove=null; this.renderKeys(); this.scrubKeys(K[i]._t); }; };
       bar.appendChild(m); });
+    this.renderLanes(el,tl,T);
     bar.onpointerdown=e=>{ if(e.target.classList.contains('tlKey')) return; const r=bar.getBoundingClientRect(); const go=ev=>this.scrubKeys(Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width))*T); go(e); bar.setPointerCapture(e.pointerId); bar.onpointermove=go; bar.onpointerup=()=>{ bar.onpointermove=null; }; }; },
+  laneAt(tl,t,f){ const K=this.scanKeys; let sg=tl.segs.find(s=>t>=s.t0&&t<s.t1)||tl.segs[tl.segs.length-1]; if(!sg) return K[0][f];
+    const A=K[sg.i], B=sg.hold?A:K[sg.i+1]; let u=sg.hold?0:Math.min(1,(t-sg.t0)/(sg.t1-sg.t0)); const ez={linear:u,in:u*u*u,out:1-Math.pow(1-u,3)}[A.ease]; const e=ez!==undefined?ez:u*u*(3-2*u);
+    return Math.exp(Math.log(Math.max(1e-3,A[f]))+(Math.log(Math.max(1e-3,B[f]))-Math.log(Math.max(1e-3,A[f])))*e); },
+  // focus / aperture / focal-length lanes: each keyframe is a dot you drag up or down; the line shows how it glides between keys
+  renderLanes(el,tl,T){ const K=this.scanKeys, c=Splat.cam; if(this._lanesOpen===undefined) this._lanesOpen=false;
+    const tog=document.createElement('button'); tog.className='laneTog'; tog.textContent=(this._lanesOpen?'▾':'▸')+' Focus · aperture · focal length'; tog.onclick=()=>{ this._lanesOpen=!this._lanesOpen; this.renderTimeline(); }; el.appendChild(tog); if(!this._lanesOpen) return;
+    const LN=[['focus','Focus',v=>{ const m=v*(c.scale||1); return m<1?Math.round(m*100)+' cm':m.toFixed(2)+' m'; }],['fnum','Aperture',v=>'ƒ/'+(v<10?v.toFixed(1):Math.round(v)).toString().replace('.0','')],['fmm','Focal length',v=>Math.round(v)+' mm']];
+    LN.forEach(([f,label,fmt])=>{ const row=document.createElement('div'); row.className='lane'; row.innerHTML='<span class="lnName"></span><div class="lnPlot"></div>'; row.firstChild.textContent=label; el.appendChild(row); const plot=row.lastChild;
+      const vals=K.map(k=>Math.log(Math.max(1e-3,k[f]))); let lo=Math.min(...vals), hi=Math.max(...vals); if(f==='fnum'){ lo=Math.log(STOPS[0]); hi=Math.log(STOPS[STOPS.length-1]); } else { const pad=Math.max(0.35,(hi-lo)*0.25); lo-=pad; hi+=pad; }
+      const H=34, yOf=v=>H-2-(Math.log(Math.max(1e-3,v))-lo)/(hi-lo)*(H-4);
+      let pts=''; for(let i=0;i<=80;i++){ const t=i/80*tl.T; pts+=`${(t/T*100).toFixed(2)},${yOf(this.laneAt(tl,t,f)).toFixed(1)} `; }
+      plot.innerHTML=`<svg viewBox="0 0 100 ${H}" preserveAspectRatio="none"><polyline points="${pts}" vector-effect="non-scaling-stroke"/></svg>`;
+      K.forEach((k,i)=>{ const d=document.createElement('div'); d.className='lnDot'+(i===this.keySel?' on':''); d.style.left=(k._t/T*100)+'%'; d.style.top=yOf(k[f])+'px'; d.title=label+' at keyframe '+(i+1)+': '+fmt(k[f])+' — drag up or down'; plot.appendChild(d);
+        d.onpointerdown=e=>{ e.preventDefault(); e.stopPropagation(); d.setPointerCapture(e.pointerId); const y0=e.clientY, v0=Math.log(Math.max(1e-3,k[f])), per=(hi-lo)/(H-4); this.keySel=i;
+          const tip=document.createElement('div'); tip.className='lnTip'; plot.appendChild(tip);
+          d.onpointermove=ev=>{ let v=Math.exp(Math.min(hi,Math.max(lo,v0-(ev.clientY-y0)*per))); if(f==='fnum'){ let si=0; STOPS.forEach((x,j)=>{ if(Math.abs(Math.log(x)-Math.log(v))<Math.abs(Math.log(STOPS[si])-Math.log(v))) si=j; }); v=STOPS[si]; } k[f]=v; d.style.top=yOf(v)+'px'; tip.textContent=fmt(v); tip.style.left=d.style.left; tip.style.top=(yOf(v)-18)+'px';
+            this.keyCamAt(this.keyTimeline(this.defMove()),k._t); Splat.lastSortView=null; Engine.dirty=true; };
+          d.onpointerup=()=>{ d.onpointermove=null; tip.remove(); this.renderKeys(); this.scrubKeys(k._t); }; }; }); }); },
   scrubKeys(t){ const tl=this.keyTimeline(this.defMove()); this.keyCamAt(tl,Math.min(t,tl.T)); Splat.lastSortView=null; Engine.dirty=true; this.tlHead(t,tl.T); },
   tlHead(t,T){ const h=this._tlHead; if(!h||!h.isConnected) return; h.style.display=''; h.style.left=(Math.min(t,T)/Math.max(T,0.5)*100)+'%'; },
   keyCamAt(tl,time){ const K=this.scanKeys, c=Splat.cam; let sg=tl.segs.find(s=>time>=s.t0&&time<s.t1)||tl.segs[tl.segs.length-1]; if(!sg) return;
@@ -1159,6 +1187,18 @@ const App = {
     UI.seg(body,'osize','Size',[['1080','1080p'],['1920','1920'],['3840','4K']],()=>String(st.size),v=>st.size=+v);
     UI.seg(body,'ofps','Frame rate',[['24','24'],['30','30'],['60','60']],()=>String(st.fps),v=>st.fps=+v);
     UI.check(body,'ograin','Moving grain (new grain every frame, like real film)',()=>st.grain,v=>st.grain=v);
+    st.dmg=Object.assign({},FilmDamage.DEFAULTS,st.dmg||{});
+    { const D=st.dmg, box=document.createElement('div'); box.className='dmgBox'; body.appendChild(box);
+      UI.check(box,'odmg','Dust & scratches — moving, like a real print going through a projector',()=>D.on,v=>{ D.on=v; inner.style.display=v?'':'none'; });
+      const inner=document.createElement('div'); box.appendChild(inner); inner.style.display=D.on?'':'none';
+      const pv=document.createElement('canvas'); pv.className='dmgPrev'; inner.appendChild(pv);
+      const S=(k,l,f)=>UI.slider(inner,'od_'+k,l,{min:0,max:100,step:1,def:FilmDamage.DEFAULTS[k],get:()=>D[k],set:v=>{ D[k]=v; },fmt:f||(x=>Math.round(x))});
+      S('amount','Overall'); S('dust','Dust density'); S('dustSize','Dust size'); S('scratch','Scratches'); S('hair','Hairs'); S('weave','Gate weave'); S('flicker','Flicker');
+      UI.seg(inner,'od_col','Dirt shows as',[['dark','Dark (print)'],['light','White (negative)'],['mix','Both']],()=>D.colour,v=>D.colour=v);
+      const r=document.createElement('div'); r.className='btnrow'; inner.appendChild(r); UI.button(r,'New random pattern',()=>{ D.seed=1+Math.floor(Math.random()*1e6); st0=null; });
+      // live preview: the current view through the damage at 24 fps
+      const L=this._lastL, img=this.viewThumb(520); let st0=null, im=new Image(); im.src=img||''; const anim=()=>{ if(!pv.isConnected) return; if(D.on&&im.complete&&im.naturalWidth){ const w=im.naturalWidth, h=im.naturalHeight; if(pv.width!==w){ pv.width=w; pv.height=h; }
+          const x=pv.getContext('2d'); if(!st0||st0.p.seed!==D.seed) st0=FilmDamage.make(D,w,h); st0.p=Object.assign(st0.p,D); x.drawImage(im,0,0); FilmDamage.frame(x,st0,pv); } setTimeout(()=>requestAnimationFrame(anim),1000/24); }; anim(); }
     UI.note(body,'Uses the current camera, lens, focus and film look. Saved as HEVC .mov in Display P3.');
     $('#dlg').classList.add('on');
     const go=await new Promise(r=>{ $('#dlgOk').onclick=()=>r(true); $('#dlgCancel').onclick=()=>r(false); });
@@ -1179,7 +1219,7 @@ const App = {
     const id=p3?x.createImageData(w,h,{colorSpace:'display-p3'}):x.createImageData(w,h), px=new Uint8Array(w*h*4);
     const EP=Object.assign(this.scanParams(cloneParams(Engine.p)),{border:'none'});
     const L={W:w,H:h,dpr:1,scale:1,fx:0,fy:0,fw:w,fh:h,ix:0,iy:0,iw:w,ih:h,win:[0,0,1,1],b:{l:0,r:0,t:0,b:0}};
-    this._cancelVideo=false; const t0=performance.now();
+    this._cancelVideo=false; const t0=performance.now(), dmg=st.dmg&&st.dmg.on?FilmDamage.make(st.dmg,w,h):null;
     try{
       for(let f=0;f<frames;f++){
         if(this._cancelVideo) throw new Error('cancelled');
@@ -1196,6 +1236,7 @@ const App = {
         Engine.src=ks; Engine.before=kb; Engine.cropMode=kc;
         gl.bindFramebuffer(gl.FRAMEBUFFER,out.f); gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px); gl.bindFramebuffer(gl.FRAMEBUFFER,null);
         for(let y=0;y<h;y++) id.data.set(px.subarray((h-1-y)*w*4,(h-y)*w*4),y*w*4); x.putImageData(id,0,0);
+        if(dmg) FilmDamage.frame(x,dmg,cv);
         const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.92));
         await Native.call('videoFrame',{job,base64:await this.blobB64(blob)});
         const el=(performance.now()-t0)/1000, eta=el/(f+1)*(frames-f-1);
@@ -1387,7 +1428,7 @@ const App = {
           const src=this.renderScanSource(w,h); Engine.src=src; Engine.view={mode:'fit'}; if(Engine.p.dblId==='__self') Engine.dblSrc=Object.assign({},src,{id:'__self',own:false});
           const p=this.scanParams(Engine.hoverParams||Engine.p);
           const L=Engine.layout(p); this._lastL=L;
-          Engine.render({params:p,layout:L,borderTex:this.borderFor(L,p)}); this.scanThumb(); if(this._snapCb){ const f=this._snapCb; this._snapCb=null; f(); } this.histo(); this.status(); }
+          Engine.render({params:p,layout:L,borderTex:this.borderFor(L,p)}); this.scanThumb(); this.cpOverlay(); if(this._snapCb){ const f=this._snapCb; this._snapCb=null; f(); } this.histo(); this.status(); }
       } else if(this.module!=='library' && Engine.dirty){
         Engine.dirty=false;
         const p=Engine.hoverParams||Engine.p;
@@ -1532,7 +1573,7 @@ const App = {
     el.dataset.label={dbl:'Second exposure',leak:'Light leak',burn:'Film burn',flare:'Flare',dust:'Dust'}[T.kind.replace(/\d+$/,'')]; el.classList.add('on'); },
   // ---- control point markers on the photo (Studio)
   cpOverlay(){ const lay=$('#cpLayer'), L=this._lastL; if(!lay) return;
-    const a=(Engine.p.cps||[]), show=this.module==='studio'&&L&&Engine.src&&!this.compare&&(a.length||Studio.cpAdding)&&!(Engine.p.off||{}).points;
+    const a=(Engine.p.cps||[]), show=(this.module==='studio'||this.module==='scan')&&L&&Engine.src&&!this.compare&&(a.length||Studio.cpAdding)&&!(Engine.p.off||{}).points;
     lay.classList.toggle('on',!!show); lay.classList.toggle('adding',!!Studio.cpAdding); if(!show){ lay.innerHTML=''; return; }
     const r=$('#view').getBoundingClientRect(), dpr=L.dpr; Object.assign(lay.style,{left:r.left+L.ix/dpr+'px',top:r.top+(L.H-L.iy-L.ih)/dpr+'px',width:L.iw/dpr+'px',height:L.ih/dpr+'px'});
     if(lay.children.length!==a.length) lay.innerHTML='';
@@ -1556,7 +1597,7 @@ const App = {
         this.cleanStroke(e,v,true); let raf=0, last=e; const mv=ev=>{ last=ev; if(!raf) raf=requestAnimationFrame(()=>{ raf=0; this.cleanStroke(last,v,false); }); };
         const up=()=>{ v.removeEventListener('pointermove',mv); v.removeEventListener('pointerup',up); this.saveClean(); }; v.addEventListener('pointermove',mv); v.addEventListener('pointerup',up); },true); }
     // adding a control point: the next click on the photo places it
-    v.addEventListener('pointerdown',e=>{ if(this.module!=='studio'||!Studio.cpAdding||e.button!==0) return; const L=this._lastL; if(!L) return; e.stopImmediatePropagation(); e.preventDefault();
+    v.addEventListener('pointerdown',e=>{ if((this.module!=='studio'&&this.module!=='scan')||!Studio.cpAdding||e.button!==0) return; const L=this._lastL; if(!L) return; e.stopImmediatePropagation(); e.preventDefault();
       const r=v.getBoundingClientRect(), dpr=L.dpr, x=((e.clientX-r.left)*dpr-L.ix)/L.iw, y=((e.clientY-r.top)*dpr-(L.H-L.iy-L.ih))/L.ih; if(x<0||y<0||x>1||y>1) return;
       const a=Engine.p.cps=(Engine.p.cps&&Engine.p.cps!==DEFAULTS.cps)?Engine.p.cps:[]; if(a.length>=8) return;
       const c={x,y,r:0.15,col:[.18,.18,.18],b:0,c:0,s:0,st:0,w:0}; this.cpSample(c); a.push(c); Studio.cpSel=a.length-1; Studio.cpAdding=false;

@@ -163,7 +163,7 @@ final class DarkroomWebView: WKWebView {
 
 // MARK: - App ------------------------------------------------------------------------------
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     var window: NSWindow!
     var web: DarkroomWebView!
     var running: [Int: Process] = [:]
@@ -192,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         window.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 1)
         window.minSize = NSSize(width: 1000, height: 640)
         window.contentView = web
+        window.delegate = self
         _ = window.setFrameAutosaveName("SplatDarkroomMain")
         if !window.setFrameUsingName("SplatDarkroomMain") { window.center() }
         window.makeKeyAndOrderFront(nil)
@@ -204,6 +205,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+    // Quitting (or closing the window) while a scan is training: keep going, finish with the newest checkpoint, or stop it
+    var allowQuit = false
+    func confirmStopScan() -> Bool {
+        if allowQuit || running.isEmpty { return true }
+        let a = NSAlert()
+        a.messageText = "A scan is still training"
+        a.informativeText = "Quitting now stops it and the scan is lost. “Finish now” keeps the newest checkpoint as your scan, then quits once it is saved."
+        a.addButton(withTitle: "Keep training")
+        a.addButton(withTitle: "Finish now, then quit")
+        a.addButton(withTitle: "Quit and cancel the scan")
+        let r = a.runModal()
+        if r == .alertFirstButtonReturn { return false }
+        if r == .alertSecondButtonReturn {
+            web.evaluateJavaScript("window.App && App.finishThenQuit && App.finishThenQuit()", completionHandler: nil)
+            return false
+        }
+        allowQuit = true
+        return true
+    }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        return confirmStopScan() ? .terminateNow : .terminateCancel
+    }
+    func windowShouldClose(_ sender: NSWindow) -> Bool { return confirmStopScan() }
     func applicationWillTerminate(_ n: Notification) { running.values.forEach { $0.terminate() } }
 
     // Menu -----------------------------------------------------------------------------------
@@ -387,6 +411,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 DispatchQueue.main.async { self.resolve(id, ["code": Int(p.terminationStatus), "out": out]) }
             }
             do { try proc.run() } catch { resolve(id, nil, error: error.localizedDescription) }
+        case "quit":
+            resolve(id, true); allowQuit = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSApp.terminate(nil) }
         case "relaunch":
             let path = Bundle.main.bundlePath
             let p = Process(); p.executableURL = URL(fileURLWithPath: "/bin/sh")
