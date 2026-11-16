@@ -129,7 +129,8 @@ const App = {
     { const h=document.createElement('div'); h.className='ahead'; h.textContent='Camera move (keyframes)'; b.appendChild(h);
       const kl=document.createElement('div'); kl.className='cpList'; kl.id='keyList'; b.appendChild(kl);
       const kr=document.createElement('div'); kr.className='btnrow'; b.appendChild(kr);
-      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'▶ Preview',()=>this.previewKeys()); UI.button(kr,'Clear',()=>{ this.scanKeys=[]; this.keySel=-1; this.renderKeys(); });
+      UI.button(kr,'+ Keyframe',()=>this.addKey()); UI.button(kr,'▶ Preview',()=>this.previewKeys()); UI.button(kr,'Clear',()=>{ if((this.scanKeys||[]).length>1&&!confirm('Clear all '+this.scanKeys.length+' keyframes? (saved moves stay)')) return; this.scanKeys=[]; this.keySel=-1; this.renderKeys(); });
+      const mr=document.createElement('div'); mr.className='btnrow'; mr.id='moveRow'; b.appendChild(mr);
       const ko=document.createElement('div'); ko.id='keyOpts'; b.appendChild(ko);
       UI.note(b,'Frame a shot, press + Keyframe; move, refocus or change aperture / focal length, add another. Export video → “Keyframes” glides between them (dolly, rack focus, aperture pull).');
       setTimeout(()=>this.renderKeys(),0); }
@@ -691,7 +692,7 @@ const App = {
     this.busy('Reading scan…'); try{ const buf=await (await fetch(Native.fileURL(path))).arrayBuffer(); this.loadScanBuffer(buf,path.split('/').pop(),path); } catch(e){ this.toast('Could not read scan: '+e.message); } this.busy();
   },
   loadScanBuffer(buf,name,path){ this._scanBytes=buf.byteLength; setTimeout(()=>this.renderScanInfo(),50);
-    try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.cam.model=null; Splat.cam.roll=0; Splat.load(s); this.scanName=name; this.scanPath=path||null;
+    try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.cam.model=null; Splat.cam.roll=0; Splat.load(s); this.scanName=name; this.scanPath=path||null; this.keysToScan();
       { const sc=this.scans.find(x=>x.path===path); if(sc&&sc.view){ const v=sc.view; Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); Splat.frame(); } }
       if(path && !/\/export_\d+\.ply$/.test(path) && !this.scans.find(x=>x.path===path)) this.scans.unshift({name:name.replace(/\.(ply|splat)$/i,''),path,thumb:null}); }
     catch(e){ this.toast(e.message); return; }
@@ -779,11 +780,11 @@ const App = {
     const list=(this.scanSnaps=this.scanSnaps||{})[this.snapKey(this.scanPath)]=this.snapsFor(this.scanPath).slice(); let sn=update&&list.find(x=>x.id===update);
     if(!sn){ const st=Engine.stock(Engine.p.stock), L=LENSES.find(l=>l.id===Splat.cam.lens); const name=await this.ask('Name this snapshot',[(st&&st.id!=='original'?st.name:''),(L?L.name.split(' · ')[0]:'')].filter(Boolean).join(' · ')||'Snapshot '+(list.length+1)); if(!name) return;
       sn={id:'s'+Date.now().toString(36),name:name.slice(0,60)}; list.push(sn); }
-    { const c=Splat.cam; sn.view={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; } sn.cam=this.camSnap(); sn.look=cloneParams(Engine.p); delete sn.look.lookUndo; sn.t=Date.now(); sn.thumb=await this.grabView(220)||sn.thumb||null; this.curSnap=sn.id;
+    { const c=Splat.cam; sn.view={yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null}; } sn.keys=JSON.parse(JSON.stringify(this.scanKeys||[])); sn.cam=this.camSnap(); sn.look=cloneParams(Engine.p); delete sn.look.lookUndo; sn.t=Date.now(); sn.thumb=await this.grabView(220)||sn.thumb||null; this.curSnap=sn.id;
     const sc=this.scans.find(x=>x.path===this.scanPath); if(sc) sc.snapOpen=true; this.renderStrip(); this.saveSoon(); this.toast(update?'Updated “'+sn.name+'”':'Saved snapshot “'+sn.name+'” — it’s under the scan in the strip'); },
   async openSnap(sc,sn){ if(this.module!=='scan') this.setModule('scan');
     if(sc.path!==this.scanPath||!Splat.scene){ if(sc.path) await this.loadScanPath(sc.path); else await this.loadDemo(); }
-    this.applyCam(sn.cam||{}); if(sn.view){ const v=JSON.parse(JSON.stringify(sn.view)); Object.assign(Splat.cam,v); Splat.lastSortView=null; Engine.dirty=true; } await this.applySettings(cloneParams(sn.look||{})); this.commit(); this.curSnap=sn.id; this.renderStrip(); this.toast('Back in “'+sn.name+'” — export it, or keep editing and choose ⋯ → Update'); },
+    this.applyCam(sn.cam||{}); if(sn.view){ const v=JSON.parse(JSON.stringify(sn.view)); Object.assign(Splat.cam,v); Splat.lastSortView=null; Engine.dirty=true; } await this.applySettings(cloneParams(sn.look||{})); this.commit(); if(sn.keys&&sn.keys.length){ this.scanKeys=JSON.parse(JSON.stringify(sn.keys)); this.keySel=-1; this.renderKeys(); } this.curSnap=sn.id; this.renderStrip(); this.toast('Back in “'+sn.name+'” — export it, or keep editing and choose ⋯ → Update'); },
   snapMenu(sc,sn,anchor){ const m=$('#ctxMenu'); m.innerHTML=''; const r=anchor.getBoundingClientRect();
     const item=(label,fn)=>{ const b=document.createElement('button'); b.textContent=label; b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const here=()=>this.curSnap===sn.id&&this.scanPath===sc.path;
@@ -805,8 +806,8 @@ const App = {
       Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); if(meta.cam) Object.assign(Splat.cam,meta.cam); Splat.frame();
       // focus on whatever is in the middle of the frame
       setTimeout(()=>{ const L=this._lastL; if(!L) return; const hit=Splat.pick(L.iw/2,L.ih/2,L.iw,L.ih); if(hit){ Splat.cam.focusLock=hit; Engine.dirty=true; } },400);
-      this.scanName=meta.name||'Demo scan'; this.scanPath=null; this.scanKey=null; this.busy(); this.setModule('scan'); UI.refresh(); setTimeout(()=>this.renderScanInfo(),50); }
-    catch(e){ setTimeout(()=>{ Splat.load(demoScene()); this.scanName='Demo still life'; this.scanPath=null; this.scanKey=null; this.busy(); this.setModule('scan'); UI.refresh(); },30); } },
+      this.scanName=meta.name||'Demo scan'; this.scanPath=null; this.scanKey=null; this.keysToScan(); this.busy(); this.setModule('scan'); UI.refresh(); setTimeout(()=>this.renderScanInfo(),50); }
+    catch(e){ setTimeout(()=>{ Splat.load(demoScene()); this.scanName='Demo still life'; this.scanPath=null; this.scanKey=null; this.keysToScan(); this.busy(); this.setModule('scan'); UI.refresh(); },30); } },
   async newScan(input){
     if(!Native.available){ this.toast('Building scans runs in the Mac app'); return; }
     if(!input){ const p=await Native.call('open',{files:true,dirs:true,multiple:false,title:'Choose an orbit video, or a folder of photos',dir:this.info&&this.info.splatDir+'/captures'}); if(!p||!p[0]) return; input=p[0]; }
@@ -956,7 +957,20 @@ const App = {
     await new Promise(r=>{ const prev=Splat.onDirty; Splat.onDirty=()=>{ Splat.onDirty=prev; r(); }; Splat.requestSort(); }); },
   keySnap(){ const c=Splat.cam; return {yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),focus:c.focus,fnum:c.fnum||STOPS[c.stop],fmm:c.fmm,roll:c.roll||0}; },
   addKey(){ if(!Splat.scene){ this.toast('Load a scan first'); return; } this.scanKeys=this.scanKeys||[]; this.scanKeys.push(this.keySnap()); this.renderKeys(); this.toast('Keyframe '+this.scanKeys.length+' saved'); },
-  renderKeys(){ const el=$('#keyList'), ko=$('#keyOpts'); if(!el) return; el.innerHTML=''; if(ko) ko.innerHTML=''; const K=this.scanKeys||[];
+  // keyframes live with the scan they were made on (kept across quits), and moves can be saved by name
+  keysToScan(){ const k=this.snapKey(this.scanPath); this.keysBy=this.keysBy||{}; this._keysFor=k; this.scanKeys=JSON.parse(JSON.stringify(this.keysBy[k]||[])); this.keySel=-1; this.renderKeys(); },
+  movesFor(){ return ((this.movesBy=this.movesBy||{})[this.snapKey(this.scanPath)])||[]; },
+  async saveMove(){ const K=this.scanKeys||[]; if(K.length<2){ this.toast('Add at least two keyframes first'); return; } const list=this.movesFor().slice();
+    const n=await this.ask('Name this camera move','Move '+(list.length+1)); if(!n) return; const ex=list.find(m=>m.name===n);
+    if(ex&&!confirm('Replace the move “'+n+'”?')) return; if(ex) list.splice(list.indexOf(ex),1); list.push({name:n.slice(0,50),keys:JSON.parse(JSON.stringify(K)),t:Date.now()});
+    this.movesBy[this.snapKey(this.scanPath)]=list; this.renderMoves(); this.saveSoon(); this.toast('Saved move “'+n+'” — pick it any time from Saved moves'); },
+  renderMoves(){ const mr=$('#moveRow'); if(!mr) return; mr.innerHTML=''; const M=this.movesFor();
+    const s=document.createElement('select'); s.className='moveSel'; s.innerHTML='<option value="">'+(M.length?'Saved moves ('+M.length+')…':'No saved moves yet')+'</option>'+M.map((m,i)=>`<option value="${i}">${m.name.replace(/</g,'&lt;')} · ${m.keys.length} keys</option>`).join('')+(M.length?'<option value="del">Delete a saved move…</option>':'');
+    s.onchange=async()=>{ const v=s.value; s.value=''; if(v==='del'){ const n=await this.ask('Delete which move? ('+M.map(m=>m.name).join(', ')+')',''); const i=M.findIndex(m=>m.name===n); if(i>=0){ M.splice(i,1); this.movesBy[this.snapKey(this.scanPath)]=M; this.renderMoves(); this.saveSoon(); } return; }
+      if(v==='') return; const m=M[+v]; if((this.scanKeys||[]).length>1&&!confirm('Replace your current '+this.scanKeys.length+' keyframes with “'+m.name+'”?')) return; this.scanKeys=JSON.parse(JSON.stringify(m.keys)); this.keySel=-1; this.renderKeys(); this.toast('Loaded “'+m.name+'” — ▶ Preview or Export video'); };
+    mr.appendChild(s); UI.button(mr,'Save move…',()=>this.saveMove()); },
+  renderKeys(){ if(this._keysFor!==undefined){ (this.keysBy=this.keysBy||{})[this._keysFor]=JSON.parse(JSON.stringify(this.scanKeys||[])); this.saveSoon(); } this.renderMoves();
+    const el=$('#keyList'), ko=$('#keyOpts'); if(!el) return; el.innerHTML=''; if(ko) ko.innerHTML=''; const K=this.scanKeys||[];
     if(!K.length){ el.innerHTML='<span class="note">No keyframes yet.</span>'; return; }
     if(this.keySel>=K.length) this.keySel=K.length-1;
     if(ko&&this.keySel>=0&&K[this.keySel]){ const k=K[this.keySel];
@@ -1164,7 +1178,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -1172,7 +1186,7 @@ const App = {
     let json='';
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
-    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.keysBy=d.keysBy||{}; this.movesBy=d.movesBy||{}; if(this._keysFor!==undefined) this.keysToScan(); this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },

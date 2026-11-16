@@ -427,3 +427,4 @@ body.m-scan #pRecipes,body.m-scan #pUserPresets{order:10}
 .thumb.snap .scanIco{font-size:22px}
 #toolbar .tgroup.scanonly{min-width:0;flex:1 1 auto;overflow:hidden}
 body:not(.m-studio):not(.m-scan) #pRecipes{display:none}
+#moveRow{display:flex;gap:6px;margin-top:6px}#moveRow .moveSel{flex:1;min-width:0;background:#1c1c1c;color:var(--text);border:1px solid #3a3a3a;border-radius:3px;font:12px var(--sans);height:28px}
