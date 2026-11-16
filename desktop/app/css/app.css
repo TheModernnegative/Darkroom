@@ -454,3 +454,11 @@ body:not(.m-scan) #scanLinkBox{display:none}
 #scanLinkBox .seg button:disabled{opacity:.35;cursor:default}
 #scanLinkBox .slNote{font:11px var(--sans);color:var(--faint);margin-top:6px}
 #scanLinkBox .slNote:empty{display:none}
+
+#cleanPanel{display:none;border:1px solid #d9573c55;border-radius:6px;padding:6px;margin:6px 0;background:#201715}
+#brushRing{position:fixed;display:none;border:1.5px solid #ff6a4d;border-radius:50%;pointer-events:none;z-index:50;box-shadow:0 0 0 1px #0008}
+body.cleaning #view{cursor:none!important}
+
+#scanLinkBox .slFrom{width:100%;margin-bottom:6px;background:#111;color:var(--text);border:1px solid #3a3a3a;border-radius:4px;font:12px var(--sans);height:26px}
+i.b3d{font-style:normal;font:700 9px var(--sans);background:#d9573c;color:#fff;border-radius:3px;padding:0 3px;margin-right:3px}
+.printPrev{display:block;margin:0 auto 8px;box-shadow:0 2px 12px #000a}

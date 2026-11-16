@@ -343,6 +343,7 @@ onmessage=e=>{const d=e.data;
     gl.bindTexture(gl.TEXTURE_2D,this.dataTex);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32UI,W,H,0,gl.RGBA_INTEGER,gl.UNSIGNED_INT,u);
+    this._u=u; this._W=W; this._H=H; this.hidden=new Uint8Array(n); this._dirtyTex=false;
     this.worker.postMessage({pos:s.pos,n}); this.sortedCount=0; this.lastSortView=null;
     this.frame(); this.requestSort();
   },
@@ -374,7 +375,18 @@ onmessage=e=>{const d=e.data;
   maybeSort(){ const v=this.viewModel(), l=this.lastSortView;
     if(!l||Math.abs(v[2]-l[2])+Math.abs(v[6]-l[6])+Math.abs(v[10]-l[10])+Math.abs(v[14]-l[14])*0.2>0.004) this.requestSort(); },
   // render the splats into rt (w×h). Values are display-referred sRGB-encoded colours.
-  render(rt){
+  // ---- clean-up: hidden splats get zero opacity in the data texture (the scan file itself is never changed)
+  hideIdx(list,on){ const u=this._u,s=this.scene; if(!u) return; for(const i of list){ this.hidden[i]=on?1:0; const o=i*8, a=on?0:s.rgba[i*4+3]; u[o+3]=((u[o+3]&0x00FFFFFF)|(a<<24))>>>0; } this._dirtyTex=true; },
+  flushTex(){ if(!this._dirtyTex||!this._u) return; const gl=this.gl; this._dirtyTex=false; gl.bindTexture(gl.TEXTURE_2D,this.dataTex); gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,this._W,this._H,gl.RGBA_INTEGER,gl.UNSIGNED_INT,this._u); },
+  brushIdx(px,py,R,iw,ih){ const s=this.scene; if(!s) return []; const [sw,sh]=this.sensor(), fovy=2*Math.atan(sh/(2*this.cam.fmm)), f=ih/2/Math.tan(fovy/2);
+    const V=this.viewModel(),hx=iw/2,hy=ih/2,R2=R*R,P=s.pos,n=s.n,H=this.hidden,out=[];
+    for(let i=0;i<n;i++){ if(H[i]) continue; const x=P[i*3],y=P[i*3+1],z=P[i*3+2]; const cz=V[2]*x+V[6]*y+V[10]*z+V[14]; if(cz>-0.01) continue; const d=-cz;
+      const dx=hx+f*(V[0]*x+V[4]*y+V[8]*z+V[12])/d-px, dy=hy-f*(V[1]*x+V[5]*y+V[9]*z+V[13])/d-py; if(dx*dx+dy*dy<R2) out.push(i); }
+    return out; },
+  farIdx(k){ const s=this.scene, F=this.fit; if(!s||!F) return []; const m=this.modelM(), P=s.pos, H=this.hidden, out=[], lim=k*F.r;
+    for(let i=0;i<s.n;i++){ if(H[i]) continue; const x=P[i*3],y=P[i*3+1],z=P[i*3+2]; const wx=m[0]*x+m[4]*y+m[8]*z-F.ctr[0], wy=m[1]*x+m[5]*y+m[9]*z-F.ctr[1], wz=m[2]*x+m[6]*y+m[10]*z-F.ctr[2];
+      if(wx*wx+wy*wy+wz*wz>lim*lim) out.push(i); } return out; },
+  render(rt){ this.flushTex();
     const gl=this.gl, c=this.cam, s=this.scene; const iw=rt.w, ih=rt.h;
     gl.bindFramebuffer(gl.FRAMEBUFFER,rt.f); gl.viewport(0,0,iw,ih);
     const bg=parseInt(c.bg.slice(1),16); gl.clearColor((bg>>16&255)/255,(bg>>8&255)/255,(bg&255)/255,1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -399,7 +411,7 @@ onmessage=e=>{const d=e.data;
     const s=this.scene; if(!s) return null;
     const [sw,sh]=this.sensor(), fovy=2*Math.atan(sh/(2*this.cam.fmm)), f=ih/2/Math.tan(fovy/2);
     const V=this.viewModel(),hx=iw/2,hy=ih/2,R=Math.max(5,ih*0.012),R2=R*R,P=s.pos,n=s.n,A=s.rgba; const cand=[];
-    for(let i=0;i<n;i++){ if(A[i*4+3]<70) continue; const x=P[i*3],y=P[i*3+1],z=P[i*3+2];
+    for(let i=0;i<n;i++){ if(A[i*4+3]<70||(this.hidden&&this.hidden[i])) continue; const x=P[i*3],y=P[i*3+1],z=P[i*3+2];
       const cz=V[2]*x+V[6]*y+V[10]*z+V[14]; if(cz>-0.03) continue; const d=-cz;
       const sx=hx+f*(V[0]*x+V[4]*y+V[8]*z+V[12])/d, sy=hy-f*(V[1]*x+V[5]*y+V[9]*z+V[13])/d;
       const dx=sx-px, dy=sy-py; if(dx*dx+dy*dy<R2) cand.push([d,i]); }

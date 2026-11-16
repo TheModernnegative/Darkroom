@@ -124,7 +124,15 @@ const App = {
     UI.note(b,'Scans have arbitrary units. Set this so the subject is its real size and depth of field behaves like a real lens.');
     const vr=document.createElement('div'); vr.className='btnrow'; b.appendChild(vr);
     UI.button(vr,'Reset view',()=>{ Splat.frame(); this.scanKey=null; d(); },'tbtn');
-    UI.button(vr,'Export orbit video…',()=>this.orbitDialog(),'tbtn accent');
+    UI.button(vr,'Export video…',()=>this.orbitDialog(),'tbtn accent');
+    // ---- clean-up brush: paint away floating specks (hidden, never deleted from the file)
+    { const cr=document.createElement('div'); cr.className='btnrow'; b.appendChild(cr); const cb=UI.button(cr,'🧹 Clean up specks…',()=>this.setClean(!this.cleanMode)); cb.id='cleanBtn';
+      const cp=document.createElement('div'); cp.id='cleanPanel'; b.appendChild(cp);
+      UI.slider(cp,'cleanR','Brush size',{min:4,max:200,step:1,def:30,get:()=>this.cleanR||30,set:v=>{ this.cleanR=v; },fmt:x=>Math.round(x)+' px'});
+      UI.slider(cp,'cleanFar','Far away',{min:1.5,max:12,step:0.1,def:5,get:()=>this.cleanFar||5,set:v=>{ this.cleanFar=v; this.cleanFarPreview(); },fmt:x=>x.toFixed(1)+'×'});
+      const r2=document.createElement('div'); r2.className='btnrow'; cp.appendChild(r2); UI.button(r2,'Remove everything that far out',()=>this.cleanFarApply());
+      const r3=document.createElement('div'); r3.className='btnrow'; cp.appendChild(r3); UI.button(r3,'Undo stroke  ⌘Z',()=>this.cleanUndo()); UI.button(r3,'Restore all',()=>this.cleanRestore()); UI.button(r3,'Done',()=>this.setClean(false),'tbtn accent');
+      UI.note(cp,'Paint over specks to remove them — it erases everything under the brush, front to back, so orbit to a side where the subject isn’t behind them. [ and ] change the brush. The scan file is never changed; Restore all brings everything back.','cleanNote'); }
     // ---- camera moves: keyframes of position, focus, aperture and focal length, rendered as one smooth shot
     { const h=document.createElement('div'); h.className='ahead'; h.textContent='Camera move (keyframes)'; b.appendChild(h);
       const kl=document.createElement('div'); kl.className='cpList'; kl.id='keyList'; b.appendChild(kl);
@@ -173,6 +181,7 @@ const App = {
     UI.buildPresets($('#presetList'),Engine.manifest.stocks,id=>{ this.setStock(id); this.commit(); },async id=>{
       this.hover(id?Tools.stockParams(Engine.p,id,false):null); });
     $('#scanLinkBox').querySelectorAll('.seg button').forEach(b=>b.onclick=()=>this.setScanLink(b.dataset.v));
+    $('#scanLinkBox .slFrom').onchange=e=>{ this.scanLinkFrom=e.target.value; if((this.scanLink||'off')==='off') this.scanLink='studio'; this.setScanLink(this.scanLink); };
     $('#scanFxSwitch').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; document.body.classList.toggle('scanFx',b.dataset.v==='fx'); $('#scanFxSwitch').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); UI.refresh(); };
     $('#stockSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'stocks'); }; $('#lookSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'looks'); };
     $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
@@ -531,8 +540,8 @@ const App = {
     const test=(it,t)=>{ let m; if(m=t.match(/^(\d)\s*(?:★|\*|stars?)?\+$/)||t.match(/^(\d)(?:★|\*)$/)) return (it.rating||0)>=+m[1]; if(m=t.match(/^[<>]=?(\d)$/)) return t[0]==='>'?(it.rating||0)>+m[1]-(t[1]==='='?1:0):(it.rating||0)<+m[1]+(t[1]==='='?1:0);
       if(/^picks?$/.test(t)) return it.flag==='pick'; if(/^rejects?$/.test(t)) return it.flag==='reject'; if(t==='unrated') return !it.rating; if(t==='edited') return this.isEdited(it.settings); if(t==='bw'||t==='b&w') return !!it.settings.silver||/tri-x|hp5|delta|pan|acros|t-max|tmax/i.test(Engine.stock(it.settings.stock).name||'');
       if(t.startsWith('-')&&t.length>1) return !test(it,t.slice(1));
-      const st=Engine.stock(it.settings.stock)||{}; const hay=(it.name+' '+(st.maker||'')+' '+(st.name||'')+' '+(it.settings.lookName||'')+' '+(it.settings.format||'')+' '+(it.kind==='scanframe'?'scan frame':'')+' '+(it.tags||[]).join(' ')).toLowerCase(); return hay.includes(t); };
-    return this.items.filter(it=>( f==='all' ? true : f==='picks' ? it.flag==='pick' : f==='rejects' ? it.flag==='reject' : f==='unrated' ? !it.rating : (it.rating||0)>=+f ) && (!tag||(it.tags||[]).includes(tag)) && toks.every(t=>test(it,t))); },
+      const st=Engine.stock(it.settings.stock)||{}; const hay=(it.name+' '+(st.maker||'')+' '+(st.name||'')+' '+(it.settings.lookName||'')+' '+(it.settings.format||'')+' '+(it.kind==='scanframe'||it.inst?'scan frame 3d':'')+' '+(it.tags||[]).join(' ')).toLowerCase(); return hay.includes(t); };
+    return this.items.filter(it=>( f==='all' ? true : f==='picks' ? it.flag==='pick' : f==='made3d' ? !!(it.inst||it.kind==='scanframe') : f==='rejects' ? it.flag==='reject' : f==='unrated' ? !it.rating : (it.rating||0)>=+f ) && (!tag||(it.tags||[]).includes(tag)) && toks.every(t=>test(it,t))); },
   renderLibFilter(){ const el=$('#libFilter'); if(!el) return; const v=this.filter||'all'; el.querySelectorAll('.sc').forEach(x=>x.remove());
     const g=document.createElement('optgroup'); g.className='sc'; g.label='Smart collections'; (this.smart||[]).forEach(c=>{ const o=document.createElement('option'); o.value='sc:'+c.id; o.textContent='⚙ '+c.name; g.appendChild(o); });
     const o1=document.createElement('option'); o1.value='__savesc'; o1.textContent='＋ Save this search as a smart collection…'; g.appendChild(o1);
@@ -544,7 +553,7 @@ const App = {
       else if(v==='__delsc'){ const n=await this.ask('Delete which smart collection? ('+this.smart.map(x=>x.name).join(', ')+')',''); const i=(this.smart||[]).findIndex(x=>x.name===n); if(i>=0){ if(this.filter==='sc:'+this.smart[i].id) this.filter='all'; this.smart.splice(i,1); this.saveSoon(); } }
       else this.filter=v;
       this.renderLibFilter(); this.renderStrip(); this.renderGrid(); },
-  badge(it){ return (it.flag==='pick'?'<i class="fl pk">⚑</i>':it.flag==='reject'?'<i class="fl rj">✕</i>':'')+(it.rating?`<i class="st">${'★'.repeat(it.rating)}</i>`:''); },
+  badge(it){ return (it.inst||it.kind==='scanframe'?'<i class="b3d" title="Made in 3D — right-click → Open in 3D">3D</i>':'')+(it.flag==='pick'?'<i class="fl pk">⚑</i>':it.flag==='reject'?'<i class="fl rj">✕</i>':'')+(it.rating?`<i class="st">${'★'.repeat(it.rating)}</i>`:''); },
   renderStrip(){
     const el=$('#strip'); el.innerHTML='';
     if(this.module==='scan'){
@@ -623,7 +632,9 @@ const App = {
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const sep=()=>{ const h=document.createElement('hr'); m.appendChild(h); };
     const open=async()=>{ if(it!==this.cur) await this.select(it.id); };
-    if(it.inst){ item('Open in 3D — back to this exact view',()=>this.openInstOf(it)); sep(); }
+    if(it.inst){ item('Open in 3D — back to this exact view',()=>this.openInstOf(it)); item('Re-render from 3D at full quality',()=>this.rerender3D(it)); sep(); }
+    if((it.tags||[]).length){ it.tags.slice(0,8).forEach(t=>item('🏷 '+t.replace(/</g,'&lt;'),()=>{ const q=$('#libSearch'); q.value=t.includes(' ')?t.split(' ')[0]:t; q.oninput(); this.toast('Showing photos tagged “'+t+'”'); })); sep(); }
+    item('Print layout…',()=>this.printDialog(),'⌘P');
     if(it.stack&&this.members(it.stack).length>1){ const top=this.cover(it.stack);
       if(it!==top) item('Make cover of stack',()=>this.makeCover(it)); else item(top.stackOpen?'Close stack':'Open stack',()=>this.toggleStack(it));
       if(it!==top) item(it.pinned?'Unpin':'Pin (show when stack is closed)',()=>this.pinItem(it));
@@ -704,7 +715,7 @@ const App = {
     this.busy('Reading scan…'); try{ const buf=await (await fetch(Native.fileURL(path))).arrayBuffer(); this.loadScanBuffer(buf,path.split('/').pop(),path); } catch(e){ this.toast('Could not read scan: '+e.message); } this.busy();
   },
   loadScanBuffer(buf,name,path){ this._scanBytes=buf.byteLength; setTimeout(()=>this.renderScanInfo(),50);
-    try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.cam.model=null; Splat.cam.roll=0; Splat.load(s); this.scanName=name; this.scanPath=path||null; this.keysToScan();
+    try{ const s=/\.splat$/i.test(name)?parseSplat(buf):parsePLY(buf); Splat.cam.up='Y-down'; Splat.cam.model=null; Splat.cam.roll=0; Splat.load(s); this.scanName=name; this.scanPath=path||null; this.keysToScan(); this.applyClean();
       { const sc=this.scans.find(x=>x.path===path); if(sc&&sc.view){ const v=sc.view; Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); Splat.frame(); } }
       if(path && !/\/export_\d+\.ply$/.test(path) && !this.scans.find(x=>x.path===path)) this.scans.unshift({name:name.replace(/\.(ply|splat)$/i,''),path,thumb:null}); }
     catch(e){ this.toast(e.message); return; }
@@ -747,7 +758,10 @@ const App = {
     const here=async()=>{ if(sc.path!==this.scanPath||!Splat.scene){ if(sc.demo) await this.loadDemo(); else await this.loadScanPath(sc.path); } };
     const live=sc.path===this.scanPath&&Splat.scene;
     if(live){ item('Save instance — keyframes, camera &amp; edits…',()=>this.saveSnap(),'⇧S'); item('Save look — just the edits, for any photo or scan…',()=>this.saveLookPreset()); m.appendChild(document.createElement('hr'));
-      item('Start over from the original scan…',()=>this.resetScanFull()); }
+      item('Start over from the original scan…',()=>this.resetScanFull());
+      const sns=this.snapsFor(sc.path); if(sns.length){ m.appendChild(document.createElement('hr'));
+        if(sns.length>1) item('Build a camera move from its '+sns.length+' instances',()=>{ if((this.scanKeys||[]).length>1&&!confirm('Replace your current '+this.scanKeys.length+' keyframes?')) return; this.scanKeys=sns.filter(x=>x.view).map(x=>this.instKey(x)); this.keySel=-1; this.renderKeys(); this.toast(this.scanKeys.length+' keyframes, one per instance — ▶ Preview, drag on the timeline to retime'); });
+        item('Export every instance as an image…',()=>this.exportInstances(sc)); } }
     else item('Open',()=>here());
     m.appendChild(document.createElement('hr'));
     if(sc.demo){ m.style.left=Math.min(innerWidth-330,r.left)+'px'; m.classList.add('on'); m.style.top=Math.max(8,r.top-4-m.offsetHeight)+'px'; setTimeout(()=>document.addEventListener('pointerdown',function f(e){ if(!m.contains(e.target)){ m.classList.remove('on'); document.removeEventListener('pointerdown',f,true); } },true),0); return; }
@@ -782,8 +796,45 @@ const App = {
   async pasteSettings(){ const c=this.clip; if(!c){ this.toast('Copy settings first (⌘⇧C)'); return; } if(!this.cur) return;
     const fn=base=>{ Object.assign(base,cloneParams(c.o)); base.off=Object.assign({},base.off||{}); for(const k in c.offs){ if(c.offs[k]) base.off[k]=true; else delete base.off[k]; } return base; };
     const n=this.applyToOthers(b=>fn(b),'Paste settings'); await this.applySettings(fn(cloneParams(Engine.p))); this.commit(); this.toast(n?`Pasted onto ${n+1} photos`:'Settings pasted'); },
+  // ---- print layout: several photos on one page with margins, gaps and captions, rendered at 300 dpi
+  PAPERS:{letter:['Letter 8.5×11',8.5,11],a4:['A4',8.27,11.69],p4x6:['4×6',4,6],p5x7:['5×7',5,7],p8x10:['8×10',8,10],p11x14:['11×14',11,14],p13x19:['13×19',13,19],a3:['A3',11.69,16.54]},
+  async printDialog(){ const photos=this.selected().filter(x=>x.kind!=='scanlook'); if(!photos.length){ this.toast('Select photos first (⌘-click in the strip)'); return; }
+    const st=Object.assign({paper:'letter',land:false,cols:2,rows:2,margin:0.5,gap:0.25,fill:false,caption:true,keyline:false,bg:'white'},this._printPrefs||{}); if(!this._printPrefs){ const n=photos.length; const g=n<=1?[1,1]:n<=2?[1,2]:n<=4?[2,2]:n<=6?[2,3]:n<=9?[3,3]:[4,5]; st.cols=g[0]; st.rows=g[1]; }
+    const body=$('#dlgBody'); body.innerHTML=''; const h=$('#dlg h2'), ok=$('#dlgOk'), kh=h.textContent, ko=ok.textContent; h.textContent='Print layout — '+photos.length+' photo'+(photos.length>1?'s':''); ok.textContent='Save pages…';
+    const pv=document.createElement('canvas'); pv.className='printPrev'; body.appendChild(pv); const info=document.createElement('div'); info.className='note'; body.appendChild(info);
+    const draw=()=>{ const [,pw0,ph0]=this.PAPERS[st.paper], pw=st.land?Math.max(pw0,ph0):Math.min(pw0,ph0), ph=st.land?Math.min(pw0,ph0):Math.max(pw0,ph0); const S=Math.min(320/pw,240/ph); pv.width=pw*S*2; pv.height=ph*S*2; pv.style.width=pw*S+'px'; pv.style.height=ph*S+'px';
+      const x=pv.getContext('2d'); x.scale(2,2); x.fillStyle=st.bg==='black'?'#111':'#fff'; x.fillRect(0,0,pw*S,ph*S); const cells=this.printCells(st,pw,ph);
+      const per=st.cols*st.rows, pages=Math.ceil(photos.length/per); cells.forEach((c,i)=>{ const it=photos[i]; x.strokeStyle='#bbb'; x.lineWidth=0.5; if(!it){ x.strokeRect(c.x*S,c.y*S,c.w*S,c.h*S); return; }
+        const im=it._pim||(it.thumb&&(it._pim=Object.assign(new Image(),{src:it.thumb,onload:draw}))); if(im&&im.complete&&im.naturalWidth){ const r=this.printFit(im.naturalWidth,im.naturalHeight,c,st.fill); x.save(); x.beginPath(); x.rect(c.x*S,c.y*S,c.w*S,c.h*S); x.clip(); x.drawImage(im,r.x*S,r.y*S,r.w*S,r.h*S); x.restore(); } else { x.fillStyle='#999'; x.fillRect(c.x*S,c.y*S,c.w*S,c.h*S); } });
+      info.textContent=`${pages} page${pages>1?'s':''} · ${this.PAPERS[st.paper][0]} at 300 dpi · each photo up to ${(cells[0].w).toFixed(1)}×${(cells[0].h).toFixed(1)} in`; };
+    UI.select(body,'prPaper','Paper',()=>Object.entries(this.PAPERS).map(([k,v])=>[k,v[0]]),()=>st.paper,v=>{ st.paper=v; draw(); });
+    UI.seg(body,'prOr','Orientation',[['false','Portrait'],['true','Landscape']],()=>String(st.land),v=>{ st.land=v==='true'; draw(); });
+    UI.seg(body,'prGrid','Layout',[['1x1','1'],['1x2','2'],['2x2','4'],['2x3','6'],['3x3','9'],['3x4','12'],['4x5','20']],()=>st.cols+'x'+st.rows,v=>{ const [c,r]=v.split('x').map(Number); st.cols=st.land?r:c; st.rows=st.land?c:r; draw(); });
+    UI.slider(body,'prMargin','Margin',{min:0,max:2,step:0.05,def:0.5,get:()=>st.margin,set:v=>{ st.margin=v; draw(); },fmt:x=>x.toFixed(2)+' in'});
+    UI.slider(body,'prGap','Gap',{min:0,max:1.5,step:0.05,def:0.25,get:()=>st.gap,set:v=>{ st.gap=v; draw(); },fmt:x=>x.toFixed(2)+' in'});
+    UI.seg(body,'prFill','Photos',[['false','Fit whole photo'],['true','Fill the cell (crop)']],()=>String(st.fill),v=>{ st.fill=v==='true'; draw(); });
+    UI.seg(body,'prBg','Paper colour',[['white','White'],['black','Black']],()=>st.bg,v=>{ st.bg=v; draw(); });
+    UI.check(body,'prCap','File names under photos',()=>st.caption,v=>{ st.caption=v; draw(); }); UI.check(body,'prKey','Thin keyline round each photo',()=>st.keyline,v=>{ st.keyline=v; draw(); });
+    draw(); $('#dlg').classList.add('on'); const go=await new Promise(r=>{ ok.onclick=()=>r(true); $('#dlgCancel').onclick=()=>r(false); }); $('#dlg').classList.remove('on'); h.textContent=kh; ok.textContent=ko; if(!go) return;
+    this._printPrefs=Object.assign({},st); await this.renderPrint(photos,st); },
+  printCells(st,pw,ph){ const cap=st.caption?0.22:0, W=pw-2*st.margin, H=ph-2*st.margin, cw=(W-(st.cols-1)*st.gap)/st.cols, ch=(H-(st.rows-1)*st.gap)/st.rows-cap, out=[];
+    for(let r=0;r<st.rows;r++) for(let c=0;c<st.cols;c++) out.push({x:st.margin+c*(cw+st.gap),y:st.margin+r*(ch+cap+st.gap),w:cw,h:ch,cap}); return out; },
+  printFit(iw,ih,c,fill){ const s=fill?Math.max(c.w/iw,c.h/ih):Math.min(c.w/iw,c.h/ih), w=iw*s, h=ih*s; return {x:c.x+(c.w-w)/2,y:c.y+(c.h-h)/2,w,h}; },
+  async renderPrint(photos,st){ const DPI=300, [,pw0,ph0]=this.PAPERS[st.paper], pw=st.land?Math.max(pw0,ph0):Math.min(pw0,ph0), ph=st.land?Math.min(pw0,ph0):Math.max(pw0,ph0), per=st.cols*st.rows, pages=Math.ceil(photos.length/per), keep=this.cur;
+    let dir=null, base=(photos[0].name||'Print').replace(/\.[^.]+$/,'')+' — print';
+    if(Native.available){ const pth=await Native.call('pickSave',{name:base+(pages>1?' 1':'')+'.jpg',dir:this.info&&this.info.splatDir+'/exports'}); if(!pth) return; dir=pth.replace(/\/[^\/]+$/,''); base=pth.split('/').pop().replace(/( 1)?\.jpe?g$/i,''); }
+    for(let pg=0;pg<pages;pg++){ const cv=document.createElement('canvas'); cv.width=Math.round(pw*DPI); cv.height=Math.round(ph*DPI); const x=cv.getContext('2d'); x.fillStyle=st.bg==='black'?'#0d0d0d':'#fff'; x.fillRect(0,0,cv.width,cv.height);
+      const cells=this.printCells(st,pw,ph);
+      for(let i=0;i<per;i++){ const it=photos[pg*per+i]; if(!it) break; const c=cells[i]; this.busy(`Print page ${pg+1}/${pages} — ${it.name}`); await this.select(it.id); await Engine.ensureLuts(Engine.p);
+        const u=this.renderThumb(Engine.p,Math.min(4096,Math.round(Math.max(c.w,c.h)*DPI*(st.fill?1.6:1)))); if(!u) continue; const im=await new Promise(r=>{ const m=new Image(); m.onload=()=>r(m); m.onerror=()=>r(null); m.src=u; }); if(!im) continue;
+        const r=this.printFit(im.width,im.height,c,st.fill); x.save(); x.beginPath(); x.rect(c.x*DPI,c.y*DPI,c.w*DPI,c.h*DPI); x.clip(); x.drawImage(im,r.x*DPI,r.y*DPI,r.w*DPI,r.h*DPI); x.restore();
+        if(st.keyline){ x.strokeStyle=st.bg==='black'?'#888':'#222'; x.lineWidth=2; const k=st.fill?c:r; x.strokeRect(k.x*DPI,k.y*DPI,k.w*DPI,k.h*DPI); }
+        if(st.caption){ x.fillStyle=st.bg==='black'?'#aaa':'#444'; x.font=`${Math.round(0.11*DPI)}px "Helvetica Neue",Arial`; x.textAlign='center'; x.fillText(it.name.replace(/\.[^.]+$/,''),(c.x+c.w/2)*DPI,(c.y+c.h+0.16)*DPI,c.w*DPI); } }
+      const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.95)), name=base+(pages>1?' '+(pg+1):'')+'.jpg';
+      if(dir) await Native.call('writeFile',{path:dir+'/'+name,base64:await this.blobB64(blob)}); else { const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); } }
+    if(keep&&this.cur!==keep) await this.select(keep.id); this.busy(); this.toast('Saved '+pages+' print page'+(pages>1?'s':'')+' (300 dpi JPEG)'); },
   shortcutSheet(){ let el=$('#keysheet'); if(el){ el.remove(); return; } el=document.createElement('div'); el.id='keysheet'; el.className='modal on';
-    const S=[['Everywhere',[['G / D / T / S','Library · Develop · Studio · 3D Scan'],['⌘Z / ⇧⌘Z','Undo / redo'],['⌘E','Export'],['⌘O','Import'],['⇧⌘C / ⇧⌘V','Copy settings (choose parts) / paste'],['⇧⌘R','Reset to original'],['?','This sheet']]],
+    const S=[['Everywhere',[['G / D / T / S','Library · Develop · Studio · 3D Scan'],['⌘Z / ⇧⌘Z','Undo / redo'],['⌘E','Export'],['⌘P','Print layout'],['⌘O','Import'],['⇧⌘C / ⇧⌘V','Copy settings (choose parts) / paste'],['⇧⌘R','Reset to original'],['?','This sheet']]],
       ['Photos',[['0–5','Star rating'],['P / X / U','Pick / reject / clear flag'],['← →','Previous / next photo'],['⌘A','Select all'],['⌘F','Search the library'],['⌘D / ⇧⌘D','Duplicate with edit / as original'],['⌘G / ⇧⌘G','Stack / unstack'],["⌘'",'Save as version'],['⌫','Remove from library']]],
       ['Develop',[['W','White-balance eyedropper'],['R','Crop & straighten'],['M','Masks'],['C','Compare'],['\\','Before / after'],['|','Split view'],['Z','Zoom 1:1'],['J','Clipping warning']]],
       ['3D Scan',[['drag','Orbit'],['⇧-drag / right-drag / arrows','Move the camera'],['⇧+arrows','Orbit'],['scroll / + −','Dolly in / out'],['click','Focus'],['double-click','Orbit pivot'],['L','Level'],['space','Expose a frame'],['⇧S','Save an instance (keyframes + camera + edits)']]]];
@@ -803,6 +854,21 @@ const App = {
     const sc=this.scans.find(x=>x.path===this.scanPath); if(sc) sc.snapOpen=true; this.renderStrip(); this.saveSoon(); this.toast(update?'Updated “'+sn.name+'”':'Saved instance “'+sn.name+'” — it’s next to the scan in the strip'); },
   instData(){ const c=Splat.cam; return {scanPath:this.scanPath,scanName:this.scanName,cam:this.camSnap(),view:{yaw:c.yaw,pitch:c.pitch,dist:c.dist,target:c.target.slice(),roll:c.roll,up:c.up,model:c.model?JSON.parse(JSON.stringify(c.model)):null,scale:c.scale,focusLock:c.focusLock?JSON.parse(JSON.stringify(c.focusLock)):null},
     look:(()=>{ const l=cloneParams(this.linkMerge(Engine.p)); delete l.lookUndo; return l; })(),keys:JSON.parse(JSON.stringify(this.scanKeys||[])),fit:Splat.fit?JSON.parse(JSON.stringify(Splat.fit)):null}; },
+  async rerender3D(it){ const back=this.module==='scan'?'develop':this.module, keepId=it.id; await this.openInstOf(it); if(this.module!=='scan'||!Splat.scene) return;
+    this.busy('Re-rendering “'+it.name+'” from the scan…'); await new Promise(r=>setTimeout(r,600));
+    const [sw,sh]=Splat.sensor(); const long=3600, w=Math.round(sw>=sh?long:long*sw/sh), h=Math.round(sw>=sh?long*sh/sw:long); const rt=GLU.target(w,h,'rgba16f'); Splat.render(rt);
+    it.src={tex:rt.t,w,h,dispRef:true,encoded:true,flipY:true,key:Math.random()}; it.thumb=null; it.thumbStale=true;
+    if(Native.available&&this.info){ try{ const rt8=GLU.target(w,h,'rgba8'); Splat.render(rt8); const gl=Engine.gl, px=new Uint8Array(w*h*4); gl.bindFramebuffer(gl.FRAMEBUFFER,rt8.f); gl.readPixels(0,0,w,h,gl.RGBA,gl.UNSIGNED_BYTE,px); GLU.free(rt8);
+      const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'), id=x.createImageData(w,h); for(let y=0;y<h;y++) id.data.set(px.subarray((h-1-y)*w*4,(h-y)*w*4),y*w*4); x.putImageData(id,0,0);
+      const path=this.info.splatDir+'/frames/'+it.name.replace(/[^\w\- ]+/g,'_')+'_'+Date.now()+'.png'; await Native.call('writeFile',{path,base64:await this.blobB64(await new Promise(r=>c.toBlob(r,'image/png')))}); it.path=path; }catch(e){} }
+    it.inst=this.instData(); this.busy(); this.setModule(back); await this.select(keepId); this.saveSoon(); this.toast('Re-rendered “'+it.name+'” — its own edits are kept'); },
+  instKey(sn){ const v=sn.view, c=sn.cam||{}; return {yaw:v.yaw,pitch:v.pitch,dist:v.dist,target:v.target.slice(),focus:c.focus!=null?c.focus:Splat.cam.focus,fnum:STOPS[c.stop!=null?c.stop:Splat.cam.stop],fmm:c.fmm||Splat.cam.fmm,roll:v.roll||0}; },
+  async exportInstances(sc){ const sns=this.snapsFor(sc.path); if(!sns.length) return; let dir=null;
+    if(Native.available){ dir=await Native.call('pickFolder',{dir:this.info&&this.info.splatDir+'/exports'}); if(!dir) return; }
+    const st=Object.assign({size:'full',fmt:'jpeg',q:0.95,space:'p3',meta:false},this._exportPrefs||{}); this._cancelVideo=false; let n=0;
+    for(const sn of sns){ if(this._cancelVideo) break; n++; this.busy(`Exporting instance ${n} / ${sns.length} — ${sn.name}  (Esc to stop)`); await this.openSnap(sc,sn); await new Promise(r=>setTimeout(r,400));
+      await this.doExport(st, dir?dir+'/'+(sc.name||'scan').replace(/\.[^.]+$/,'')+' — '+sn.name.replace(/[\/:]/g,'-')+this.EXT[st.fmt]:null, true); }
+    this.busy(); this.toast('Exported '+n+' instance'+(n>1?'s':'')+(dir?' to '+dir.split('/').pop():'')); },
   async openInstOf(it){ const d=it.inst; if(!d) return; const sc=this.scans.find(x=>x.path===d.scanPath)||(d.scanPath?{path:d.scanPath,name:d.scanName}:{path:null,demo:true});
     if(d.scanPath&&!this.scans.some(x=>x.path===d.scanPath)){ try{ const st=await Native.call('stat',{paths:[d.scanPath]}); if(!st[0]||st[0].size<0){ this.toast('That scan file isn’t there any more ('+d.scanName+')'); return; } }catch(e){} }
     await this.openSnap(sc,Object.assign({id:'lib_'+it.id,name:it.name},d)); },
@@ -818,6 +884,7 @@ const App = {
     item('Save image…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.exportDialog(); });
     if((sn.keys||[]).length>1) item('Export its video…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.orbitDialog(); });
     item('Save its edits as a look…',async()=>{ if(!here()) await this.openSnap(sc,sn); this.saveLookPreset(); });
+    if(sc.path===this.scanPath&&Splat.scene&&sn.view) item('Add its view as a keyframe',()=>{ this.scanKeys=this.scanKeys||[]; this.scanKeys.push(this.instKey(sn)); this.renderKeys(); this.toast('Keyframe '+this.scanKeys.length+' from “'+sn.name+'”'); });
     if((sn.keys||[]).length>1&&this.scans.filter(x=>x.path!==sc.path).length) item('Use this move on another scan…',()=>this.pickScan('Use “'+sn.name+'” camera move on…',sc.path,t=>this.useMoveOn(sc,sn,t)));
     item('Rename…',async()=>{ const n=await this.ask('Rename instance',sn.name); if(n){ sn.name=n.slice(0,60); this.renderStrip(); this.saveSoon(); } });
     item('Delete',()=>{ if(!confirm('Delete the instance “'+sn.name+'”? (the scan itself stays)')) return; const k=this.snapKey(sc.path); this.scanSnaps[k]=this.snapsFor(sc.path).filter(x=>x!==sn); if(this.curSnap===sn.id) this.curSnap=null; this.renderStrip(); this.saveSoon(); });
@@ -841,8 +908,8 @@ const App = {
       Object.assign(Splat.cam,{up:v.up||'Y-down',model:v.model||null,roll:v.roll||0,scale:v.scale||Splat.cam.scale}); if(v.lens) this.setLens(v.lens); if(meta.cam) Object.assign(Splat.cam,meta.cam); Splat.frame();
       // focus on whatever is in the middle of the frame
       setTimeout(()=>{ const L=this._lastL; if(!L) return; const hit=Splat.pick(L.iw/2,L.ih/2,L.iw,L.ih); if(hit){ Splat.cam.focusLock=hit; Engine.dirty=true; } },400);
-      this.scanName=meta.name||'Demo scan'; this.scanPath=null; this.scanKey=null; this.keysToScan(); this.busy(); this.setModule('scan'); UI.refresh(); setTimeout(()=>this.renderScanInfo(),50); }
-    catch(e){ setTimeout(()=>{ Splat.load(demoScene()); this.scanName='Demo still life'; this.scanPath=null; this.scanKey=null; this.keysToScan(); this.busy(); this.setModule('scan'); UI.refresh(); },30); } },
+      this.scanName=meta.name||'Demo scan'; this.scanPath=null; this.scanKey=null; this.keysToScan(); this.applyClean(); this.busy(); this.setModule('scan'); UI.refresh(); setTimeout(()=>this.renderScanInfo(),50); }
+    catch(e){ setTimeout(()=>{ Splat.load(demoScene()); this.scanName='Demo still life'; this.scanPath=null; this.scanKey=null; this.keysToScan(); this.applyClean(); this.busy(); this.setModule('scan'); UI.refresh(); },30); } },
   async newScan(input){
     if(!Native.available){ this.toast('Building scans runs in the Mac app'); return; }
     if(!input){ const p=await Native.call('open',{files:true,dirs:true,multiple:false,title:'Choose an orbit video, or a folder of photos',dir:this.info&&this.info.splatDir+'/captures'}); if(!p||!p[0]) return; input=p[0]; }
@@ -983,15 +1050,34 @@ const App = {
     UI.refresh(); this.lensNote(); this.scanKey=null; Engine.dirty=true; this.toast(L.name); },
   lensNote(){ const el=$('#lensNote'); if(!el) return; const L=LENSES.find(l=>l.id===Splat.cam.lens); el.innerHTML=L?L.desc:'Pick a lens to load its focal length, widest aperture and rendering character — then adjust anything.'; },
   // the scan view renders with the photo look from Develop plus the lens's own traits
-  linkSrc(){ const it=this._prevCur; return it&&this.items.includes(it)&&it.kind!=='scanlook'?it:null; },
+  setClean(on){ this.cleanMode=!!on&&!!Splat.scene; document.body.classList.toggle('cleaning',this.cleanMode); const b=$('#cleanBtn'); if(b) b.classList.toggle('accent',this.cleanMode); $('#cleanPanel').style.display=this.cleanMode?'block':'none';
+    if(!this.cleanMode){ $('#brushRing').style.display='none'; this.saveClean(); } else this.toast('Clean-up: paint over specks · [ ] brush size · ⌘Z undo'); },
+  cleanKey(){ return this.snapKey(this.scanPath); },
+  saveClean(){ const H=Splat.hidden; if(!H) return; this.cleanBy=this.cleanBy||{}; let any=false; const b=new Uint8Array((H.length+7)>>3); for(let i=0;i<H.length;i++) if(H[i]){ b[i>>3]|=1<<(i&7); any=true; }
+    if(!any){ delete this.cleanBy[this.cleanKey()]; } else { let str=''; for(let i=0;i<b.length;i+=0x8000) str+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); this.cleanBy[this.cleanKey()]={n:H.length,b:btoa(str)}; } this.saveSoon(); },
+  applyClean(){ this._cleanUndo=[]; const c=(this.cleanBy||{})[this.cleanKey()]; if(!c||!Splat.scene||c.n!==Splat.scene.n) return; const raw=atob(c.b), idx=[];
+    for(let j=0;j<raw.length;j++){ const v=raw.charCodeAt(j); if(v) for(let k=0;k<8;k++) if(v&(1<<k)) idx.push(j*8+k); } Splat.hideIdx(idx,true); this.scanKey=null; Engine.dirty=true; },
+  cleanStroke(e,v,first){ const L=this._lastL; if(!L) return; const r=v.getBoundingClientRect(), dpr=L.dpr, px=(e.clientX-r.left)*dpr-L.ix, py=(e.clientY-r.top)*dpr-(L.H-L.iy-L.ih);
+    const idx=Splat.brushIdx(px,py,(this.cleanR||30)*dpr,L.iw,L.ih); if(first) this._cleanUndo.push([]); if(idx.length){ this._cleanUndo[this._cleanUndo.length-1].push(...idx); Splat.hideIdx(idx,true); this.scanKey=null; Splat.lastSortView=null; Engine.dirty=true; } },
+  cleanUndo(){ const u=(this._cleanUndo||[]).pop(); if(!u){ this.toast('Nothing to undo'); return; } Splat.hideIdx(u,false); this.scanKey=null; Engine.dirty=true; this.saveClean(); },
+  cleanRestore(){ const H=Splat.hidden; if(!H) return; const idx=[]; for(let i=0;i<H.length;i++) if(H[i]) idx.push(i); if(!idx.length) return; this._cleanUndo=this._cleanUndo||[]; Splat.hideIdx(idx,false); this.scanKey=null; Engine.dirty=true; this.saveClean(); this.toast('Restored '+idx.length.toLocaleString()+' splats'); },
+  cleanFarPreview(){ clearTimeout(this._cfp); this._cfp=setTimeout(()=>{ const n=Splat.farIdx(this.cleanFar||5).length; const el=$('#cleanNote'); if(el&&this.cleanMode) el.innerHTML='<b>'+n.toLocaleString()+'</b> splats are further than '+(this.cleanFar||5).toFixed(1)+'× the subject size from its centre — press the button to remove them. Then paint any specks that are left.'; },150); },
+  cleanFarApply(){ const idx=Splat.farIdx(this.cleanFar||5); if(!idx.length){ this.toast('Nothing that far out — try a smaller value'); return; } (this._cleanUndo=this._cleanUndo||[]).push(idx); Splat.hideIdx(idx,true); this.scanKey=null; Engine.dirty=true; this.saveClean(); this.toast('Removed '+idx.length.toLocaleString()+' far-away splats — ⌘Z to undo'); },
+  linkSrc(){ const id=this.scanLinkFrom||'auto';
+    if(id.startsWith('look:')){ const ps=(this.userPresets||[]).find(x=>x.name===id.slice(5)); if(ps) return {name:ps.name,settings:Object.assign(withDefaults({}),cloneParams(ps.settings)),look:true}; }
+    if(id.startsWith('item:')){ const it=this.items.find(x=>x.id==id.slice(5)); if(it) return it; }
+    const it=this._prevCur; return it&&this.items.includes(it)&&it.kind!=='scanlook'?it:null; },
   linkMerge(base){ const m=this.scanLink, it=this.linkSrc(); if(!m||m==='off'||!it) return base; const o=Object.assign({},base), src=it.settings;
     const skip=new Set(['crop','angle','rot','flip','aspect','masks','lookUndo']);
     const keys=m==='all'?Object.keys(DEFAULTS).filter(k=>!skip.has(k)&&k!=='off'):STUDIO_KEYS; keys.forEach(k=>{ if(k in src) o[k]=cloneParams(src[k]); });
     const off=Object.assign({},base.off||{}); const so=src.off||{}; for(const k in Object.assign({},off,so)){ const isStudio=!(k in SECTIONS); if(m==='all'||isStudio){ if(so[k]) off[k]=true; else delete off[k]; } } o.off=off; return o; },
   renderScanLink(){ const el=$('#scanLinkBox'); if(!el) return; const it=this.linkSrc(), m=this.scanLink||'off';
-    el.querySelector('.slSrc').textContent=it?'from “'+it.name.replace(/\.[^.]+$/,'')+'”':'— open a photo in Develop or Studio first';
+    { const sel=el.querySelector('.slFrom'), cur=this.scanLinkFrom||'auto', last=this._prevCur&&this.items.includes(this._prevCur)?this._prevCur:null; const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      sel.innerHTML=`<option value="auto">The photo you last had open${last?' — '+esc(last.name.replace(/\.[^.]+$/,'')):''}</option>`+((this.userPresets||[]).length?'<optgroup label="My looks">'+this.userPresets.map(ps=>`<option value="look:${esc(ps.name)}">${esc(ps.name)}</option>`).join('')+'</optgroup>':'')
+        +'<optgroup label="Photos">'+this.items.filter(x=>x.kind!=='scanlook').slice(0,300).map(x=>`<option value="item:${x.id}">${esc(x.name.replace(/\.[^.]+$/,''))}${this.isEdited(x.settings)?' ✎':''}</option>`).join('')+'</optgroup>';
+      sel.value=cur; if(sel.value!==cur) sel.value='auto'; }
     el.querySelectorAll('.seg button').forEach(b=>{ b.classList.toggle('on',b.dataset.v===m); b.disabled=!it&&b.dataset.v!=='off'; });
-    el.classList.toggle('active',m!=='off'&&!!it); el.querySelector('.slNote').textContent=m!=='off'&&it?(m==='studio'?'Studio effects come live from that photo — change them in Studio and they show here. The sliders below are the scan’s own edits.':'That photo’s whole edit (film, tone, grain and Studio) is used live on the scan.'):''; },
+    el.classList.toggle('active',m!=='off'&&!!it); el.querySelector('.slNote').textContent=m!=='off'&&it?(it.look?(m==='studio'?'The look’s Studio effects are used on the scan.':'The whole look is used on the scan.'):(m==='studio'?'Studio effects come live from that photo — change them in Studio and they show here. The sliders below are the scan’s own edits.':'That photo’s whole edit (film, tone, grain and Studio) is used live on the scan.')):''; },
   setScanLink(m){ this.scanLink=m; this.renderScanLink(); this.scanKey=null; Engine.dirty=true; this.saveSoon(); },
   scanParams(base){ base=this.linkMerge(base); const post=Splat.cam.post||{}; const o=Object.assign({},base,{crop:{x:0,y:0,w:1,h:1},angle:0,rot:0,flip:false});
     if('falloff' in post) o.falloff=post.falloff; if('glow' in post) o.glow=Math.max(o.glow||0,post.glow);
@@ -1243,7 +1329,7 @@ const App = {
   saveSoon(){ clearTimeout(this._st); this._st=setTimeout(()=>this.save(),800); },
   save(){
     const pj=JSON.stringify(this.userPresets); if(pj!==this._lastPJ){ this._lastPJ=pj; if(this._presetsLoaded) this.syncPresetsOut(); this._presetsLoaded=true; }
-    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},scanLink:this.scanLink||'off',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
+    const sl=this.scanItem||this._scanLookSaved; const data={v:1,favStocks:this.favStocks||[],scanLook:sl?{settings:sl.settings,hist:(sl.hist||[]).slice(-60)}:null,presets:this.userPresets,scanPresets:this.scanPresets||[],scanSnaps:this.scanSnaps||{},cleanBy:this.cleanBy||{},scanLink:this.scanLink||'off',scanLinkFrom:this.scanLinkFrom||'auto',keysBy:this.keysBy||{},movesBy:this.movesBy||{},xPresets:this.xPresets||[],smart:this.smart||[],lastStock:this.lastStock,scanPath:this.scanPath||null,scans:this.scans.filter(x=>x.path),hiddenScans:this.hiddenScans||[],items:this.items.filter(i=>i.path).map(i=>({id:i.id,name:i.name,path:i.path,kind:i.kind==='scanframe'?'photo':i.kind,settings:i.settings,thumb:i.thumb,versions:i.versions||[],rating:i.rating||0,flag:i.flag||null,stack:i.stack||undefined,stackTop:!!i.stackTop,stackOpen:!!i.stackOpen,pinned:!!i.pinned,tags:i.tags||undefined,lrId:i.lrId||undefined,inst:i.inst||undefined}))};
     const json=JSON.stringify(data);
     if(Native.available) Native.call('saveState',{json}).catch(()=>{}); else { try{ localStorage.setItem('darkroom.lib',json); }catch(e){} }
   },
@@ -1251,7 +1337,7 @@ const App = {
     let json='';
     if(Native.available){ try{ this.info=await Native.call('info'); json=await Native.call('loadState'); }catch(e){} }
     else { try{ json=localStorage.getItem('darkroom.lib')||''; }catch(e){} }
-    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.scanLink=d.scanLink||'off'; this.keysBy=d.keysBy||{}; this.movesBy=d.movesBy||{}; if(this._keysFor!==undefined) this.keysToScan(); this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
+    if(!json) return; try{ const d=JSON.parse(json); this.lastStock=d.lastStock||this.lastStock; this.userPresets=d.presets||[]; this.scanPresets=d.scanPresets||[]; this.scanSnaps=d.scanSnaps||{}; this.cleanBy=d.cleanBy||{}; this.scanLink=d.scanLink||'off'; this.scanLinkFrom=d.scanLinkFrom||'auto'; this.keysBy=d.keysBy||{}; this.movesBy=d.movesBy||{}; if(this._keysFor!==undefined) this.keysToScan(); this.xPresets=d.xPresets||[]; this.smart=d.smart||[]; this._scanLookSaved=d.scanLook||null; this.favStocks=d.favStocks||[]; if(UI._bp){ UI.favs=new Set(this.favStocks); UI.buildPresets(...UI._bp); } this.scans=(d.scans||[]).filter(x=>x&&x.path); this.hiddenScans=d.hiddenScans||[];
       (d.items||[]).forEach(o=>{ const it=this.newItem(o); it.settings=withDefaults(o.settings); it.hist=[JSON.stringify(it.settings)]; });
       this.renderStrip(); }catch(e){ console.warn(e); }
   },
@@ -1391,6 +1477,7 @@ const App = {
     if(e.key==='Escape' && $('#busy').classList.contains('on')){ this._cancelVideo=true; this._stopSheet=true; }
     if(e.target.tagName==='INPUT'&&e.target.type!=='range'||e.target.tagName==='SELECT') return;
     const k=e.key, meta=e.metaKey||e.ctrlKey;
+    if(this.cleanMode&&this.module==='scan'){ if(meta&&k.toLowerCase()==='z'&&!e.shiftKey){ e.preventDefault(); this.cleanUndo(); return; } if(k==='['||k===']'){ this.cleanR=Math.max(4,Math.min(200,(this.cleanR||30)*(k===']'?1.25:0.8))); UI.refresh(); return; } if(k==='Escape'){ this.setClean(false); return; } }
     if(meta&&k.toLowerCase()==='z'){ e.preventDefault(); e.shiftKey?this.redo():this.undo(); return; }
     // 3D Scan camera from the keyboard: arrows move (pan), ⇧+arrows orbit, +/− or PageUp/PageDown dolly in and out
     if(this.module==='scan'&&Splat.scene&&!meta&&/^(Arrow(Up|Down|Left|Right)|PageUp|PageDown|\+|=|-|_)$/.test(k)){ e.preventDefault(); const c=Splat.cam, st=e.altKey?8:30;
@@ -1406,6 +1493,7 @@ const App = {
     if(meta&&e.shiftKey&&k.toLowerCase()==='r'&&this.cur){ e.preventDefault(); if(this.module==='scan') this.resetScan(false); else this.resetPhoto(false); return; }
     if(meta&&k==="'"){ e.preventDefault(); this.saveVersion(); return; }
     if(meta&&k.toLowerCase()==='e'){ e.preventDefault(); this.exportDialog(); return; }
+    if(meta&&k.toLowerCase()==='p'&&this.module!=='scan'){ e.preventDefault(); this.printDialog(); return; }
     if(meta&&k.toLowerCase()==='f'&&this.module!=='scan'){ e.preventDefault(); const q=$('#libSearch'); q.focus(); q.select(); return; }
     if(meta&&k.toLowerCase()==='o'){ e.preventDefault(); this.importDialog(); return; }
     if(meta) return;
@@ -1461,6 +1549,12 @@ const App = {
     m.addEventListener('pointerup',e=>{ if(!drag) return; const c=Engine.p.cps[drag.i]; if(c&&!drag.ring) this.cpSample(c); drag=null; this.commit(); setTimeout(()=>{ Engine.cpShow=-1; Engine.dirty=true; },400); }); },
   cpSample(c){ const L=this._lastL; if(!L) return; const px=L.ix+c.x*L.iw, py=L.iy+L.ih-c.y*L.ih; const v=Engine.sampleAt(px,py,L); if(v) c.col=Array.from(CM.vec(CM.REC709_TO_AP1,v)).slice(0,3); },   // back to the prep (AP1) space the shader compares in
   bindPlace(v){
+    { const ring=document.createElement('div'); ring.id='brushRing'; document.body.appendChild(ring);
+      v.addEventListener('pointermove',e=>{ if(!this.cleanMode||this.module!=='scan'){ ring.style.display='none'; return; } const R=this.cleanR||30; ring.style.display='block'; ring.style.width=ring.style.height=(2*R)+'px'; ring.style.left=(e.clientX-R)+'px'; ring.style.top=(e.clientY-R)+'px'; });
+      v.addEventListener('pointerleave',()=>{ ring.style.display='none'; });
+      v.addEventListener('pointerdown',e=>{ if(this.module!=='scan'||!this.cleanMode||e.button!==0||e.shiftKey) return; e.stopImmediatePropagation(); e.preventDefault(); v.setPointerCapture(e.pointerId);
+        this.cleanStroke(e,v,true); let raf=0, last=e; const mv=ev=>{ last=ev; if(!raf) raf=requestAnimationFrame(()=>{ raf=0; this.cleanStroke(last,v,false); }); };
+        const up=()=>{ v.removeEventListener('pointermove',mv); v.removeEventListener('pointerup',up); this.saveClean(); }; v.addEventListener('pointermove',mv); v.addEventListener('pointerup',up); },true); }
     // adding a control point: the next click on the photo places it
     v.addEventListener('pointerdown',e=>{ if(this.module!=='studio'||!Studio.cpAdding||e.button!==0) return; const L=this._lastL; if(!L) return; e.stopImmediatePropagation(); e.preventDefault();
       const r=v.getBoundingClientRect(), dpr=L.dpr, x=((e.clientX-r.left)*dpr-L.ix)/L.iw, y=((e.clientY-r.top)*dpr-(L.H-L.iy-L.ih))/L.ih; if(x<0||y<0||x>1||y>1) return;
