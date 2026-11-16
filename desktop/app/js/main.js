@@ -186,6 +186,7 @@ const App = {
     $('#scanLinkBox').querySelectorAll('.seg button').forEach(b=>b.onclick=()=>this.setScanLink(b.dataset.v));
     $('#scanLinkBox .slFrom').onchange=e=>{ this.scanLinkFrom=e.target.value; if((this.scanLink||'off')==='off') this.scanLink='studio'; this.setScanLink(this.scanLink); };
     $('#scanFxSwitch').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; document.body.classList.toggle('scanFx',b.dataset.v==='fx'); $('#scanFxSwitch').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); UI.refresh(); };
+    $('#tbExpSel').onclick=()=>this.exportDialog(); $('#tbSelClear').onclick=()=>this.clearSel();
     $('#stockSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'stocks'); }; $('#lookSheet').onclick=e=>{ e.stopPropagation(); this.sheetMenu(e.target,'looks'); };
     $('#presetSearch').addEventListener('input',e=>{ UI.filterPresets(e.target.value); this.stockThumbsSoon(); });
     { const el=$('#presetList'), btn=$('#stockGrid'); const set=on=>{ el.classList.toggle('gridmode',on); btn.classList.toggle('on',on); try{ localStorage.stockGrid=on?'1':''; }catch(e){} if(on) this.stockThumbsSoon(true); };
@@ -638,6 +639,7 @@ const App = {
     const item=(label,fn,kb)=>{ const b=document.createElement('button'); b.innerHTML=label+(kb?`<kbd>${kb}</kbd>`:''); b.onclick=()=>{ m.classList.remove('on'); fn(); }; m.appendChild(b); };
     const sep=()=>{ const h=document.createElement('hr'); m.appendChild(h); };
     const open=async()=>{ if(it!==this.cur) await this.select(it.id); };
+    { const sel=this.selected(); if(sel.length>1&&sel.includes(it)) item(`Export ${sel.length} selected photos…`,()=>this.exportDialog(),'⌘E'); else item('Export…',async()=>{ await open(); this.exportDialog(); },'⌘E'); }
     if(it.kind!=='scanlook'){ item('Copy all edits',async()=>{ await open(); this.copyAll(); },'⌘C'); item('Copy edits — choose which…',async()=>{ await open(); this.copyDialog(); },'⇧⌘C');
       if(this.clip){ const sel=this.selected(), many=sel.length>1&&sel.includes(it); item(many?`Paste edits onto ${sel.length} selected photos`:'Paste edits',async()=>{ await open(); this.pasteSettings(); },many?'':'⌘V'); }
       sep(); }
@@ -666,7 +668,9 @@ const App = {
     this.items.forEach(x=>x.sel=false); if(this.module==='library') this.setModule('develop'); this.select(it.id); this.updateSync();
   },
   selected(){ const s=this.items.filter(x=>x.sel); if(this.cur&&!s.includes(this.cur)) s.unshift(this.cur); return s.length?s:(this.cur?[this.cur]:[]); },
-  updateSync(){ const n=this.selected().length; const b=$('#tbSync'); if(b){ b.textContent=n>1?`Sync to ${n-1}…`:'Sync…'; b.disabled=n<2; } },
+  updateSync(){ const n=this.selected().length; const b=$('#tbSync'); if(b){ b.textContent=n>1?`Sync to ${n-1}…`:'Sync…'; b.disabled=n<2; }
+    const x=$('#tbExpSel'), c=$('#tbSelClear'); if(x){ x.style.display=n>1&&this.module!=='scan'?'':'none'; x.textContent=`Export ${n}…`; } if(c) c.style.display=n>1&&this.module!=='scan'?'':'none'; },
+  clearSel(){ this.items.forEach(x=>x.sel=false); this.renderStrip(); this.renderGrid&&this.renderGrid(); this.updateSync(); },
   syncDialog(){
     const targets=this.selected().filter(x=>x!==this.cur); if(!targets.length){ this.toast('⌘-click photos in the filmstrip to choose what to sync to'); return; }
     const groups=[['film','Film & paper',['stock','paper','format','autoExp']],['wb','White balance',['temp','tint']],['exp','Exposure',['ev']],['tone','Tone',['contrast','highlights','shadows','whites','blacks','hlExpand']],
@@ -1320,7 +1324,7 @@ precision highp float; in vec2 vUv; uniform sampler2D uT; uniform float uW; out 
     if(!this.cur && this.module!=='scan'){ this.toast('Nothing to export'); return; }
     const sel=this.module==='scan'?[]:this.selected();
     const body=$('#dlgBody'); body.innerHTML='';
-    const st=Object.assign({size:'full',fmt:'jpeg',q:0.95,space:'p3',meta:true,which:sel.length>1?'sel':'cur'},this._exportPrefs||{});
+    const st=Object.assign({size:'full',fmt:'jpeg',q:0.95,space:'p3',meta:true},this._exportPrefs||{}); st.which=sel.length>1?'sel':'cur';
     if(!Native.available && st.fmt==='tiff') st.fmt='jpeg';
     if(sel.length>1) UI.seg(body,'xwhich','Photos',[['cur','This photo'],['sel',sel.length+' selected']],()=>st.which,v=>st.which=v);
     this.xPresets=this.xPresets||[];
